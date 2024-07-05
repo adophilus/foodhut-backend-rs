@@ -1,0 +1,30 @@
+# fly.toml app configuration file generated for foodhut-backend on 2024-05-04T14:59:51+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'foodhut'
+primary_region = 'ord'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  PORT = 5000
+
+[http_service]
+  internal_port = 5000
+  auto_stop_machines = false
+
+[checks]
+  [checks.api]
+    port = 5000
+    type = 'http'
+    interval = '120s'
+    timeout = '30s'
+    grace_period = '60s'
+    method = 'get'
+    path = '/api'
+
+[[vm]]
+  size = 'shared-cpu-1x'

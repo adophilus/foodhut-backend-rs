@@ -1,0 +1,9 @@
+CREATE TABLE otps (
+  id VARCHAR PRIMARY KEY,
+  otp VARCHAR NOT NULL,
+  purpose VARCHAR NOT NULL,
+  meta VARCHAR NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT now() NOT NULL,
+  updated_at TIMESTAMP
+);
