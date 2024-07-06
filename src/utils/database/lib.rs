@@ -11,7 +11,10 @@ pub async fn connect(database_url: &str) -> DatabaseConnection {
             .max_connections(4)
             .connect(database_url)
             .await
-            .unwrap_or_else(|_| panic!("Error connecting to database {}", database_url)),
+            .unwrap_or_else(|e| {
+                tracing::debug!("{:}", e);
+                panic!("Error connecting to database {}", database_url)
+            }),
     }
 }
 

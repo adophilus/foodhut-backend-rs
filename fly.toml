@@ -6,10 +6,6 @@
 app = 'foodhut'
 primary_region = 'ams'
 
-[build]
-[env]
-  PORT = 8080
-
 [http_service]
   internal_port = 8080
   auto_stop_machines = false

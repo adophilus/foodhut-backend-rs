@@ -58,13 +58,8 @@ async fn update_user_by_id(
     }
 }
 
-async fn health_check() -> ApiResponse<&'static str, &'static str> {
-    ApiResponse::ok("We up!")
-}
-
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
-        .route("/", get(health_check))
         .route("/profile", get(profile))
         .route("/:id", get(get_user_by_id).patch(update_user_by_id))
 }
