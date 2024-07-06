@@ -20,7 +20,9 @@ fn init_tracing() {
 async fn main() {
     let config = config::get_config();
     let db_conn = database::connect(config.database.url.as_str()).await;
-    let ctx = Arc::new(types::Context { db_conn: db_conn.clone() });
+    let ctx = Arc::new(types::Context {
+        db_conn: db_conn.clone(),
+    });
 
     init_tracing();
     database::migrate(db_conn.clone()).await;
@@ -35,6 +37,8 @@ async fn main() {
         tokio::net::TcpListener::bind(format!("{}:{}", config.app.host, config.app.port))
             .await
             .unwrap();
+
+    tracing::debug!("App is running on {}:{}", config.app.host, config.app.port);
 
     axum::serve(listener, app).await.unwrap();
 }
