@@ -11,7 +11,7 @@ FROM chef AS planner
 COPY . .
 
 ARG SQLX_OFFLINE=true
-RUN bash -c 'echo $SQLX_OFFLINE'
+RUN bash -c 'echo $DATABASE_URL'
 
 RUN cargo chef prepare --recipe-path recipe.json
 
