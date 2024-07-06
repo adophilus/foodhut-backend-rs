@@ -1,7 +1,7 @@
-use axum::async_trait;
 use axum::extract::{FromRequestParts, State};
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
+use axum::{async_trait, Json};
 use axum::{
     extract::{Extension, Request},
     http,
@@ -10,10 +10,11 @@ use axum::{
     response::Response,
 };
 use serde::Serialize;
+use serde_json::json;
 
 use crate::repository;
 use crate::repository::user::User;
-use crate::types::{ApiResponse, Context};
+use crate::types::Context;
 use crate::utils::database::DatabaseConnection;
 use std::sync::Arc;
 
@@ -22,7 +23,8 @@ enum Error {
 }
 
 fn get_session_id_from_header(header: String) -> Result<String, Error> {
-    header.split(" ")
+    header
+        .split(" ")
         .skip(1)
         .next()
         .map(|h| h.to_string())
@@ -79,7 +81,10 @@ impl<S: Send + Sync> FromRequestParts<S> for Auth {
         let Extension(ctx) = parts.extract::<Extension<Arc<Context>>>().await.unwrap();
         let headers = parts.extract::<HeaderMap>().await.unwrap();
 
-        let err = ApiResponse::<&str, &str>::err("Invalid session token");
+        let err = (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "Invalid session token"})),
+        );
 
         let auth_header = headers
             .get(http::header::AUTHORIZATION)
@@ -89,6 +94,6 @@ impl<S: Send + Sync> FromRequestParts<S> for Auth {
         get_user_from_header(ctx.db_conn.clone(), auth_header.to_string())
             .await
             .map(|user| Auth { user })
-            .map_err(|_| err.into_response())
+            .map_err(|_| err.clone().into_response())
     }
 }

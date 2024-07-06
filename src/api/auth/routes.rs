@@ -1,6 +1,7 @@
+use crate::repository;
 use crate::types::Context;
-use crate::utils::database::DatabaseConnection;
-use crate::{repository, types::ApiResponse};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::{
     extract::{Json, State},
     routing::post,
@@ -8,6 +9,7 @@ use axum::{
 };
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -22,7 +24,7 @@ struct SignUpPayload {
 async fn sign_up(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SignUpPayload>,
-) -> axum::Json<ApiResponse<&'static str, &'static str>> {
+) -> impl IntoResponse {
     match (
         repository::user::find_by_email(ctx.db_conn.clone(), payload.email.clone()).await,
         repository::user::find_by_phone_number(ctx.db_conn.clone(), payload.phone_number.clone())
@@ -42,12 +44,25 @@ async fn sign_up(
             .await;
 
             match res {
-                Ok(_) => axum::Json(ApiResponse::ok("Sign up successful")),
-                Err(_) => axum::Json(ApiResponse::err("Sign up failed!")),
+                Ok(_) => (
+                    StatusCode::CREATED,
+                    Json(json!({
+                        "message": "Sign up successful"
+                    })),
+                ),
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "error": "Sign up failed!"
+                    })),
+                ),
             }
         }
-        (Some(_), _) => axum::Json(ApiResponse::err("Email taken")),
-        (_, Some(_)) => axum::Json(ApiResponse::err("Phone number taken")),
+        (Some(_), _) => (StatusCode::CONFLICT, Json(json!({"error": "Email taken"}))),
+        (_, Some(_)) => (
+            StatusCode::CONFLICT,
+            Json(json!({ "error": "Phone number taken"})),
+        ),
     }
 }
 
@@ -59,17 +74,23 @@ struct SendVerificationOtpPayload {
 async fn verification_send_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SendVerificationOtpPayload>,
-) -> axum::Json<ApiResponse<&'static str, &'static str>> {
+) -> impl IntoResponse {
     match repository::user::find_by_phone_number(ctx.db_conn.clone(), payload.phone_number.clone())
         .await
     {
         Some(user) => {
             if user.is_verified {
-                return axum::Json(ApiResponse::err("User already verified"));
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error" : "User already verified"})),
+                );
             }
         }
         None => {
-            return axum::Json(ApiResponse::err("User not found"));
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error" : "User not found"})),
+            );
         }
     }
 
@@ -82,12 +103,16 @@ async fn verification_send_otp(
     {
         Ok(otp) => {
             // TODO: actually send the OTP using twilio or something
-            axum::Json(ApiResponse::ok("OTP sent!"))
+            (StatusCode::OK, Json(json!({ "message" :"OTP sent!"})))
         }
-        Err(repository::otp::Error::OtpNotExpired) => {
-            axum::Json(ApiResponse::err("OTP not expired"))
-        }
-        Err(_) => axum::Json(ApiResponse::err("Failed to send OTP")),
+        Err(repository::otp::Error::OtpNotExpired) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error" : "OTP not expired"})),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error" : "Failed to send OTP"})),
+        ),
     }
 }
 
@@ -100,7 +125,7 @@ struct VerifyOtpPayload {
 async fn verification_verify_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<VerifyOtpPayload>,
-) -> axum::Json<ApiResponse<&'static str, &'static str>> {
+) -> impl IntoResponse {
     match repository::otp::verify(
         ctx.db_conn.clone(),
         "auth.sign-up.verification".to_string(),
@@ -116,11 +141,17 @@ async fn verification_verify_otp(
             )
             .await
             {
-                Ok(_) => axum::Json(ApiResponse::ok("OTP verified")),
-                _ => axum::Json(ApiResponse::err("Failed to verify OTP")),
+                Ok(_) => (StatusCode::OK, Json(json!({ "message" : "OTP verified"}))),
+                _ => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error" : "Failed to verify OTP"})),
+                ),
             }
         }
-        _ => axum::Json(ApiResponse::err("Invalid OTP")),
+        _ => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error" : "Invalid OTP"})),
+        ),
     }
 }
 
@@ -132,17 +163,23 @@ struct SignInSendOtpPayload {
 async fn sign_in_send_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SignInSendOtpPayload>,
-) -> axum::Json<ApiResponse<&'static str,  &'static str>> {
+) -> impl IntoResponse {
     match repository::user::find_by_phone_number(ctx.db_conn.clone(), payload.phone_number.clone())
         .await
     {
         Some(user) => {
             if !user.is_verified {
-                return axum::Json(ApiResponse::err("User not verified"));
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "User not verified"})),
+                );
             }
         }
         None => {
-            return axum::Json(ApiResponse::err("User not found"));
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "User not found"})),
+            );
         }
     }
 
@@ -155,12 +192,16 @@ async fn sign_in_send_otp(
     {
         Ok(otp) => {
             // TODO: actually send the OTP using twilio or something
-            axum::Json(ApiResponse::ok("OTP sent!"))
+            (StatusCode::OK, Json(json!({"message": "OTP sent!"})))
         }
-        Err(repository::otp::Error::OtpNotExpired) => {
-            axum::Json(ApiResponse::err("OTP not expired"))
-        }
-        Err(_) => axum::Json(ApiResponse::err("Failed to send OTP")),
+        Err(repository::otp::Error::OtpNotExpired) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "OTP not expired"})),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to send OTP"})),
+        ),
     }
 }
 
@@ -170,15 +211,10 @@ struct SignInVerifyOtpPayload {
     otp: String,
 }
 
-#[derive(Serialize)]
-struct SessionTokenPayload {
-    token: String,
-}
-
 async fn sign_in_verify_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SignInVerifyOtpPayload>,
-) -> axum::Json<ApiResponse<SessionTokenPayload, String>> {
+) -> impl IntoResponse {
     match repository::otp::verify(
         ctx.db_conn.clone(),
         "auth.sign-in.verification".to_string(),
@@ -203,21 +239,36 @@ async fn sign_in_verify_otp(
                     {
                         Some(user) => {
                             match repository::session::create(ctx.db_conn.clone(), user.id).await {
-                                Ok(session) => axum::Json(ApiResponse::ok(SessionTokenPayload {
-                                    token: session.id,
-                                })),
-                                Err(_) => {
-                                    axum::Json(ApiResponse::err("Failed to create session".to_string()))
-                                }
+                                Ok(session) => (
+                                    StatusCode::OK,
+                                    Json(json!({
+                                        "token": session.id,
+                                    })),
+                                ),
+                                Err(_) => (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(json!({
+                                        "error": "Failed to create session"
+                                    })),
+                                ),
                             }
                         }
-                        None => axum::Json(ApiResponse::err("User does not exist".to_string())),
+                        None => (
+                            StatusCode::NOT_FOUND,
+                            Json(json!({ "error": "User does not exist"})),
+                        ),
                     }
                 }
-                _ => axum::Json(ApiResponse::err("Failed to verify OTP".to_string())),
+                _ => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": "Failed to verify OTP"})),
+                ),
             }
         }
-        _ => axum::Json(ApiResponse::err("Invalid OTP".to_string())),
+        _ => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Invalid OTP"})),
+        ),
     }
 }
 
