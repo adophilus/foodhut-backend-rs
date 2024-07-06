@@ -10,7 +10,7 @@ primary_region = 'ams'
 
 [env]
   PORT = '8080'
-  DATABASE_URL = 'postgres://foodhut:RAf1vmHQILdKMcj@foodhut-db.flycast:5432/foodhut?sslmode=disable'
+  SET_PORT = 'uche'
   SQLX_OFFLINE = true
 
 [http_service]

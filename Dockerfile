@@ -3,6 +3,12 @@ WORKDIR /app
 
 FROM chef AS planner
 COPY . .
+
+RUN ls -la
+
+RUN echo $PORT
+# ENV SQLX_OFFLINE = true
+
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
