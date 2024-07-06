@@ -1,4 +1,9 @@
-use axum::{extract::{Path, State}, response::IntoResponse, routing::{get, patch}, extract::Json, Router};
+use axum::{
+    extract::Json,
+    extract::{Path, State},
+    routing::{get, put},
+    Router,
+};
 use chrono::NaiveDate;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -20,15 +25,16 @@ struct UpdateUserPayload {
     first_name: Option<String>,
     last_name: Option<String>,
     birthday: Option<NaiveDate>,
-    // profile_picture: Option
 }
 
-async fn get_user_by_id(State(ctx): State<Arc<Context>>, Path(id): Path<String>) -> ApiResponse<User, &'static str> {
-    match repository::user::find_by_id(ctx.db_conn.clone(), id)
-    .await {
-            Some(user) => ApiResponse::ok(user),
-            None => ApiResponse::err("User not found"),
-        }
+async fn get_user_by_id(
+    State(ctx): State<Arc<Context>>,
+    Path(id): Path<String>,
+) -> ApiResponse<User, &'static str> {
+    match repository::user::find_by_id(ctx.db_conn.clone(), id).await {
+        Some(user) => ApiResponse::ok(user),
+        None => ApiResponse::err("User not found"),
+    }
 }
 
 async fn update_user_by_id(
@@ -36,7 +42,7 @@ async fn update_user_by_id(
     auth: Auth,
     Path(id): Path<String>,
     Json(payload): Json<UpdateUserPayload>,
-) -> ApiResponse<&'static str, &'static str>{
+) -> ApiResponse<&'static str, &'static str> {
     tracing::debug!(auth.user.id);
     tracing::debug!(id);
     if auth.user.id != id {
@@ -49,7 +55,7 @@ async fn update_user_by_id(
         first_name: payload.first_name,
         last_name: payload.last_name,
         birthday: payload.birthday,
-        profile_picture_url: None
+        profile_picture_url: None,
     };
 
     match repository::user::update_by_id(ctx.db_conn.clone(), id, update_payload).await {
@@ -58,8 +64,13 @@ async fn update_user_by_id(
     }
 }
 
+async fn set_user_profile_picture() {
+    todo!("Not implemented yet!")
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/profile", get(profile))
         .route("/:id", get(get_user_by_id).patch(update_user_by_id))
+        .route("/:id/profile-picture", put(set_user_profile_picture))
 }
