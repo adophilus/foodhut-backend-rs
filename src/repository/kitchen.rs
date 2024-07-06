@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::types::BigDecimal;
 use ulid::Ulid;
 
-use crate::utils::database::DatabaseConnection;
+use crate::{types::Pagination, utils::database::DatabaseConnection};
 
 #[derive(Serialize, Deserialize)]
 pub struct Kitchen {
@@ -81,3 +81,28 @@ pub async fn create(db: DatabaseConnection, payload: CreateKitchenPayload) -> Re
         }
     }
 }
+
+// pub async fn find_many(
+//     db: DatabaseConnection,
+//     pagination: Pagination,
+// ) -> Result<Vec<Kitchen>, Error> {
+//     match sqlx::query_as!(
+//         Vec<Kitchen>,
+//         "
+//             SELECT * FROM kitchens
+//             OFFSET $1
+//             LIMIT $2
+//         ",
+//         ((pagination.page - 1) * pagination.per_page) as i64,
+//         pagination.per_page as i64
+//     )
+//     .find_all(&db.pool)
+//     .await
+//     {
+//         Ok(kitchens) => kitchens,
+//         Err(err) {
+//             tracing::info!("Error occurred while trying to fetch many kitchens: {}", err);
+//             Err(Error::UnexpectedError)
+//     }
+//     }
+// }

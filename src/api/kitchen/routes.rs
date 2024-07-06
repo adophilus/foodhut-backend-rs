@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
-use axum::{extract::State, routing::post, Json, Router};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::{
     api::auth::middleware::Auth,
     repository,
-    types::{ApiResponse, Context},
+    types::{ApiResponse, Context, Pagination},
 };
 
 #[derive(Deserialize)]
@@ -26,7 +27,7 @@ async fn create_kitchen(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
     Json(payload): Json<CreateKitchenPayload>,
-) -> ApiResponse<&'static str, &'static str> {
+) -> impl IntoResponse {
     match repository::kitchen::create(
         ctx.db_conn.clone(),
         repository::kitchen::CreateKitchenPayload {
@@ -43,11 +44,32 @@ async fn create_kitchen(
     )
     .await
     {
-        Ok(_) => ApiResponse::ok("Kitchen created!"),
-        Err(_) => ApiResponse::err("Kitchen creation failed"),
+        Ok(_) => (
+            StatusCode::CREATED,
+            Json(json!({ "message": "Kitchen created!"})),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Kitchen creation failed"})),
+        ),
     }
 }
 
+async fn get_kitchens(pagination: Pagination) -> impl IntoResponse {
+    // let kitchens = repository::kitchen::find_many(pagination);
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "items": [],
+            "meta": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+            }
+        })),
+    )
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
-    Router::new().route("/", post(create_kitchen))
+    Router::new().route("/", post(create_kitchen).get(get_kitchens))
 }

@@ -1,8 +1,12 @@
 use axum::{
-    http::{header, StatusCode},
-    response::IntoResponse,
+    async_trait,
+    extract::{FromRequestParts, Query},
+    http::{header, request::Parts, StatusCode},
+    response::{IntoResponse, Response},
+    Json, RequestPartsExt,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 pub use crate::database::DatabaseConnection;
 
@@ -53,6 +57,38 @@ impl<T: Serialize, E: Serialize> IntoResponse for ApiResponse<T, E> {
                 serde_json::to_string(&err).unwrap(),
             )
                 .into_response(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct Pagination {
+    #[serde(default = "default_page")]
+    pub page: u64,
+    #[serde(default = "default_per_page")]
+    pub per_page: u64,
+}
+
+fn default_page() -> u64 {
+    1
+}
+
+fn default_per_page() -> u64 {
+    10
+}
+
+#[async_trait]
+impl<S: Send + Sync> FromRequestParts<S> for Pagination {
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extract::<Query<Pagination>>().await {
+            Ok(Query(pagination)) => Ok(pagination),
+            _ => Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "Invalid pagination options"})),
+            )
+                .into_response()),
         }
     }
 }
