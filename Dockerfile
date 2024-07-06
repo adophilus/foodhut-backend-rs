@@ -10,7 +10,7 @@ WORKDIR /app
 FROM chef AS planner
 COPY . .
 
-ENV SQLX_OFFLINE=true
+ARG SQLX_OFFLINE=true
 RUN bash -c 'echo $SQLX_OFFLINE'
 
 RUN cargo chef prepare --recipe-path recipe.json
