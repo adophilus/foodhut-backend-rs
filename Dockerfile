@@ -1,4 +1,10 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+ARG BASE_IMAGE=rustlang/rust:nightly
+FROM ${BASE_IMAGE} as chef
+
+RUN ((cat /etc/os-release | grep ID | grep alpine) && apk add --no-cache musl-dev || true) \
+    && cargo install cargo-chef \
+    && rm -rf $CARGO_HOME/registry/
+
 WORKDIR /app
 
 FROM chef AS planner
