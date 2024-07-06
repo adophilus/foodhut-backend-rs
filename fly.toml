@@ -10,6 +10,7 @@ primary_region = 'ams'
 
 [env]
   PORT = '8080'
+  SQLX_OFFLINE = true
 
 [http_service]
   internal_port = 8080

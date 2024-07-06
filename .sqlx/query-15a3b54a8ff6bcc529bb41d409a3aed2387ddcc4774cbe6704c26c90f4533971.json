@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users SET\n                email = COALESCE($1, email),\n                phone_number = COALESCE($2, phone_number),\n                first_name = COALESCE($3, first_name),\n                last_name = COALESCE($4, last_name),\n                birthday = COALESCE($5, birthday),\n                profile_picture_url = COALESCE($6, profile_picture_url)\n            WHERE\n                id = $7\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Date",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "15a3b54a8ff6bcc529bb41d409a3aed2387ddcc4774cbe6704c26c90f4533971"
+}
