@@ -20,9 +20,10 @@ fn init_tracing() {
 async fn main() {
     let config = config::get_config();
     let db_conn = database::connect(config.database.url.as_str()).await;
-    let ctx = Arc::new(types::Context { db_conn });
+    let ctx = Arc::new(types::Context { db_conn: db_conn.clone() });
 
     init_tracing();
+    database::migrate(db_conn.clone()).await;
 
     let app = Router::new()
         .nest("/api", api::get_router())

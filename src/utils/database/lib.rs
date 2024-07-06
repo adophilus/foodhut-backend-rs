@@ -1,7 +1,7 @@
 use sqlx::{postgres::PgPoolOptions, PgPool};
 
 #[derive(Clone)]
-pub struct DatabaseConnection{
+pub struct DatabaseConnection {
     pub pool: PgPool,
 }
 
@@ -12,5 +12,15 @@ pub async fn connect(database_url: &str) -> DatabaseConnection {
             .connect(database_url)
             .await
             .unwrap_or_else(|_| panic!("Error connecting to database {}", database_url)),
+    }
+}
+
+pub async fn migrate(db_conn: DatabaseConnection) {
+    match sqlx::migrate!().run(&db_conn.pool).await {
+        Ok(_) => (),
+        Err(err) => {
+            tracing::error!("{}", err);
+            panic!("Failed to run database migrations");
+        }
     }
 }

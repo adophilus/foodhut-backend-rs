@@ -1,15 +1,15 @@
-# fly.toml app configuration file generated for foodhut-backend-rs on 2024-07-05T22:43:26+01:00
+# fly.toml app configuration file generated for foodhut on 2024-07-05T22:49:21+01:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'foodhut-backend-rs'
+app = 'foodhut'
 primary_region = 'ams'
 
 [build]
 
 [env]
-  PORT = 8080
+  PORT = '8080'
 
 [http_service]
   internal_port = 8080
@@ -20,9 +20,9 @@ primary_region = 'ams'
   [checks.api]
     port = 8080
     type = 'http'
-    interval = '120s'
+    interval = '2m0s'
     timeout = '30s'
-    grace_period = '60s'
+    grace_period = '1m0s'
     method = 'get'
     path = '/api'
 

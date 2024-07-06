@@ -1,3 +1,3 @@
 mod lib;
-pub use lib::{DatabaseConnection, connect};
+pub use lib::*;
 
