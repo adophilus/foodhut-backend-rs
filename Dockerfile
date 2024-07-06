@@ -4,8 +4,7 @@ WORKDIR /app
 FROM chef AS planner
 COPY . .
 
-RUN bash -c 'echo $SET_PORT'
-# ENV SQLX_OFFLINE = true
+ENV SQLX_OFFLINE=true
 
 RUN cargo chef prepare --recipe-path recipe.json
 

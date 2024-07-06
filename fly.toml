@@ -6,13 +6,6 @@
 app = 'foodhut'
 primary_region = 'ams'
 
-[build]
-
-[env]
-  PORT = '8080'
-  SET_PORT = 'uche'
-  SQLX_OFFLINE = true
-
 [http_service]
   internal_port = 8080
   auto_stop_machines = false
