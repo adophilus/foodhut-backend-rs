@@ -4,7 +4,7 @@ WORKDIR /app
 FROM chef AS planner
 COPY . .
 
-RUN ls -la
+ENV PORT=8080
 
 RUN echo $PORT
 # ENV SQLX_OFFLINE = true
