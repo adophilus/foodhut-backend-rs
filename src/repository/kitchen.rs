@@ -2,11 +2,12 @@ use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use sqlx::types::BigDecimal;
+use std::str::FromStr;
 use ulid::Ulid;
 
 use crate::{types::Pagination, utils::database::DatabaseConnection};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Kitchen {
     pub id: String,
     pub name: String,
@@ -19,7 +20,7 @@ pub struct Kitchen {
     pub preparation_time: String,
     pub delivery_time: String,
     pub cover_image_url: Option<String>,
-    pub rating: f64,
+    pub rating: BigDecimal,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -82,27 +83,45 @@ pub async fn create(db: DatabaseConnection, payload: CreateKitchenPayload) -> Re
     }
 }
 
-// pub async fn find_many(
-//     db: DatabaseConnection,
-//     pagination: Pagination,
-// ) -> Result<Vec<Kitchen>, Error> {
-//     match sqlx::query_as!(
-//         Vec<Kitchen>,
-//         "
-//             SELECT * FROM kitchens
-//             OFFSET $1
-//             LIMIT $2
-//         ",
-//         ((pagination.page - 1) * pagination.per_page) as i64,
-//         pagination.per_page as i64
-//     )
-//     .find_all(&db.pool)
-//     .await
-//     {
-//         Ok(kitchens) => kitchens,
-//         Err(err) {
-//             tracing::info!("Error occurred while trying to fetch many kitchens: {}", err);
-//             Err(Error::UnexpectedError)
-//     }
-//     }
-// }
+pub async fn find_many(
+    db: DatabaseConnection,
+    pagination: Pagination,
+) -> Result<Vec<Kitchen>, Error> {
+    match sqlx::query_as!(
+        Kitchen,
+        "
+        SELECT 
+            id, 
+            name, 
+            address, 
+            type AS type_, 
+            phone_number, 
+            opening_time, 
+            closing_time, 
+            preparation_time, 
+            delivery_time, 
+            cover_image_url, 
+            rating, 
+            owner_id, 
+            created_at, 
+            updated_at
+        FROM kitchens
+        LIMIT $1
+        OFFSET $2
+        ",
+        pagination.per_page as i64,
+        ((pagination.page - 1) * pagination.per_page) as i64,
+    )
+    .fetch_all(&db.pool)
+    .await
+    {
+        Ok(kitchens) => Ok(kitchens),
+        Err(err) => {
+            tracing::info!(
+                "Error occurred while trying to fetch many kitchens: {}",
+                err
+            );
+            Err(Error::UnexpectedError)
+        }
+    }
+}

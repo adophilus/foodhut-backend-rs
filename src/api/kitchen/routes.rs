@@ -1,13 +1,19 @@
 use std::sync::Arc;
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
+    Json, Router,
+};
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::{
     api::auth::middleware::Auth,
     repository,
-    types::{ApiResponse, Context, Pagination},
+    types::{Context, Pagination},
 };
 
 #[derive(Deserialize)]
@@ -55,14 +61,27 @@ async fn create_kitchen(
     }
 }
 
-async fn get_kitchens(pagination: Pagination) -> impl IntoResponse {
-    // let kitchens = repository::kitchen::find_many(pagination);
+async fn get_kitchens(
+    State(ctx): State<Arc<Context>>,
+    pagination: Pagination,
+) -> impl IntoResponse {
+    let kitchens =
+        match repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await {
+            Ok(kitchens) => kitchens,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "Failed to fetch kitchens"})),
+                )
+            }
+        };
 
     (
         StatusCode::OK,
         Json(json!({
-            "items": [],
+            "items": kitchens,
             "meta": {
+                "total": 1,
                 "page": pagination.page,
                 "per_page": pagination.per_page,
             }
@@ -70,6 +89,12 @@ async fn get_kitchens(pagination: Pagination) -> impl IntoResponse {
     )
 }
 
+async fn fetch_kitchen_types() -> impl IntoResponse {
+    Json(json!(["Chinese", "Cuisine", "Fast Food", "Local"]))
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
-    Router::new().route("/", post(create_kitchen).get(get_kitchens))
+    Router::new()
+        .route("/", post(create_kitchen).get(get_kitchens))
+        .route("/types", get(fetch_kitchen_types))
 }

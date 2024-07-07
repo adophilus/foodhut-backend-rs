@@ -61,7 +61,7 @@ impl<T: Serialize, E: Serialize> IntoResponse for ApiResponse<T, E> {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct Pagination {
     #[serde(default = "default_page")]
     pub page: u64,
@@ -91,4 +91,9 @@ impl<S: Send + Sync> FromRequestParts<S> for Pagination {
                 .into_response()),
         }
     }
+}
+
+pub struct PaginationResult<T> {
+    items: Vec<T>,
+    total: u64,
 }
