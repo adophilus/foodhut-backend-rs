@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -63,18 +63,44 @@ async fn get_kitchens(
     State(ctx): State<Arc<Context>>,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    let paginated_kitchens =
-        match repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await {
-            Ok(kitchens) => kitchens,
-            Err(_) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": "Failed to fetch kitchens"})),
-                )
-            }
-        };
+    match repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await {
+        Ok(paginated_kitchens) => (StatusCode::OK, Json(json!(paginated_kitchens))),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to fetch kitchens"})),
+        ),
+    }
+}
 
-    (StatusCode::OK, Json(json!(paginated_kitchens)))
+async fn get_kitchen_by_profile(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {
+    match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
+        Ok(Some(kitchen)) => (StatusCode::OK, Json(json!(kitchen))),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "Kitchen not found" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to fetch kitchen"})),
+        ),
+    }
+}
+
+async fn get_kitchen_by_id(
+    Path(id): Path<String>,
+    State(ctx): State<Arc<Context>>,
+) -> impl IntoResponse {
+    match repository::kitchen::find_by_id(ctx.db_conn.clone(), id).await {
+        Ok(Some(kitchen)) => (StatusCode::OK, Json(json!(kitchen))),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "Kitchen not found" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to fetch kitchens"})),
+        ),
+    }
 }
 
 async fn fetch_kitchen_types() -> impl IntoResponse {
@@ -84,5 +110,7 @@ async fn fetch_kitchen_types() -> impl IntoResponse {
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", post(create_kitchen).get(get_kitchens))
+        .route("/profile", get(get_kitchen_by_profile))
+        .route("/:id", get(get_kitchen_by_id))
         .route("/types", get(fetch_kitchen_types))
 }

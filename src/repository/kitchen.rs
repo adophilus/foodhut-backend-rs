@@ -5,8 +5,6 @@ use sqlx::types::BigDecimal;
 use std::convert::Into;
 use ulid::Ulid;
 
-use std::str::FromStr;
-
 use crate::utils::{
     database::DatabaseConnection,
     pagination::{Paginated, Pagination},
@@ -83,6 +81,80 @@ pub async fn create(db: DatabaseConnection, payload: CreateKitchenPayload) -> Re
         Ok(_) => Ok(()),
         Err(err) => {
             tracing::info!("Error occurred while trying to create a kitchen: {}", err);
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
+pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Kitchen>, Error> {
+    match sqlx::query_as!(
+        Kitchen,
+        "
+            SELECT 
+                id, 
+                name, 
+                address, 
+                type AS type_, 
+                phone_number, 
+                opening_time, 
+                closing_time, 
+                preparation_time, 
+                delivery_time, 
+                cover_image_url, 
+                rating, 
+                owner_id, 
+                created_at, 
+                updated_at
+            FROM kitchens WHERE id = $1
+        ",
+        id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    {
+        Ok(maybe_kitchen) => Ok(maybe_kitchen),
+        Err(err) => {
+            tracing::info!(
+                "Error occurred while trying to fetch many kitchens: {}",
+                err
+            );
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
+pub async fn find_by_owner_id(db: DatabaseConnection, owner_id: String) -> Result<Option<Kitchen>, Error> {
+    match sqlx::query_as!(
+        Kitchen,
+        "
+            SELECT 
+                id, 
+                name, 
+                address, 
+                type AS type_, 
+                phone_number, 
+                opening_time, 
+                closing_time, 
+                preparation_time, 
+                delivery_time, 
+                cover_image_url, 
+                rating, 
+                owner_id, 
+                created_at, 
+                updated_at
+            FROM kitchens WHERE owner_id = $1
+        ",
+        owner_id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    {
+        Ok(maybe_kitchen) => Ok(maybe_kitchen),
+        Err(err) => {
+            tracing::info!(
+                "Error occurred while trying to fetch many kitchens: {}",
+                err
+            );
             Err(Error::UnexpectedError)
         }
     }
