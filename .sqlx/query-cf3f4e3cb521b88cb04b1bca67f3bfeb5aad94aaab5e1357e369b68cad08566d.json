@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH filtered_data AS (\n                SELECT *\n                FROM kitchens \n                LIMIT $1\n                OFFSET $2\n            ), \n            total_count AS (\n                SELECT COUNT(id) AS total_rows\n                FROM kitchens\n            )\n            SELECT JSONB_BUILD_OBJECT(\n                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),\n                'total', (SELECT total_rows FROM total_count)\n            ) AS result\n            FROM filtered_data;\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "result",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "cf3f4e3cb521b88cb04b1bca67f3bfeb5aad94aaab5e1357e369b68cad08566d"
+}
