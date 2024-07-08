@@ -2,10 +2,15 @@ use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use sqlx::types::BigDecimal;
-use std::str::FromStr;
+use std::convert::Into;
 use ulid::Ulid;
 
-use crate::{types::Pagination, utils::database::DatabaseConnection};
+use std::str::FromStr;
+
+use crate::utils::{
+    database::DatabaseConnection,
+    pagination::{Paginated, Pagination},
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Kitchen {
@@ -83,39 +88,67 @@ pub async fn create(db: DatabaseConnection, payload: CreateKitchenPayload) -> Re
     }
 }
 
+#[derive(Deserialize)]
+struct DatabaseCountedResult {
+    data: Vec<Kitchen>,
+    total: u32,
+}
+
+impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
+    fn into(self) -> DatabaseCountedResult {
+        match self {
+            Some(json) => {
+                serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref())
+                    .unwrap()
+            }
+            None => DatabaseCountedResult {
+                data: vec![],
+                total: 0,
+            },
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct DatabaseCounted {
+    result: DatabaseCountedResult,
+}
+
 pub async fn find_many(
     db: DatabaseConnection,
     pagination: Pagination,
-) -> Result<Vec<Kitchen>, Error> {
+) -> Result<Paginated<Kitchen>, Error> {
     match sqlx::query_as!(
-        Kitchen,
+        DatabaseCounted,
         "
-        SELECT 
-            id, 
-            name, 
-            address, 
-            type AS type_, 
-            phone_number, 
-            opening_time, 
-            closing_time, 
-            preparation_time, 
-            delivery_time, 
-            cover_image_url, 
-            rating, 
-            owner_id, 
-            created_at, 
-            updated_at
-        FROM kitchens
-        LIMIT $1
-        OFFSET $2
+            WITH filtered_data AS (
+                SELECT *
+                FROM kitchens 
+                LIMIT $1
+                OFFSET $2
+            ), 
+            total_count AS (
+                SELECT COUNT(id) AS total_rows
+                FROM kitchens
+            )
+            SELECT JSONB_BUILD_OBJECT(
+                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
+                'total', (SELECT total_rows FROM total_count)
+            ) AS result
+            FROM filtered_data;
         ",
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
     )
-    .fetch_all(&db.pool)
+    .fetch_one(&db.pool)
     .await
     {
-        Ok(kitchens) => Ok(kitchens),
+        Ok(counted) => Ok(Paginated::new(
+            counted.result.data,
+            counted.result.total,
+            pagination.page,
+            pagination.per_page,
+        )),
         Err(err) => {
             tracing::info!(
                 "Error occurred while trying to fetch many kitchens: {}",

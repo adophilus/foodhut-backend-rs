@@ -11,9 +11,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::{
-    api::auth::middleware::Auth,
-    repository,
-    types::{Context, Pagination},
+    api::auth::middleware::Auth, repository, types::Context, utils::pagination::Pagination,
 };
 
 #[derive(Deserialize)]
@@ -65,7 +63,7 @@ async fn get_kitchens(
     State(ctx): State<Arc<Context>>,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    let kitchens =
+    let paginated_kitchens =
         match repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await {
             Ok(kitchens) => kitchens,
             Err(_) => {
@@ -76,17 +74,7 @@ async fn get_kitchens(
             }
         };
 
-    (
-        StatusCode::OK,
-        Json(json!({
-            "items": kitchens,
-            "meta": {
-                "total": 1,
-                "page": pagination.page,
-                "per_page": pagination.per_page,
-            }
-        })),
-    )
+    (StatusCode::OK, Json(json!(paginated_kitchens)))
 }
 
 async fn fetch_kitchen_types() -> impl IntoResponse {

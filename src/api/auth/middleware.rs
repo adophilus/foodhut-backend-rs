@@ -36,7 +36,6 @@ async fn get_user_from_header(
     header: String,
 ) -> Result<repository::user::User, Error> {
     let session_id = get_session_id_from_header(header)?;
-    tracing::info!("{}", session_id);
     match repository::session::find_by_id(db_conn.clone(), session_id).await {
         Some(session) => match repository::user::find_by_id(db_conn.clone(), session.user_id).await
         {
