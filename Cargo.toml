@@ -10,6 +10,7 @@ chrono = { version = "0.4.38", features = ["serde"] }
 env_logger = "0.11.3"
 log = "0.4.22"
 num-bigint = "0.4.6"
+regex = "1.10.5"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.120"
 sqlx = { version = "0.7.4", features = ["postgres", "runtime-tokio", "chrono", "macros", "bigdecimal"] }
@@ -19,3 +20,4 @@ tower-http = { version = "0.5.2", features = ["trace"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["std", "env-filter"] }
 ulid = "1.1.2"
+validator = { version = "0.18.1", features = ["derive"] }

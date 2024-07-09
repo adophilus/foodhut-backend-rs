@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 
 use axum::{
     extract::{Path, State},
@@ -7,24 +7,66 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use regex::Regex;
 use serde::Deserialize;
 use serde_json::json;
+use validator::{Validate, ValidationError};
 
 use crate::{
-    api::auth::middleware::Auth, repository, types::Context, utils::pagination::Pagination,
+    api::auth::middleware::Auth,
+    repository,
+    types::Context,
+    utils::{self, pagination::Pagination},
 };
 
-#[derive(Deserialize)]
+const KITCHEN_TYPES: [&str; 4] = ["Chinese", "Cuisine", "Fast Food", "Local"];
+
+#[derive(Deserialize, Validate)]
 struct CreateKitchenPayload {
     pub name: String,
     pub address: String,
     pub phone_number: String,
+    #[validate(custom(function = "validate_kitchen_type"))]
     #[serde(rename = "type")]
     pub type_: String,
+    #[validate(custom(function = "validate_opening_time"))]
     pub opening_time: String,
+    #[validate(custom(function = "validate_closing_time"))]
     pub closing_time: String,
     pub preparation_time: String,
     pub delivery_time: String,
+}
+
+fn validate_kitchen_type(type_: &str) -> Result<(), ValidationError> {
+    match KITCHEN_TYPES.contains(&type_) {
+        true => Ok(()),
+        false => Err(ValidationError::new("INVALID_KITCHEN_TYPE")
+            .with_message(Cow::from("Invalid kitchen type"))),
+    }
+}
+
+fn validate_opening_time(time_str: &str) -> Result<(), ValidationError> {
+    let regex = Regex::new(r"^\d{2}:\d{2}$").expect("Invalid opening time regex");
+    match regex.is_match(time_str) {
+        true => Ok(()),
+        false => Err(
+            ValidationError::new("INVALID_OPENING_TIME").with_message(Cow::from(
+                r"Opening time must be in 24 hour format (e.g: 08:00)",
+            )),
+        ),
+    }
+}
+
+fn validate_closing_time(time_str: &str) -> Result<(), ValidationError> {
+    let regex = Regex::new(r"^\d{2}:\d{2}$").expect("Invalid closing time regex");
+    match regex.is_match(time_str) {
+        true => Ok(()),
+        false => Err(
+            ValidationError::new("INVALID_CLOSING_TIME").with_message(Cow::from(
+                r"Closing time must be in 24 hour format (e.g: 20:00)",
+            )),
+        ),
+    }
 }
 
 async fn create_kitchen(
@@ -32,6 +74,10 @@ async fn create_kitchen(
     auth: Auth,
     Json(payload): Json<CreateKitchenPayload>,
 ) -> impl IntoResponse {
+    if let Err(errors) = payload.validate() {
+        return utils::validation::into_response(errors);
+    }
+
     match repository::kitchen::create(
         ctx.db_conn.clone(),
         repository::kitchen::CreateKitchenPayload {
@@ -104,7 +150,7 @@ async fn get_kitchen_by_id(
 }
 
 async fn fetch_kitchen_types() -> impl IntoResponse {
-    Json(json!(["Chinese", "Cuisine", "Fast Food", "Local"]))
+    Json(json!(KITCHEN_TYPES))
 }
 
 pub fn get_router() -> Router<Arc<Context>> {

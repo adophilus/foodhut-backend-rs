@@ -1,5 +1,6 @@
 use crate::repository;
 use crate::types::Context;
+use crate::utils;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{
@@ -11,9 +12,11 @@ use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
+use validator::Validate;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 struct SignUpPayload {
+    #[validate(email(code = "INVALID_USER_EMAIL", message = "Invalid email address"))]
     email: String,
     phone_number: String,
     first_name: String,
@@ -25,6 +28,10 @@ async fn sign_up(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SignUpPayload>,
 ) -> impl IntoResponse {
+    if let Err(errors) = payload.validate() {
+        return utils::validation::into_response(errors);
+    }
+
     match (
         repository::user::find_by_email(ctx.db_conn.clone(), payload.email.clone()).await,
         repository::user::find_by_phone_number(ctx.db_conn.clone(), payload.phone_number.clone())
