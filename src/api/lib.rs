@@ -2,7 +2,7 @@ use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router}
 use serde_json::json;
 
 use crate::{
-    api::{auth, cart, kitchen, order, user, wallet},
+    api::{auth, cart, kitchen, meal, order, user, wallet},
     types::{ApiResponse, Context},
 };
 use std::sync::Arc;
@@ -20,6 +20,7 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/auth", auth::get_router())
         .nest("/users", user::get_router())
         .nest("/kitchens", kitchen::get_router())
+        .nest("/kitchens/:kitchen_id/meals", meal::get_router())
         .nest("/wallet", wallet::get_router())
         .nest("/cart", cart::get_router())
         .nest("/order", order::get_router())

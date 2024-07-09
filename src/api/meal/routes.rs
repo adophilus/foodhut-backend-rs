@@ -7,6 +7,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use bigdecimal::BigDecimal;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::json;
@@ -19,220 +20,130 @@ use crate::{
     utils::{self, pagination::Pagination},
 };
 
-const KITCHEN_TYPES: [&str; 4] = ["Chinese", "Cuisine", "Fast Food", "Local"];
-
 #[derive(Deserialize, Validate)]
-struct CreateKitchenPayload {
+struct CreateMealPayload {
     pub name: String,
-    pub address: String,
-    pub phone_number: String,
-    #[validate(custom(function = "validate_kitchen_type"))]
-    #[serde(rename = "type")]
-    pub type_: String,
-    #[validate(custom(function = "validate_opening_time"))]
-    pub opening_time: String,
-    #[validate(custom(function = "validate_closing_time"))]
-    pub closing_time: String,
-    pub preparation_time: String,
-    pub delivery_time: String,
+    pub description: String,
+    pub price: BigDecimal,
+    pub tags: Vec<String>,
 }
 
-fn validate_kitchen_type(type_: &str) -> Result<(), ValidationError> {
-    match KITCHEN_TYPES.contains(&type_) {
-        true => Ok(()),
-        false => Err(ValidationError::new("INVALID_KITCHEN_TYPE")
-            .with_message(Cow::from("Invalid kitchen type"))),
-    }
-}
-
-fn validate_opening_time(time_str: &str) -> Result<(), ValidationError> {
-    let regex = Regex::new(r"^\d{2}:\d{2}$").expect("Invalid opening time regex");
-    match regex.is_match(time_str) {
-        true => Ok(()),
-        false => Err(
-            ValidationError::new("INVALID_OPENING_TIME").with_message(Cow::from(
-                r"Opening time must be in 24 hour format (e.g: 08:00)",
-            )),
-        ),
-    }
-}
-
-fn validate_closing_time(time_str: &str) -> Result<(), ValidationError> {
-    let regex = Regex::new(r"^\d{2}:\d{2}$").expect("Invalid closing time regex");
-    match regex.is_match(time_str) {
-        true => Ok(()),
-        false => Err(
-            ValidationError::new("INVALID_CLOSING_TIME").with_message(Cow::from(
-                r"Closing time must be in 24 hour format (e.g: 20:00)",
-            )),
-        ),
-    }
-}
-
-async fn create_kitchen(
+async fn create_meal(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
-    Json(payload): Json<CreateKitchenPayload>,
+    Json(payload): Json<CreateMealPayload>,
 ) -> impl IntoResponse {
     if let Err(errors) = payload.validate() {
         return utils::validation::into_response(errors);
     }
 
-    match repository::kitchen::create(
-        ctx.db_conn.clone(),
-        repository::kitchen::CreateKitchenPayload {
-            name: payload.name,
-            address: payload.address,
-            type_: payload.type_,
-            phone_number: payload.phone_number,
-            opening_time: payload.opening_time,
-            closing_time: payload.closing_time,
-            preparation_time: payload.preparation_time,
-            delivery_time: payload.delivery_time,
-            owner_id: auth.user.id,
-        },
-    )
-    .await
-    {
-        Ok(_) => (
-            StatusCode::CREATED,
-            Json(json!({ "message": "Kitchen created!"})),
-        ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Kitchen creation failed"})),
-        ),
-    }
-}
-
-async fn get_kitchens(
-    State(ctx): State<Arc<Context>>,
-    pagination: Pagination,
-) -> impl IntoResponse {
-    match repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await {
-        Ok(paginated_kitchens) => (StatusCode::OK, Json(json!(paginated_kitchens))),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch kitchens"})),
-        ),
-    }
-}
-
-async fn get_kitchen_by_profile(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {
     match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
-        Ok(Some(kitchen)) => (StatusCode::OK, Json(json!(kitchen))),
+        Ok(Some(kitchen)) => match repository::meal::create(
+            ctx.db_conn.clone(),
+            repository::meal::CreateMealPayload {
+                name: payload.name,
+                description: payload.description,
+                price: payload.price,
+                cover_image_url: "".to_string(),
+                tags: payload.tags,
+                kitchen_id: kitchen.id,
+            },
+        )
+        .await
+        {
+            Ok(_) => (
+                StatusCode::CREATED,
+                Json(json!({ "message": "Meal created!"})),
+            ),
+            Err(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Meal creation failed"})),
+            ),
+        },
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Kitchen not found" })),
+            Json(json!({"error": "Kitchen not found"})),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch kitchen"})),
+            Json(json!({"error": "Failed to create meal"})),
         ),
     }
 }
 
-async fn get_kitchen_by_id(
-    Path(id): Path<String>,
+async fn get_meals(State(ctx): State<Arc<Context>>, pagination: Pagination) -> impl IntoResponse {
+    match repository::meal::find_many(ctx.db_conn.clone(), pagination.clone()).await {
+        Ok(paginated_meals) => (StatusCode::OK, Json(json!(paginated_meals))),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to fetch meals"})),
+        ),
+    }
+}
+
+struct MealPath {
+    pub meal_id: String,
+}
+
+async fn get_meal_by_id(
+    Path(path): Path<MealPath>,
     State(ctx): State<Arc<Context>>,
 ) -> impl IntoResponse {
-    match repository::kitchen::find_by_id(ctx.db_conn.clone(), id).await {
-        Ok(Some(kitchen)) => (StatusCode::OK, Json(json!(kitchen))),
+    match repository::meal::find_by_id(ctx.db_conn.clone(), path.meal_id).await {
+        Ok(Some(meal)) => (StatusCode::OK, Json(json!(meal))),
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Kitchen not found" })),
+            Json(json!({ "error": "Meal not found" })),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch kitchens"})),
+            Json(json!({"error": "Failed to fetch meals"})),
         ),
     }
-}
-
-async fn fetch_kitchen_types() -> impl IntoResponse {
-    Json(json!(KITCHEN_TYPES))
 }
 
 #[derive(Deserialize, Validate)]
-pub struct UpdateKitchenPayload {
+pub struct UpdateMealPayload {
     pub name: Option<String>,
-    pub address: Option<String>,
-    pub phone_number: Option<String>,
-    #[validate(custom(function = "validate_kitchen_type"))]
-    #[serde(rename = "type")]
-    pub type_: Option<String>,
-    #[validate(custom(function = "validate_opening_time"))]
-    pub opening_time: Option<String>,
-    #[validate(custom(function = "validate_closing_time"))]
-    pub closing_time: Option<String>,
-    pub preparation_time: Option<String>,
-    pub delivery_time: Option<String>,
+    pub description: Option<String>,
+    pub price: Option<BigDecimal>,
+    pub tags: Option<Vec<String>>,
 }
 
-async fn update_kitchen_by_profile(
-    auth: Auth,
+async fn update_meal_by_id(
+    Path(path): Path<MealPath>,
     State(ctx): State<Arc<Context>>,
-    Json(payload): Json<UpdateKitchenPayload>,
-) -> Response {
-    match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
-        Ok(Some(kitchen)) => {
-            update_kitchen_by_id(Path { 0: kitchen.id }, State(ctx), Json(payload))
-                .await
-                .into_response()
-        }
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Kitchen not found" })),
-        )
-            .into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Failed to fetch kitchen" })),
-        )
-            .into_response(),
-    }
-}
-
-async fn update_kitchen_by_id(
-    Path(id): Path<String>,
-    State(ctx): State<Arc<Context>>,
-    Json(payload): Json<UpdateKitchenPayload>,
+    Json(payload): Json<UpdateMealPayload>,
 ) -> impl IntoResponse {
-    match repository::kitchen::update_by_id(
+    match repository::meal::update_by_id(
         ctx.db_conn.clone(),
-        id,
-        repository::kitchen::UpdateKitchenPayload {
+        path.meal_id,
+        repository::meal::UpdateMealPayload {
             name: payload.name,
-            address: payload.address,
-            phone_number: payload.phone_number,
-            type_: payload.type_,
-            opening_time: payload.opening_time,
-            closing_time: payload.closing_time,
-            preparation_time: payload.preparation_time,
-            delivery_time: payload.delivery_time,
             rating: None,
+            is_available: None,
+            description: payload.description,
+            price: payload.price,
+            cover_image_url: None,
+            tags: payload.tags,
+            kitchen_id: None,
         },
     )
     .await
     {
         Ok(_) => (
             StatusCode::OK,
-            Json(json!({ "message": "Kitchen updated successfully" })),
+            Json(json!({ "message": "Meal updated successfully" })),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "message": "Failed to update kitchen" })),
+            Json(json!({ "message": "Failed to update meal" })),
         ),
     }
 }
 
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
-        .route("/", post(create_kitchen).get(get_kitchens))
-        .route(
-            "/profile",
-            get(get_kitchen_by_profile).patch(update_kitchen_by_profile),
-        )
-        .route("/:id", get(get_kitchen_by_id).patch(update_kitchen_by_id))
-        .route("/types", get(fetch_kitchen_types))
+        .route("/", post(create_meal).get(get_meals))
+        .route("/:meal_id", get(get_meal_by_id).patch(update_meal_by_id))
 }

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO meals (\n            id, \n            name, \n            description, \n            price,\n            rating, \n            tags, \n            cover_image_url, \n            is_available, \n            kitchen_id\n        )\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Numeric",
+        "Numeric",
+        "Json",
+        "Varchar",
+        "Bool",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "490d14a035fba7ad8cf8ca38bc84967ec7384e3d529fe7b64ffa37b97d419c76"
+}

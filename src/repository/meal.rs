@@ -1,6 +1,7 @@
 use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::types::BigDecimal;
 use std::convert::Into;
 use ulid::Ulid;
@@ -10,154 +11,90 @@ use crate::utils::{
     pagination::{Paginated, Pagination},
 };
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Kitchen {
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Tags {
+    pub items: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Meal {
     pub id: String,
     pub name: String,
-    pub address: String,
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub phone_number: String,
-    pub opening_time: String,
-    pub closing_time: String,
-    pub preparation_time: String,
-    pub delivery_time: String,
-    pub cover_image_url: Option<String>,
+    pub description: String,
     pub rating: BigDecimal,
-    pub owner_id: String,
+    pub price: BigDecimal,
+    pub tags: Tags,
+    pub cover_image_url: String,
+    pub is_available: bool,
+    pub kitchen_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
 
-pub struct CreateKitchenPayload {
+pub struct CreateMealPayload {
     pub name: String,
-    pub address: String,
-    pub phone_number: String,
-    pub type_: String,
-    pub opening_time: String,
-    pub closing_time: String,
-    pub preparation_time: String,
-    pub delivery_time: String,
-    pub owner_id: String,
+    pub description: String,
+    pub price: BigDecimal,
+    pub tags: Vec<String>,
+    pub cover_image_url: String,
+    pub kitchen_id: String,
 }
 
 pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateKitchenPayload) -> Result<(), Error> {
+pub async fn create(db: DatabaseConnection, payload: CreateMealPayload) -> Result<(), Error> {
     match sqlx::query!(
         "
-        INSERT INTO kitchens (
-            id,
-            name,
-            address,
-            type,
-            phone_number,
-            opening_time,
-            closing_time,
-            preparation_time,
-            delivery_time,
-            rating,
-            owner_id
+        INSERT INTO meals (
+            id, 
+            name, 
+            description, 
+            price,
+            rating, 
+            tags, 
+            cover_image_url, 
+            is_available, 
+            kitchen_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     ",
         Ulid::new().to_string(),
         payload.name,
-        payload.address,
-        payload.type_,
-        payload.phone_number,
-        payload.opening_time,
-        payload.closing_time,
-        payload.preparation_time,
-        payload.delivery_time,
+        payload.description,
+        payload.price,
         BigDecimal::new(BigInt::new(Sign::Plus, vec![0]), 2),
-        payload.owner_id
+        json!([]),
+        payload.cover_image_url,
+        true,
+        payload.kitchen_id,
     )
     .execute(&db.pool)
     .await
     {
         Ok(_) => Ok(()),
         Err(err) => {
-            tracing::info!("Error occurred while trying to create a kitchen: {}", err);
+            tracing::info!("Error occurred while trying to create a meal: {}", err);
             Err(Error::UnexpectedError)
         }
     }
 }
 
-pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Kitchen>, Error> {
-    match sqlx::query_as!(
-        Kitchen,
-        "
-            SELECT 
-                id, 
-                name, 
-                address, 
-                type AS type_, 
-                phone_number, 
-                opening_time, 
-                closing_time, 
-                preparation_time, 
-                delivery_time, 
-                cover_image_url, 
-                rating, 
-                owner_id, 
-                created_at, 
-                updated_at
-            FROM kitchens WHERE id = $1
-        ",
-        id
-    )
-    .fetch_optional(&db.pool)
-    .await
-    {
-        Ok(maybe_kitchen) => Ok(maybe_kitchen),
-        Err(err) => {
-            tracing::info!(
-                "Error occurred while trying to fetch many kitchens: {}",
-                err
-            );
-            Err(Error::UnexpectedError)
-        }
+impl Into<Tags> for serde_json::Value {
+    fn into(self) -> Tags {
+        serde_json::de::from_str::<Tags>(self.to_string().as_ref()).unwrap()
     }
 }
 
-pub async fn find_by_owner_id(
-    db: DatabaseConnection,
-    owner_id: String,
-) -> Result<Option<Kitchen>, Error> {
-    match sqlx::query_as!(
-        Kitchen,
-        "
-            SELECT 
-                id, 
-                name, 
-                address, 
-                type AS type_, 
-                phone_number, 
-                opening_time, 
-                closing_time, 
-                preparation_time, 
-                delivery_time, 
-                cover_image_url, 
-                rating, 
-                owner_id, 
-                created_at, 
-                updated_at
-            FROM kitchens WHERE owner_id = $1
-        ",
-        owner_id
-    )
-    .fetch_optional(&db.pool)
-    .await
+pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Meal>, Error> {
+    match sqlx::query_as!(Meal, "SELECT * FROM meals WHERE id = $1", id)
+        .fetch_optional(&db.pool)
+        .await
     {
-        Ok(maybe_kitchen) => Ok(maybe_kitchen),
+        Ok(maybe_meal) => Ok(maybe_meal),
         Err(err) => {
-            tracing::info!(
-                "Error occurred while trying to fetch many kitchens: {}",
-                err
-            );
+            tracing::info!("Error occurred while trying to fetch many meals: {}", err);
             Err(Error::UnexpectedError)
         }
     }
@@ -165,7 +102,7 @@ pub async fn find_by_owner_id(
 
 #[derive(Deserialize)]
 struct DatabaseCountedResult {
-    data: Vec<Kitchen>,
+    data: Vec<Meal>,
     total: u32,
 }
 
@@ -192,19 +129,19 @@ struct DatabaseCounted {
 pub async fn find_many(
     db: DatabaseConnection,
     pagination: Pagination,
-) -> Result<Paginated<Kitchen>, Error> {
+) -> Result<Paginated<Meal>, Error> {
     match sqlx::query_as!(
         DatabaseCounted,
         "
             WITH filtered_data AS (
                 SELECT *
-                FROM kitchens 
+                FROM meals 
                 LIMIT $1
                 OFFSET $2
             ), 
             total_count AS (
                 SELECT COUNT(id) AS total_rows
-                FROM kitchens
+                FROM meals
             )
             SELECT JSONB_BUILD_OBJECT(
                 'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
@@ -225,68 +162,59 @@ pub async fn find_many(
             pagination.per_page,
         )),
         Err(err) => {
-            tracing::info!(
-                "Error occurred while trying to fetch many kitchens: {}",
-                err
-            );
+            tracing::info!("Error occurred while trying to fetch many meals: {}", err);
             Err(Error::UnexpectedError)
         }
     }
 }
 
 #[derive(Serialize)]
-pub struct UpdateKitchenPayload {
+pub struct UpdateMealPayload {
     pub name: Option<String>,
-    pub address: Option<String>,
-    pub phone_number: Option<String>,
-    pub type_: Option<String>,
-    pub opening_time: Option<String>,
-    pub closing_time: Option<String>,
-    pub preparation_time: Option<String>,
-    pub delivery_time: Option<String>,
+    pub description: Option<String>,
     pub rating: Option<BigDecimal>,
+    pub price: Option<BigDecimal>,
+    pub tags: Option<Vec<String>>,
+    pub cover_image_url: Option<String>,
+    pub is_available: Option<bool>,
+    pub kitchen_id: Option<String>,
 }
 
 pub async fn update_by_id(
     db: DatabaseConnection,
     id: String,
-    payload: UpdateKitchenPayload,
+    payload: UpdateMealPayload,
 ) -> Result<(), Error> {
     match sqlx::query!(
         "
-            UPDATE kitchens SET
+            UPDATE meals SET
                 name = COALESCE($1, name),
-                address = COALESCE($2, address),
-                type = COALESCE($3, type),
-                phone_number = COALESCE($4, phone_number),
-                opening_time = COALESCE($5, opening_time),
-                closing_time = COALESCE($6, closing_time),
-                preparation_time = COALESCE($7, preparation_time),
-                delivery_time = COALESCE($8, delivery_time),
-                rating = COALESCE($9, rating),
+                description = COALESCE($2, description),
+                rating = COALESCE($3, rating),
+                price = COALESCE($4, price),
+                tags = COALESCE($5, tags),
+                cover_image_url = COALESCE($6, cover_image_url),
+                is_available = COALESCE($7, is_available),
+                kitchen_id = COALESCE($8, kitchen_id),
                 updated_at = NOW()
             WHERE
-                id = $10
+                id = $9
         ",
         payload.name,
-        payload.address,
-        payload.type_,
-        payload.phone_number,
-        payload.opening_time,
-        payload.closing_time,
-        payload.preparation_time,
-        payload.delivery_time,
+        payload.description,
         payload.rating,
+        payload.price,
+        payload.tags.map(|t| json!(t)),
+        payload.cover_image_url,
+        payload.is_available,
+        payload.kitchen_id,
         id,
     )
     .execute(&db.pool)
     .await
     {
         Err(e) => {
-            log::error!(
-                "Error occurred while trying to clean up verified OTP: {}",
-                e
-            );
+            log::error!("Error occurred while trying to update a meal by id: {}", e);
             return Err(Error::UnexpectedError);
         }
         _ => Ok(()),
