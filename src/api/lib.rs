@@ -1,13 +1,17 @@
-use axum::{routing::get, Router};
+use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use serde_json::json;
 
 use crate::{
-    api::{auth, kitchen, user},
+    api::{auth, cart, kitchen, order, user, wallet},
     types::{ApiResponse, Context},
 };
 use std::sync::Arc;
 
-async fn health_check() -> ApiResponse<&'static str, &'static str> {
-    ApiResponse::ok("We up!")
+async fn health_check() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(json!({ "message":"Welcome to Foodhut API"})),
+    )
 }
 
 pub fn get_router() -> Router<Arc<Context>> {
@@ -16,5 +20,8 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/auth", auth::get_router())
         .nest("/users", user::get_router())
         .nest("/kitchens", kitchen::get_router())
+        .nest("/wallet", wallet::get_router())
+        .nest("/cart", cart::get_router())
+        .nest("/order", order::get_router())
     // .layer(axum::middleware::from_fn(auth::middleware::auth))
 }
