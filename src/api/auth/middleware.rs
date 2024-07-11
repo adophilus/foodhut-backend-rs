@@ -66,7 +66,7 @@ async fn get_user_from_header(
 //     }
 // }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Auth {
     pub user: User,
 }

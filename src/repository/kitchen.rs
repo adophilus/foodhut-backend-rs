@@ -5,6 +5,7 @@ use sqlx::types::BigDecimal;
 use std::convert::Into;
 use ulid::Ulid;
 
+use crate::repository;
 use crate::utils::{
     database::DatabaseConnection,
     pagination::{Paginated, Pagination},
@@ -24,6 +25,7 @@ pub struct Kitchen {
     pub delivery_time: String,
     pub cover_image_url: Option<String>,
     pub rating: BigDecimal,
+    pub likes: i32,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -102,6 +104,7 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Kit
                 delivery_time, 
                 cover_image_url, 
                 rating, 
+                likes, 
                 owner_id, 
                 created_at, 
                 updated_at
@@ -142,6 +145,7 @@ pub async fn find_by_owner_id(
                 delivery_time, 
                 cover_image_url, 
                 rating, 
+                likes, 
                 owner_id, 
                 created_at, 
                 updated_at
@@ -234,6 +238,54 @@ pub async fn find_many(
     }
 }
 
+pub async fn find_many_by_type(
+    db: DatabaseConnection,
+    pagination: Pagination,
+    type_: String,
+) -> Result<Paginated<Kitchen>, Error> {
+    match sqlx::query_as!(
+        DatabaseCounted,
+        "
+            WITH filtered_data AS (
+                SELECT * FROM kitchens 
+                WHERE type = $3
+                LIMIT $1
+                OFFSET $2
+            ), 
+            total_count AS (
+                SELECT COUNT(id) AS total_rows
+                FROM kitchens
+                WHERE type = $3
+            )
+            SELECT JSONB_BUILD_OBJECT(
+                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
+                'total', (SELECT total_rows FROM total_count)
+            ) AS result
+            FROM filtered_data;
+        ",
+        pagination.per_page as i64,
+        ((pagination.page - 1) * pagination.per_page) as i64,
+        type_,
+    )
+    .fetch_one(&db.pool)
+    .await
+    {
+        Ok(counted) => Ok(Paginated::new(
+            counted.result.data,
+            counted.result.total,
+            pagination.page,
+            pagination.per_page,
+        )),
+        Err(err) => {
+            tracing::info!(
+                "Error occurred while trying to fetch many kitchens by type: {}",
+                err
+            );
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub struct UpdateKitchenPayload {
     pub name: Option<String>,
@@ -245,6 +297,7 @@ pub struct UpdateKitchenPayload {
     pub preparation_time: Option<String>,
     pub delivery_time: Option<String>,
     pub rating: Option<BigDecimal>,
+    pub likes: Option<i32>,
 }
 
 pub async fn update_by_id(
@@ -264,9 +317,10 @@ pub async fn update_by_id(
                 preparation_time = COALESCE($7, preparation_time),
                 delivery_time = COALESCE($8, delivery_time),
                 rating = COALESCE($9, rating),
+                likes = COALESCE($10, likes),
                 updated_at = NOW()
             WHERE
-                id = $10
+                id = $11
         ",
         payload.name,
         payload.address,
@@ -277,18 +331,74 @@ pub async fn update_by_id(
         payload.preparation_time,
         payload.delivery_time,
         payload.rating,
+        payload.likes,
         id,
     )
     .execute(&db.pool)
     .await
     {
         Err(e) => {
-            log::error!(
-                "Error occurred while trying to clean up verified OTP: {}",
-                e
-            );
+            log::error!("Error occurred while trying to update kitchen: {}", e);
             return Err(Error::UnexpectedError);
         }
         _ => Ok(()),
     }
+}
+
+pub async fn like_by_id(db: DatabaseConnection, id: String, user_id: String) -> Result<(), Error> {
+    // TODO: handle event type related to this entity
+    match sqlx::query!(
+        "
+            UPDATE kitchens SET
+                likes = likes + 1,
+                updated_at = NOW()
+            WHERE
+                id = $1
+                AND EXISTS (SELECT 1 FROM users WHERE id = $2)
+        ",
+        id,
+        user_id,
+    )
+    .execute(&db.pool)
+    .await
+    {
+        Err(e) => {
+            log::error!("Error occurred while trying to like kitchen by id: {}", e);
+            return Err(Error::UnexpectedError);
+        }
+        _ => Ok(()),
+    }
+}
+
+pub async fn unlike_by_id(
+    db: DatabaseConnection,
+    id: String,
+    user_id: String,
+) -> Result<(), Error> {
+    // TODO: handle event type related to this entity
+    match sqlx::query!(
+        "
+            UPDATE kitchens SET
+                likes = likes - 1,
+                updated_at = NOW()
+            WHERE
+                id = $1
+                AND EXISTS (SELECT 1 FROM users WHERE id = $2)
+        ",
+        id,
+        user_id,
+    )
+    .execute(&db.pool)
+    .await
+    {
+        Err(e) => {
+            log::error!("Error occurred while trying to like kitchen by id: {}", e);
+            return Err(Error::UnexpectedError);
+        }
+        _ => Ok(()),
+    }
+}
+
+pub fn is_owner(user: repository::user::User, kitchen: Kitchen) -> bool {
+    kitchen.owner_id == user.id
 }

@@ -1,10 +1,10 @@
 use std::{borrow::Cow, sync::Arc};
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
 use regex::Regex;
@@ -14,7 +14,7 @@ use validator::{Validate, ValidationError};
 
 use crate::{
     api::auth::middleware::Auth,
-    repository,
+    repository::{self, kitchen::Kitchen, user::User},
     types::Context,
     utils::{self, pagination::Pagination},
 };
@@ -105,11 +105,26 @@ async fn create_kitchen(
     }
 }
 
+#[derive(Deserialize)]
+struct GetKitchenQueryParams {
+    #[serde(rename = "type")]
+    type_: Option<String>,
+}
+
 async fn get_kitchens(
     State(ctx): State<Arc<Context>>,
+    Query(query): Query<GetKitchenQueryParams>,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    match repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await {
+    let res = match query.type_ {
+        None => repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await,
+        Some(type_) => {
+            repository::kitchen::find_many_by_type(ctx.db_conn.clone(), pagination.clone(), type_)
+                .await
+        }
+    };
+
+    match res {
         Ok(paginated_kitchens) => (StatusCode::OK, Json(json!(paginated_kitchens))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -174,12 +189,15 @@ async fn update_kitchen_by_profile(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<UpdateKitchenPayload>,
 ) -> Response {
-    match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
-        Ok(Some(kitchen)) => {
-            update_kitchen_by_id(Path { 0: kitchen.id }, State(ctx), Json(payload))
-                .await
-                .into_response()
-        }
+    match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.clone().user.id).await {
+        Ok(Some(kitchen)) => update_kitchen_by_id(
+            Path { 0: kitchen.id },
+            State(ctx),
+            auth.clone(),
+            Json(payload),
+        )
+        .await
+        .into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "Kitchen not found" })),
@@ -196,11 +214,35 @@ async fn update_kitchen_by_profile(
 async fn update_kitchen_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
+    auth: Auth,
     Json(payload): Json<UpdateKitchenPayload>,
 ) -> impl IntoResponse {
+    let kitchen = match repository::kitchen::find_by_id(ctx.db_conn.clone(), id).await {
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to find kitchen"})),
+            )
+        }
+        Ok(Some(kitchen)) => kitchen,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Kitchen not found"})),
+            )
+        }
+    };
+
+    if repository::kitchen::is_owner(auth.user, kitchen.clone()) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": "You are not the owner of this kitchen"})),
+        );
+    }
+
     match repository::kitchen::update_by_id(
         ctx.db_conn.clone(),
-        id,
+        kitchen.id,
         repository::kitchen::UpdateKitchenPayload {
             name: payload.name,
             address: payload.address,
@@ -211,6 +253,7 @@ async fn update_kitchen_by_id(
             preparation_time: payload.preparation_time,
             delivery_time: payload.delivery_time,
             rating: None,
+            likes: None,
         },
     )
     .await
@@ -226,6 +269,42 @@ async fn update_kitchen_by_id(
     }
 }
 
+async fn like_kitchen_by_id(
+    Path(id): Path<String>,
+    State(ctx): State<Arc<Context>>,
+    auth: Auth,
+    Json(payload): Json<UpdateKitchenPayload>,
+) -> impl IntoResponse {
+    match repository::kitchen::like_by_id(ctx.db_conn.clone(), id, auth.user.id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Kitchen liked successfully" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "message": "Failed to like kitchen" })),
+        ),
+    }
+}
+
+async fn unlike_kitchen_by_id(
+    Path(id): Path<String>,
+    State(ctx): State<Arc<Context>>,
+    auth: Auth,
+    Json(payload): Json<UpdateKitchenPayload>,
+) -> impl IntoResponse {
+    match repository::kitchen::unlike_by_id(ctx.db_conn.clone(), id, auth.user.id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Kitchen unliked successfully" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "message": "Failed to unlike kitchen" })),
+        ),
+    }
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", post(create_kitchen).get(get_kitchens))
@@ -234,5 +313,7 @@ pub fn get_router() -> Router<Arc<Context>> {
             get(get_kitchen_by_profile).patch(update_kitchen_by_profile),
         )
         .route("/:id", get(get_kitchen_by_id).patch(update_kitchen_by_id))
+        .route("/:id/like", put(like_kitchen_by_id))
+        .route("/:id/unlike", put(unlike_kitchen_by_id))
         .route("/types", get(fetch_kitchen_types))
 }

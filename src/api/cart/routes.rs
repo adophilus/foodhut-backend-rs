@@ -14,81 +14,15 @@ use validator::{Validate, ValidationError};
 
 use crate::{
     api::auth::middleware::Auth,
-    repository,
+    repository::{self, cart::CartItems},
     types::Context,
     utils::{self, pagination::Pagination},
 };
 
-const KITCHEN_TYPES: [&str; 4] = ["Chinese", "Cuisine", "Fast Food", "Local"];
-
-#[derive(Deserialize, Validate)]
-struct CreateKitchenPayload {
-    pub name: String,
-    pub address: String,
-    pub phone_number: String,
-    #[validate(custom(function = "validate_kitchen_type"))]
-    #[serde(rename = "type")]
-    pub type_: String,
-    #[validate(custom(function = "validate_opening_time"))]
-    pub opening_time: String,
-    #[validate(custom(function = "validate_closing_time"))]
-    pub closing_time: String,
-    pub preparation_time: String,
-    pub delivery_time: String,
-}
-
-fn validate_kitchen_type(type_: &str) -> Result<(), ValidationError> {
-    match KITCHEN_TYPES.contains(&type_) {
-        true => Ok(()),
-        false => Err(ValidationError::new("INVALID_KITCHEN_TYPE")
-            .with_message(Cow::from("Invalid kitchen type"))),
-    }
-}
-
-fn validate_opening_time(time_str: &str) -> Result<(), ValidationError> {
-    let regex = Regex::new(r"^\d{2}:\d{2}$").expect("Invalid opening time regex");
-    match regex.is_match(time_str) {
-        true => Ok(()),
-        false => Err(
-            ValidationError::new("INVALID_OPENING_TIME").with_message(Cow::from(
-                r"Opening time must be in 24 hour format (e.g: 08:00)",
-            )),
-        ),
-    }
-}
-
-fn validate_closing_time(time_str: &str) -> Result<(), ValidationError> {
-    let regex = Regex::new(r"^\d{2}:\d{2}$").expect("Invalid closing time regex");
-    match regex.is_match(time_str) {
-        true => Ok(()),
-        false => Err(
-            ValidationError::new("INVALID_CLOSING_TIME").with_message(Cow::from(
-                r"Closing time must be in 24 hour format (e.g: 20:00)",
-            )),
-        ),
-    }
-}
-
-async fn create_kitchen(
-    State(ctx): State<Arc<Context>>,
-    auth: Auth,
-    Json(payload): Json<CreateKitchenPayload>,
-) -> impl IntoResponse {
-    if let Err(errors) = payload.validate() {
-        return utils::validation::into_response(errors);
-    }
-
-    match repository::kitchen::create(
+async fn create_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl IntoResponse {
+    match repository::cart::create(
         ctx.db_conn.clone(),
-        repository::kitchen::CreateKitchenPayload {
-            name: payload.name,
-            address: payload.address,
-            type_: payload.type_,
-            phone_number: payload.phone_number,
-            opening_time: payload.opening_time,
-            closing_time: payload.closing_time,
-            preparation_time: payload.preparation_time,
-            delivery_time: payload.delivery_time,
+        repository::cart::CreateCartPayload {
             owner_id: auth.user.id,
         },
     )
@@ -96,143 +30,123 @@ async fn create_kitchen(
     {
         Ok(_) => (
             StatusCode::CREATED,
-            Json(json!({ "message": "Kitchen created!"})),
+            Json(json!({ "message": "Cart created!"})),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Kitchen creation failed"})),
+            Json(json!({ "error": "Cart creation failed"})),
         ),
     }
 }
 
-async fn get_kitchens(
+async fn get_carts(
     State(ctx): State<Arc<Context>>,
+    auth: Auth,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    match repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await {
-        Ok(paginated_kitchens) => (StatusCode::OK, Json(json!(paginated_kitchens))),
+    match repository::cart::find_many_by_owner_id(
+        ctx.db_conn.clone(),
+        pagination.clone(),
+        auth.user.id,
+    )
+    .await
+    {
+        Ok(paginated_carts) => (StatusCode::OK, Json(json!(paginated_carts))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch kitchens"})),
+            Json(json!({"error": "Failed to fetch carts"})),
         ),
     }
 }
 
-async fn get_kitchen_by_profile(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {
-    match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
-        Ok(Some(kitchen)) => (StatusCode::OK, Json(json!(kitchen))),
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Kitchen not found" })),
-        ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch kitchen"})),
-        ),
-    }
-}
-
-async fn get_kitchen_by_id(
+async fn get_cart_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
+    auth: Auth,
 ) -> impl IntoResponse {
-    match repository::kitchen::find_by_id(ctx.db_conn.clone(), id).await {
-        Ok(Some(kitchen)) => (StatusCode::OK, Json(json!(kitchen))),
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Kitchen not found" })),
-        ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch kitchens"})),
-        ),
-    }
-}
+    let cart = match repository::cart::find_by_id(ctx.db_conn.clone(), id.clone()).await {
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to find cart"})),
+            )
+        }
+        Ok(Some(cart)) => cart,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Cart not found"})),
+            )
+        }
+    };
 
-async fn fetch_kitchen_types() -> impl IntoResponse {
-    Json(json!(KITCHEN_TYPES))
+    if repository::cart::is_owner(auth.user.clone(), cart.clone()) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": "You are not the owner of this cart"})),
+        );
+    }
+
+    (StatusCode::OK, Json(json!(cart)))
 }
 
 #[derive(Deserialize, Validate)]
-pub struct UpdateKitchenPayload {
-    pub name: Option<String>,
-    pub address: Option<String>,
-    pub phone_number: Option<String>,
-    #[validate(custom(function = "validate_kitchen_type"))]
-    #[serde(rename = "type")]
-    pub type_: Option<String>,
-    #[validate(custom(function = "validate_opening_time"))]
-    pub opening_time: Option<String>,
-    #[validate(custom(function = "validate_closing_time"))]
-    pub closing_time: Option<String>,
-    pub preparation_time: Option<String>,
-    pub delivery_time: Option<String>,
+pub struct UpdateCartPayload {
+    items: CartItems,
 }
 
-async fn update_kitchen_by_profile(
-    auth: Auth,
-    State(ctx): State<Arc<Context>>,
-    Json(payload): Json<UpdateKitchenPayload>,
-) -> Response {
-    match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
-        Ok(Some(kitchen)) => {
-            update_kitchen_by_id(Path { 0: kitchen.id }, State(ctx), Json(payload))
-                .await
-                .into_response()
-        }
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Kitchen not found" })),
-        )
-            .into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Failed to fetch kitchen" })),
-        )
-            .into_response(),
-    }
-}
-
-async fn update_kitchen_by_id(
+async fn update_cart_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
-    Json(payload): Json<UpdateKitchenPayload>,
+    auth: Auth,
+    Json(payload): Json<UpdateCartPayload>,
 ) -> impl IntoResponse {
-    match repository::kitchen::update_by_id(
+    let cart = match repository::cart::find_by_id(ctx.db_conn.clone(), id.clone()).await {
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to find cart"})),
+            )
+        }
+        Ok(Some(cart)) => cart,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Cart not found"})),
+            )
+        }
+    };
+
+    if repository::cart::is_owner(auth.user.clone(), cart.clone()) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": "You are not the owner of this cart"})),
+        );
+    }
+
+    match repository::cart::update_by_id(
         ctx.db_conn.clone(),
         id,
-        repository::kitchen::UpdateKitchenPayload {
-            name: payload.name,
-            address: payload.address,
-            phone_number: payload.phone_number,
-            type_: payload.type_,
-            opening_time: payload.opening_time,
-            closing_time: payload.closing_time,
-            preparation_time: payload.preparation_time,
-            delivery_time: payload.delivery_time,
-            rating: None,
+        repository::cart::UpdateCartPayload {
+            items: Some(payload.items),
+            status: None,
         },
     )
     .await
     {
         Ok(_) => (
             StatusCode::OK,
-            Json(json!({ "message": "Kitchen updated successfully" })),
+            Json(json!({ "message": "Cart updated successfully" })),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "message": "Failed to update kitchen" })),
+            Json(json!({ "message": "Failed to update cart" })),
         ),
     }
 }
 
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
-        .route("/", post(create_kitchen).get(get_kitchens))
-        .route(
-            "/profile",
-            get(get_kitchen_by_profile).patch(update_kitchen_by_profile),
-        )
-        .route("/:id", get(get_kitchen_by_id).patch(update_kitchen_by_id))
-        .route("/types", get(fetch_kitchen_types))
+        .route("/", post(create_cart).get(get_carts))
+        .route("/:id", get(get_cart_by_id).patch(update_cart_by_id))
 }

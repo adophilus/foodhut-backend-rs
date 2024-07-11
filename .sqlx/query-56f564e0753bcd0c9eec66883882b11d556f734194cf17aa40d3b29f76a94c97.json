@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO carts (\n            id,\n            items,\n            status,\n            owner_id\n        )\n        VALUES ($1, $2, $3, $4)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Json",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "56f564e0753bcd0c9eec66883882b11d556f734194cf17aa40d3b29f76a94c97"
+}

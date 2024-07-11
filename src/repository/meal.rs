@@ -6,6 +6,8 @@ use sqlx::types::BigDecimal;
 use std::convert::Into;
 use ulid::Ulid;
 
+use crate::repository;
+
 use crate::utils::{
     database::DatabaseConnection,
     pagination::{Paginated, Pagination},
@@ -23,6 +25,7 @@ pub struct Meal {
     pub description: String,
     pub rating: BigDecimal,
     pub price: BigDecimal,
+    pub likes: i32,
     pub tags: Tags,
     pub cover_image_url: String,
     pub is_available: bool,
@@ -214,9 +217,38 @@ pub async fn update_by_id(
     .await
     {
         Err(e) => {
-            log::error!("Error occurred while trying to update a meal by id: {}", e);
+            log::error!(
+                "Error occurred while trying to update a meal by id {}: {}",
+                id,
+                e
+            );
             return Err(Error::UnexpectedError);
         }
         _ => Ok(()),
     }
+}
+
+pub async fn delete_by_id(db: DatabaseConnection, id: String) -> Result<(), Error> {
+    match sqlx::query!("DELETE FROM meals WHERE id = $1", id)
+        .execute(&db.pool)
+        .await
+    {
+        Err(e) => {
+            log::error!(
+                "Error occurred while trying to delete a meal by id {}: {}",
+                id,
+                e
+            );
+            return Err(Error::UnexpectedError);
+        }
+        Ok(_) => Ok(()),
+    }
+}
+
+pub fn is_owner(
+    user: repository::user::User,
+    kitchen: repository::kitchen::Kitchen,
+    meal: Meal,
+) -> bool {
+    return repository::kitchen::is_owner(user, kitchen.clone()) || kitchen.id == meal.kitchen_id;
 }

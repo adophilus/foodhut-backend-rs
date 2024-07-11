@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE kitchens SET\n                likes = likes + 1,\n                updated_at = NOW()\n            WHERE\n                id = $1\n                AND EXISTS (SELECT 1 FROM users WHERE id = $2)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c0c444c23c7cb24c45daf33de66fce03e8c1b5a60a2440d05cf5832480d04271"
+}

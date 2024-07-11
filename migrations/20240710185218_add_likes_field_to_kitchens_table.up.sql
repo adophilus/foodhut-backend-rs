@@ -1,0 +1,2 @@
+ALTER TABLE kitchens
+ADD COLUMN likes INTEGER NOT NULL;

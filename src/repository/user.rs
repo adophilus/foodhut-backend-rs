@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::utils::database::DatabaseConnection;
 use ulid::Ulid;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct User {
     pub id: String,
     pub email: String,

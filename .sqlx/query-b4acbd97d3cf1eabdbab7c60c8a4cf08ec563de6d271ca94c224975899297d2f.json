@@ -57,6 +57,11 @@
         "ordinal": 10,
         "name": "updated_at",
         "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 11,
+        "name": "likes",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -75,7 +80,8 @@
       false,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
   "hash": "b4acbd97d3cf1eabdbab7c60c8a4cf08ec563de6d271ca94c224975899297d2f"

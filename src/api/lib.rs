@@ -20,9 +20,9 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/auth", auth::get_router())
         .nest("/users", user::get_router())
         .nest("/kitchens", kitchen::get_router())
-        .nest("/kitchens/:kitchen_id/meals", meal::get_router())
-        .nest("/wallet", wallet::get_router())
-        .nest("/cart", cart::get_router())
-        .nest("/order", order::get_router())
+        .nest("/meals", meal::get_router())
+        .nest("/wallets", wallet::get_router())
+        .nest("/carts", cart::get_router())
+        .nest("/orders", order::get_router())
     // .layer(axum::middleware::from_fn(auth::middleware::auth))
 }
