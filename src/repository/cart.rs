@@ -104,7 +104,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateCartPayload) -> Resul
     {
         Ok(_) => Ok(()),
         Err(err) => {
-            tracing::info!("Error occurred while trying to create a cart: {}", err);
+            tracing::error!("Error occurred while trying to create a cart: {}", err);
             Err(Error::UnexpectedError)
         }
     }
@@ -123,7 +123,7 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Car
     {
         Ok(maybe_cart) => Ok(maybe_cart),
         Err(err) => {
-            tracing::info!("Error occurred while trying to fetch many carts: {}", err);
+            tracing::error!("Error occurred while trying to fetch many carts: {}", err);
             Err(Error::UnexpectedError)
         }
     }
@@ -191,7 +191,7 @@ pub async fn find_many(
             pagination.per_page,
         )),
         Err(err) => {
-            tracing::info!("Error occurred while trying to fetch many carts: {}", err);
+            tracing::error!("Error occurred while trying to fetch many carts: {}", err);
             Err(Error::UnexpectedError)
         }
     }
@@ -236,7 +236,7 @@ pub async fn find_many_by_owner_id(
             pagination.per_page,
         )),
         Err(err) => {
-            tracing::info!("Error occurred while trying to fetch many carts: {}", err);
+            tracing::error!("Error occurred while trying to fetch many carts: {}", err);
             Err(Error::UnexpectedError)
         }
     }

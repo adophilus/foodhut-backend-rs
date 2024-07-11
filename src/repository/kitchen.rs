@@ -61,9 +61,10 @@ pub async fn create(db: DatabaseConnection, payload: CreateKitchenPayload) -> Re
             preparation_time,
             delivery_time,
             rating,
+            likes,
             owner_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     ",
         Ulid::new().to_string(),
         payload.name,
@@ -75,6 +76,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateKitchenPayload) -> Re
         payload.preparation_time,
         payload.delivery_time,
         BigDecimal::new(BigInt::new(Sign::Plus, vec![0]), 2),
+        0,
         payload.owner_id
     )
     .execute(&db.pool)
@@ -82,7 +84,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateKitchenPayload) -> Re
     {
         Ok(_) => Ok(()),
         Err(err) => {
-            tracing::info!("Error occurred while trying to create a kitchen: {}", err);
+            tracing::error!("Error occurred while trying to create a kitchen: {}", err);
             Err(Error::UnexpectedError)
         }
     }
@@ -117,7 +119,7 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Kit
     {
         Ok(maybe_kitchen) => Ok(maybe_kitchen),
         Err(err) => {
-            tracing::info!(
+            tracing::error!(
                 "Error occurred while trying to fetch many kitchens: {}",
                 err
             );
@@ -158,7 +160,7 @@ pub async fn find_by_owner_id(
     {
         Ok(maybe_kitchen) => Ok(maybe_kitchen),
         Err(err) => {
-            tracing::info!(
+            tracing::error!(
                 "Error occurred while trying to fetch many kitchens: {}",
                 err
             );
@@ -229,7 +231,7 @@ pub async fn find_many(
             pagination.per_page,
         )),
         Err(err) => {
-            tracing::info!(
+            tracing::error!(
                 "Error occurred while trying to fetch many kitchens: {}",
                 err
             );
@@ -277,7 +279,7 @@ pub async fn find_many_by_type(
             pagination.per_page,
         )),
         Err(err) => {
-            tracing::info!(
+            tracing::error!(
                 "Error occurred while trying to fetch many kitchens by type: {}",
                 err
             );

@@ -78,6 +78,22 @@ async fn create_kitchen(
         return utils::validation::into_response(errors);
     }
 
+    match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id.clone()).await {
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to find kitchen"})),
+            )
+        }
+        Ok(Some(_)) => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({"error": "You already have a kitchen"})),
+            )
+        }
+        Ok(None) => (),
+    };
+
     match repository::kitchen::create(
         ctx.db_conn.clone(),
         repository::kitchen::CreateKitchenPayload {

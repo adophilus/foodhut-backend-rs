@@ -1,9 +1,10 @@
 use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use sqlx::types::BigDecimal;
 use std::convert::Into;
+use std::ops::{Deref, DerefMut};
 use ulid::Ulid;
 
 use crate::repository;
@@ -13,10 +14,24 @@ use crate::utils::{
     pagination::{Paginated, Pagination},
 };
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Tags {
-    pub items: Vec<String>,
-}
+// #[derive(Serialize, Deserialize, Clone)]
+// pub struct Tags {
+//     pub items: Vec<String>,
+// }
+
+// impl Deref for Tags {
+//     type Target = Vec<String>;
+//
+//     fn deref(&self) -> &Self::Target {
+//         &self.items
+//     }
+// }
+//
+// impl DerefMut for Tags {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.items
+//     }
+// }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Meal {
@@ -26,12 +41,20 @@ pub struct Meal {
     pub rating: BigDecimal,
     pub price: BigDecimal,
     pub likes: i32,
-    pub tags: Tags,
+    // pub tags: Tags,
+    #[serde(deserialize_with = "deserialze_tags")]
+    pub tags: T
     pub cover_image_url: String,
     pub is_available: bool,
     pub kitchen_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+}
+
+fn deserialze_tags<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where D: Deserializer<'de>
+{
+    Ok(vec![])
 }
 
 pub struct CreateMealPayload {
@@ -56,19 +79,21 @@ pub async fn create(db: DatabaseConnection, payload: CreateMealPayload) -> Resul
             description, 
             price,
             rating, 
+            likes,
             tags, 
             cover_image_url, 
             is_available, 
             kitchen_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     ",
         Ulid::new().to_string(),
         payload.name,
         payload.description,
         payload.price,
         BigDecimal::new(BigInt::new(Sign::Plus, vec![0]), 2),
-        json!([]),
+        0,
+        json!(payload.tags),
         payload.cover_image_url,
         true,
         payload.kitchen_id,
@@ -78,17 +103,36 @@ pub async fn create(db: DatabaseConnection, payload: CreateMealPayload) -> Resul
     {
         Ok(_) => Ok(()),
         Err(err) => {
-            tracing::info!("Error occurred while trying to create a meal: {}", err);
+            tracing::error!("Error occurred while trying to create a meal: {}", err);
             Err(Error::UnexpectedError)
         }
     }
 }
 
-impl Into<Tags> for serde_json::Value {
-    fn into(self) -> Tags {
-        serde_json::de::from_str::<Tags>(self.to_string().as_ref()).unwrap()
-    }
-}
+// impl Into<Tags> for serde_json::Value {
+//     fn into(self) -> Tags {
+//         tracing::debug!("Am I the one causing the error?");
+//         match self {
+//             serde_json::Value::Array(items) => Tags {
+//                 items: items.into_iter().map(|item| item.to_string()).collect(),
+//             },
+//             _ => Tags { items: vec![] },
+//         };
+//         tracing::debug!("No I'm not");
+//         Tags { items: vec![] }
+//         // match serde_json::de::from_str::<Vec<String>>(self.to_string().as_ref()) {
+//         //     Ok(items) => Tags { items },
+//         //     Err(err) => {
+//         //         tracing::error!(
+//         //             "Error occurred while trying to convert tags from the db to Tags {}: {}",
+//         //             self.to_string(),
+//         //             err
+//         //         );
+//         //         Tags { items: vec![] }
+//         //     }
+//         // }
+//     }
+// }
 
 pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Meal>, Error> {
     match sqlx::query_as!(Meal, "SELECT * FROM meals WHERE id = $1", id)
@@ -97,7 +141,7 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Mea
     {
         Ok(maybe_meal) => Ok(maybe_meal),
         Err(err) => {
-            tracing::info!("Error occurred while trying to fetch many meals: {}", err);
+            tracing::error!("Error occurred while trying to fetch many meals: {}", err);
             Err(Error::UnexpectedError)
         }
     }
@@ -113,8 +157,17 @@ impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
     fn into(self) -> DatabaseCountedResult {
         match self {
             Some(json) => {
-                serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref())
-                    .unwrap()
+                tracing::debug!("{}", json["data"]);
+                match serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref()) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        tracing::error!("{}", err);
+                        DatabaseCountedResult {
+                            data: vec![],
+                            total: 0,
+                        }
+                    }
+                }
             }
             None => DatabaseCountedResult {
                 data: vec![],
@@ -165,7 +218,7 @@ pub async fn find_many(
             pagination.per_page,
         )),
         Err(err) => {
-            tracing::info!("Error occurred while trying to fetch many meals: {}", err);
+            tracing::error!("Error occurred while trying to fetch many meals: {}", err);
             Err(Error::UnexpectedError)
         }
     }
