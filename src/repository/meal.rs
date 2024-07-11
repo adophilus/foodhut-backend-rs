@@ -14,24 +14,50 @@ use crate::utils::{
     pagination::{Paginated, Pagination},
 };
 
-// #[derive(Serialize, Deserialize, Clone)]
-// pub struct Tags {
-//     pub items: Vec<String>,
-// }
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Tags {
+    pub items: Vec<String>,
+}
 
-// impl Deref for Tags {
-//     type Target = Vec<String>;
-//
-//     fn deref(&self) -> &Self::Target {
-//         &self.items
-//     }
-// }
-//
-// impl DerefMut for Tags {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         &mut self.items
-//     }
-// }
+impl Deref for Tags {
+    type Target = Vec<String>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.items
+    }
+}
+
+impl DerefMut for Tags {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.items
+    }
+}
+
+impl Into<Tags> for serde_json::Value {
+    fn into(self) -> Tags {
+        tracing::debug!("Am I the one causing the error?");
+        match self {
+            serde_json::Value::Array(items) => Tags {
+                items: items.into_iter().map(|item| item.to_string()).collect(),
+            },
+            _ => Tags { items: vec![] },
+        };
+        tracing::debug!("No I'm not");
+        Tags { items: vec![] }
+        // match serde_json::de::from_str::<Vec<String>>(self.to_string().as_ref()) {
+        //     Ok(items) => Tags { items },
+        //     Err(err) => {
+        //         tracing::error!(
+        //             "Error occurred while trying to convert tags from the db to Tags {}: {}",
+        //             self.to_string(),
+        //             err
+        //         );
+        //         Tags { items: vec![] }
+        //     }
+        // }
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Meal {
@@ -41,20 +67,12 @@ pub struct Meal {
     pub rating: BigDecimal,
     pub price: BigDecimal,
     pub likes: i32,
-    // pub tags: Tags,
-    #[serde(deserialize_with = "deserialze_tags")]
-    pub tags: T
+    pub tags: Tags,
     pub cover_image_url: String,
     pub is_available: bool,
     pub kitchen_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
-}
-
-fn deserialze_tags<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where D: Deserializer<'de>
-{
-    Ok(vec![])
 }
 
 pub struct CreateMealPayload {
@@ -108,31 +126,6 @@ pub async fn create(db: DatabaseConnection, payload: CreateMealPayload) -> Resul
         }
     }
 }
-
-// impl Into<Tags> for serde_json::Value {
-//     fn into(self) -> Tags {
-//         tracing::debug!("Am I the one causing the error?");
-//         match self {
-//             serde_json::Value::Array(items) => Tags {
-//                 items: items.into_iter().map(|item| item.to_string()).collect(),
-//             },
-//             _ => Tags { items: vec![] },
-//         };
-//         tracing::debug!("No I'm not");
-//         Tags { items: vec![] }
-//         // match serde_json::de::from_str::<Vec<String>>(self.to_string().as_ref()) {
-//         //     Ok(items) => Tags { items },
-//         //     Err(err) => {
-//         //         tracing::error!(
-//         //             "Error occurred while trying to convert tags from the db to Tags {}: {}",
-//         //             self.to_string(),
-//         //             err
-//         //         );
-//         //         Tags { items: vec![] }
-//         //     }
-//         // }
-//     }
-// }
 
 pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Meal>, Error> {
     match sqlx::query_as!(Meal, "SELECT * FROM meals WHERE id = $1", id)
