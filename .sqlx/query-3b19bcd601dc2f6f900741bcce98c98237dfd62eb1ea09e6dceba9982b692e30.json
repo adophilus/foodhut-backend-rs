@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE meals SET\n                        likes = likes + 1,\n                        updated_at = NOW()\n                    WHERE\n                        id = $1;\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3b19bcd601dc2f6f900741bcce98c98237dfd62eb1ea09e6dceba9982b692e30"
+}

@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
 use bigdecimal::BigDecimal;
@@ -67,9 +67,12 @@ async fn create_meal(
     )
     .await
     {
-        Ok(_) => (
+        Ok(meal) => (
             StatusCode::CREATED,
-            Json(json!({ "message": "Meal created!"})),
+            Json(json!({
+                "message": "Meal created!",
+                "id": meal.id
+            })),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -192,16 +195,85 @@ async fn update_meal_by_id(
 
 async fn delete_meal_by_id(
     Path(id): Path<String>,
+    auth: Auth,
     State(ctx): State<Arc<Context>>,
 ) -> impl IntoResponse {
-    match repository::meal::delete_by_id(ctx.db_conn.clone(), id).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(json!({ "message": "Meal deleted successfully" })),
-        ),
+    match repository::meal::find_by_id(ctx.db_conn.clone(), id.clone()).await {
+        Ok(maybe_meal) => {
+            if maybe_meal.is_none() {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": "Meal not found"})),
+                );
+            }
+
+            let meal = maybe_meal.unwrap();
+            let kitchen = if let Ok(Some(kitchen)) =
+                repository::kitchen::find_by_id(ctx.db_conn.clone(), meal.kitchen_id.clone()).await
+            {
+                kitchen
+            } else {
+                return (
+                    StatusCode::OK,
+                    Json(json!({ "error": "Kitchen not found" })),
+                );
+            };
+
+            if !repository::meal::is_owner(auth.user.clone(), kitchen, meal) {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({"error": "You are not the owner of this kitchen"})),
+                );
+            }
+
+            match repository::meal::delete_by_id(ctx.db_conn.clone(), id.clone()).await {
+                Ok(_) => (
+                    StatusCode::OK,
+                    Json(json!({ "message": "Meal deleted successfully" })),
+                ),
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "message": "Failed to delete meal" })),
+                ),
+            }
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "message": "Failed to delete meal" })),
+        ),
+    }
+}
+
+async fn like_meal_by_id(
+    Path(id): Path<String>,
+    State(ctx): State<Arc<Context>>,
+    auth: Auth,
+) -> impl IntoResponse {
+    match repository::meal::like_by_id(ctx.db_conn.clone(), id, auth.user.id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Meal liked successfully" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "message": "Failed to like meal" })),
+        ),
+    }
+}
+
+async fn unlike_meal_by_id(
+    Path(id): Path<String>,
+    State(ctx): State<Arc<Context>>,
+    auth: Auth,
+) -> impl IntoResponse {
+    match repository::meal::unlike_by_id(ctx.db_conn.clone(), id, auth.user.id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Meal unliked successfully" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "message": "Failed to unlike meal" })),
         ),
     }
 }
@@ -210,9 +282,11 @@ pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", post(create_meal).get(get_meals))
         .route(
-            "/:meal_id",
+            "/:id",
             get(get_meal_by_id)
                 .patch(update_meal_by_id)
                 .delete(delete_meal_by_id),
         )
+        .route("/:id/like", put(like_meal_by_id))
+        .route("/:id/unlike", put(unlike_meal_by_id))
 }

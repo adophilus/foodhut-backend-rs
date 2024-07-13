@@ -41,14 +41,14 @@ pub struct KitchenUserReaction {
     pub updated_at: Option<NaiveDateTime>,
 }
 
-enum KitchenUserReactionReaction {
+pub enum KitchenUserReactionReaction {
     Like,
 }
 
 impl ToString for KitchenUserReactionReaction {
     fn to_string(&self) -> String {
         match self {
-            KitchenUserReactionReaction::Like => String::from("LIKE"),
+            Self::Like => String::from("LIKE"),
         }
     }
 }
