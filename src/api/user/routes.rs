@@ -53,7 +53,8 @@ async fn update_user_by_id(
         return (
             StatusCode::FORBIDDEN,
             Json(json!({ "error": "Access denied"})),
-        ).into_response();
+        )
+            .into_response();
     }
 
     update_user_profile(ctx.db_conn.clone(), id, payload).await
@@ -78,6 +79,7 @@ async fn update_user_profile(
         first_name: payload.first_name,
         last_name: payload.last_name,
         birthday: payload.birthday,
+        has_kitchen: None,
         profile_picture_url: None,
     };
 
@@ -85,11 +87,13 @@ async fn update_user_profile(
         Ok(_) => (
             StatusCode::OK,
             Json(json!({ "message": "Update successful"})),
-        ).into_response(),
+        )
+            .into_response(),
         Err(repository::user::Error::UnexpectedError) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Update failed" })),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 

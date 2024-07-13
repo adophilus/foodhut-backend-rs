@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use chrono::{NaiveDate, NaiveDateTime};
 use log;
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +13,7 @@ pub struct User {
     pub is_verified: bool,
     pub first_name: String,
     pub last_name: String,
+    pub has_kitchen: bool,
     pub birthday: NaiveDateTime,
     pub referral_code: Option<String>,
     pub profile_picture_url: Option<String>,
@@ -56,13 +57,19 @@ pub async fn create(db: DatabaseConnection, payload: CreateUserPayload) -> Resul
 }
 
 pub async fn find_by_id(db: DatabaseConnection, id: String) -> Option<User> {
-    sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", id,)
-        .fetch_optional(&db.pool)
-        .await
-        .map_err(|err| {
-            log::error!("Error occurred while fetching user with id {}: {}", id, err);
-        })
-        .unwrap_or(None)
+    sqlx::query_as!(
+        User,
+        "
+        SELECT * FROM users WHERE id = $1
+    ",
+        id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    .map_err(|err| {
+        log::error!("Error occurred while fetching user with id {}: {}", id, err);
+    })
+    .unwrap_or(None)
 }
 
 pub async fn find_by_email(db: DatabaseConnection, email: String) -> Option<User> {
@@ -125,6 +132,7 @@ pub struct UpdateUserPayload {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub birthday: Option<NaiveDate>,
+    pub has_kitchen: Option<bool>,
     pub profile_picture_url: Option<String>,
 }
 
@@ -141,16 +149,18 @@ pub async fn update_by_id(
                 first_name = COALESCE($3, first_name),
                 last_name = COALESCE($4, last_name),
                 birthday = COALESCE($5, birthday),
-                profile_picture_url = COALESCE($6, profile_picture_url),
+                has_kitchen = COALESCE($6, has_kitchen),
+                profile_picture_url = COALESCE($7, profile_picture_url),
                 updated_at = NOW()
             WHERE
-                id = $7
+                id = $8
         ",
         payload.email,
         payload.phone_number,
         payload.first_name,
         payload.last_name,
         payload.birthday,
+        payload.has_kitchen,
         payload.profile_picture_url,
         id,
     )
@@ -159,7 +169,8 @@ pub async fn update_by_id(
     {
         Err(e) => {
             log::error!(
-                "Error occurred while trying to clean up verified OTP: {}",
+                "Error occurred while trying to update a user by id {}: {}",
+                id,
                 e
             );
             return Err(Error::UnexpectedError);

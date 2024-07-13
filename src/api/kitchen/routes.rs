@@ -94,7 +94,7 @@ async fn create_kitchen(
         Ok(None) => (),
     };
 
-    match repository::kitchen::create(
+    if let Err(_) = repository::kitchen::create(
         ctx.db_conn.clone(),
         repository::kitchen::CreateKitchenPayload {
             name: payload.name,
@@ -105,20 +105,42 @@ async fn create_kitchen(
             closing_time: payload.closing_time,
             preparation_time: payload.preparation_time,
             delivery_time: payload.delivery_time,
-            owner_id: auth.user.id,
+            owner_id: auth.user.id.clone(),
         },
     )
     .await
     {
-        Ok(_) => (
-            StatusCode::CREATED,
-            Json(json!({ "message": "Kitchen created!"})),
-        ),
-        Err(_) => (
+        return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Kitchen creation failed"})),
-        ),
+        );
     }
+
+    if let Err(_) = repository::user::update_by_id(
+        ctx.db_conn.clone(),
+        auth.user.id.clone(),
+        repository::user::UpdateUserPayload {
+            has_kitchen: Some(true),
+            email: None,
+            birthday: None,
+            last_name: None,
+            first_name: None,
+            phone_number: None,
+            profile_picture_url: None,
+        },
+    )
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Kitchen creation failed"})),
+        );
+    };
+
+    (
+        StatusCode::CREATED,
+        Json(json!({ "message": "Kitchen created!"})),
+    )
 }
 
 #[derive(Deserialize)]
@@ -289,7 +311,6 @@ async fn like_kitchen_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
     auth: Auth,
-    Json(payload): Json<UpdateKitchenPayload>,
 ) -> impl IntoResponse {
     match repository::kitchen::like_by_id(ctx.db_conn.clone(), id, auth.user.id).await {
         Ok(_) => (
@@ -307,7 +328,6 @@ async fn unlike_kitchen_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
     auth: Auth,
-    Json(payload): Json<UpdateKitchenPayload>,
 ) -> impl IntoResponse {
     match repository::kitchen::unlike_by_id(ctx.db_conn.clone(), id, auth.user.id).await {
         Ok(_) => (

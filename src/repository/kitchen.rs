@@ -11,7 +11,7 @@ use crate::utils::{
     pagination::{Paginated, Pagination},
 };
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Kitchen {
     pub id: String,
     pub name: String,
@@ -29,6 +29,28 @@ pub struct Kitchen {
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct KitchenUserReaction {
+    pub id: String,
+    pub reaction: String,
+    pub user_id: String,
+    pub kitchen_id: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+enum KitchenUserReactionReaction {
+    Like,
+}
+
+impl ToString for KitchenUserReactionReaction {
+    fn to_string(&self) -> String {
+        match self {
+            KitchenUserReactionReaction::Like => String::from("LIKE"),
+        }
+    }
 }
 
 pub struct CreateKitchenPayload {
@@ -340,7 +362,7 @@ pub async fn update_by_id(
     .await
     {
         Err(e) => {
-            log::error!("Error occurred while trying to update kitchen: {}", e);
+            tracing::error!("Error occurred while trying to update kitchen: {}", e);
             return Err(Error::UnexpectedError);
         }
         _ => Ok(()),
@@ -348,27 +370,68 @@ pub async fn update_by_id(
 }
 
 pub async fn like_by_id(db: DatabaseConnection, id: String, user_id: String) -> Result<(), Error> {
-    // TODO: handle event type related to this entity
-    match sqlx::query!(
-        "
-            UPDATE kitchens SET
-                likes = likes + 1,
-                updated_at = NOW()
-            WHERE
-                id = $1
-                AND EXISTS (SELECT 1 FROM users WHERE id = $2)
-        ",
-        id,
-        user_id,
-    )
-    .execute(&db.pool)
-    .await
-    {
-        Err(e) => {
-            log::error!("Error occurred while trying to like kitchen by id: {}", e);
-            return Err(Error::UnexpectedError);
+    match db.pool.begin().await {
+        Ok(mut tx) => {
+            match sqlx::query!(
+                "SELECT * FROM kitchen_user_reactions WHERE kitchen_id = $1 AND user_id = $2",
+                id.clone(),
+                user_id
+            )
+            .fetch_one(&mut *tx)
+            .await
+            {
+                Ok(_) => return Ok(()),
+                Err(_) => (),
+            }
+
+            let reaction_id = Ulid::new().to_string();
+
+            let insert_result = sqlx::query!(
+                "
+                    INSERT INTO kitchen_user_reactions (id, reaction, user_id, kitchen_id)
+                    VALUES ($1, $2, $3, $4);
+                ",
+                reaction_id.clone(),
+                KitchenUserReactionReaction::Like.to_string(),
+                user_id,
+                id.clone()
+            )
+            .execute(&mut *tx)
+            .await;
+
+            let update_result = sqlx::query!(
+                "
+                    UPDATE kitchens SET
+                        likes = likes + 1,
+                        updated_at = NOW()
+                    WHERE
+                        id = $1;
+                ",
+                id.clone()
+            )
+            .execute(&mut *tx)
+            .await;
+
+            match (insert_result, update_result) {
+                (Ok(_), Ok(_)) => {
+                    if let Err(e) = tx.commit().await {
+                        tracing::error!("Failed to commit transaction: {}", e);
+                        return Err(Error::UnexpectedError);
+                    }
+                    Ok(())
+                }
+                _ => {
+                    if let Err(e) = tx.rollback().await {
+                        tracing::error!("Failed to rollback transaction: {}", e);
+                    }
+                    Err(Error::UnexpectedError)
+                }
+            }
         }
-        _ => Ok(()),
+        Err(err) => {
+            tracing::error!("Failed to begin transaction: {}", err);
+            Err(Error::UnexpectedError)
+        }
     }
 }
 
@@ -377,27 +440,66 @@ pub async fn unlike_by_id(
     id: String,
     user_id: String,
 ) -> Result<(), Error> {
-    // TODO: handle event type related to this entity
-    match sqlx::query!(
-        "
-            UPDATE kitchens SET
-                likes = likes - 1,
-                updated_at = NOW()
-            WHERE
-                id = $1
-                AND EXISTS (SELECT 1 FROM users WHERE id = $2)
-        ",
-        id,
-        user_id,
-    )
-    .execute(&db.pool)
-    .await
-    {
-        Err(e) => {
-            log::error!("Error occurred while trying to like kitchen by id: {}", e);
-            return Err(Error::UnexpectedError);
+    match db.pool.begin().await {
+        Ok(mut tx) => {
+            match sqlx::query!(
+                "SELECT * FROM kitchen_user_reactions WHERE kitchen_id = $1 AND user_id = $2",
+                id.clone(),
+                user_id
+            )
+            .fetch_one(&mut *tx)
+            .await
+            {
+                Ok(_) => (),
+                Err(_) => return Ok(()),
+            }
+
+            tracing::info!("Got past the query for user_id and kitchen_id");
+
+            let insert_result = sqlx::query!(
+                "
+                    DELETE FROM kitchen_user_reactions
+                    WHERE kitchen_id = $1 AND user_id = $2
+                ",
+                id.clone(),
+                user_id,
+            )
+            .execute(&mut *tx)
+            .await;
+
+            let update_result = sqlx::query!(
+                "
+                    UPDATE kitchens SET
+                        likes = likes - 1,
+                        updated_at = NOW()
+                    WHERE
+                        id = $1;
+                ",
+                id.clone()
+            )
+            .execute(&mut *tx)
+            .await;
+
+            match (insert_result, update_result) {
+                (Ok(_), Ok(_)) => {
+                    if let Err(e) = tx.commit().await {
+                        tracing::error!("Failed to commit transaction: {}", e);
+                        return Err(Error::UnexpectedError);
+                    }
+                    Ok(())
+                }
+                _ => {
+                    if let Err(e) = tx.rollback().await {
+                        tracing::error!("Failed to rollback transaction: {}", e);
+                    }
+                    Err(Error::UnexpectedError)
+                }
+            }
         }
-        _ => Ok(()),
+        Err(err) => {
+            tracing::error!("Failed to begin transaction: {}", err);
+            Err(Error::UnexpectedError)
+        }
     }
 }
 

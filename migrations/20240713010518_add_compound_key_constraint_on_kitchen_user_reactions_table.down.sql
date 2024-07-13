@@ -1,0 +1,2 @@
+ALTER TABLE kitchen_user_reactions 
+DROP CONSTRAINT user_id_kitchen_id_unique;

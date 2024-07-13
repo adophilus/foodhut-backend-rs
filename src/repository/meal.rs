@@ -14,8 +14,9 @@ use crate::utils::{
     pagination::{Paginated, Pagination},
 };
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Clone)]
 pub struct Tags {
+    #[serde(flatten)]
     pub items: Vec<String>,
 }
 
@@ -44,20 +45,17 @@ impl Into<Tags> for serde_json::Value {
         };
         tracing::debug!("No I'm not");
         Tags { items: vec![] }
-        // match serde_json::de::from_str::<Vec<String>>(self.to_string().as_ref()) {
-        //     Ok(items) => Tags { items },
-        //     Err(err) => {
-        //         tracing::error!(
-        //             "Error occurred while trying to convert tags from the db to Tags {}: {}",
-        //             self.to_string(),
-        //             err
-        //         );
-        //         Tags { items: vec![] }
-        //     }
-        // }
     }
 }
 
+impl<'de> Deserialize<'de> for Tags {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de> {
+        Ok(Tags{ items: vec![]})
+    }
+
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Meal {
@@ -150,7 +148,8 @@ impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
     fn into(self) -> DatabaseCountedResult {
         match self {
             Some(json) => {
-                tracing::debug!("{}", json["data"]);
+                tracing::debug!("{}", json);
+                tracing::debug!("{}", json["data"][0]);
                 match serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref()) {
                     Ok(v) => v,
                     Err(err) => {
