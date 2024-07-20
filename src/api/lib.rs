@@ -3,8 +3,8 @@ use serde_json::json;
 
 use crate::{
     // api::{auth, cart, kitchen, meal, order, user, wallet},
-    api::{auth, cart, kitchen, meal, user},
-    types::{ApiResponse, Context},
+    api::{auth, cart, kitchen, meal, media, user},
+    types::Context,
 };
 use std::sync::Arc;
 
@@ -19,6 +19,7 @@ pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", get(health_check))
         .nest("/auth", auth::get_router())
+        .nest("/media", media::get_router())
         .nest("/users", user::get_router())
         .nest("/kitchens", kitchen::get_router())
         .nest("/meals", meal::get_router())

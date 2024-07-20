@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                id, \n                name, \n                address, \n                type AS type_, \n                phone_number, \n                opening_time, \n                closing_time, \n                preparation_time, \n                delivery_time, \n                cover_image_url, \n                rating, \n                likes, \n                CASE\n                    WHEN EXISTS (\n                        SELECT 1\n                        FROM kitchen_user_reactions\n                        WHERE kitchen_user_reactions.user_id = $2\n                    )\n                    THEN true\n                    ELSE false\n                END AS has_liked,\n                owner_id, \n                created_at, \n                updated_at\n            FROM kitchens WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "type_",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "phone_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "opening_time",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "closing_time",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "preparation_time",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "delivery_time",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "cover_image_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "rating",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "likes",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "has_liked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
+        "name": "owner_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 14,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 15,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      null,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "4e5ef7d4c81410ff43e5170829fd4e3fd4e43897c052441ebf3f27f4447d879a"
+}

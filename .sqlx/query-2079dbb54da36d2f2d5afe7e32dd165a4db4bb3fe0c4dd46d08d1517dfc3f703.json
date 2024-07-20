@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE carts SET\n                items = COALESCE($1::json, items),\n                status = COALESCE($2, status),\n                updated_at = NOW()\n            WHERE\n                id = $3\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Json",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2079dbb54da36d2f2d5afe7e32dd165a4db4bb3fe0c4dd46d08d1517dfc3f703"
+}

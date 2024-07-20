@@ -1,16 +1,24 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, io::Read, sync::Arc};
 
 use axum::{
-    extract::{Path, State},
+    async_trait,
+    body::Bytes,
+    extract::{multipart::Field, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, put},
     Json, Router,
 };
-use bigdecimal::BigDecimal;
+use axum_typed_multipart::{
+    FieldData, TryFromField, TryFromMultipart, TypedMultipart, TypedMultipartError,
+};
+use bigdecimal::{BigDecimal, FromPrimitive};
+use num_bigint::{BigInt, Sign};
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::json;
+use tempfile::NamedTempFile;
+use ulid::Ulid;
 use validator::{Validate, ValidationError};
 
 use crate::{
@@ -20,23 +28,51 @@ use crate::{
     utils::{self, pagination::Pagination},
 };
 
-#[derive(Deserialize, Validate)]
+#[derive(Debug, Clone)]
+struct Price(BigDecimal);
+
+#[async_trait]
+impl TryFromField for Price {
+    async fn try_from_field<'a>(
+        field: Field<'a>,
+        limit: Option<usize>,
+    ) -> Result<Self, TypedMultipartError> {
+        field
+            .text()
+            .await
+            .map(|text| {
+                text.parse::<f32>().map(|price| {
+                    Price(BigDecimal::from_f32(price).unwrap_or(BigDecimal::from_u8(0).unwrap()))
+                })
+            })
+            .map_err(|err| {
+                tracing::debug!("Error occurred while parsing body: {}", err);
+                TypedMultipartError::InvalidRequestBody { source: err }
+            })
+            .unwrap()
+            .map_err(|err| {
+                tracing::debug!("Error occurred while parsing body: {}", err);
+                TypedMultipartError::UnknownField {
+                    field_name: String::from("price"),
+                }
+            })
+    }
+}
+
+#[derive(TryFromMultipart)]
 struct CreateMealPayload {
-    pub name: String,
-    pub description: String,
-    pub price: BigDecimal,
-    pub tags: Vec<String>,
+    name: String,
+    description: String,
+    price: Price,
+    #[form_data(limit = "10MiB")]
+    cover_image: FieldData<NamedTempFile>,
 }
 
 async fn create_meal(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
-    Json(payload): Json<CreateMealPayload>,
+    TypedMultipart(mut payload): TypedMultipart<CreateMealPayload>,
 ) -> impl IntoResponse {
-    if let Err(errors) = payload.validate() {
-        return utils::validation::into_response(errors);
-    }
-
     let kitchen =
         match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
             Err(_) => {
@@ -54,14 +90,33 @@ async fn create_meal(
             }
         };
 
+    let mut buf: Vec<u8> = vec![];
+
+    if let Err(err) = payload.cover_image.contents.read_to_end(&mut buf) {
+        tracing::debug!("Failed to read the uploaded file {:?}", err);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to upload image" })),
+        );
+    }
+
+    let cover_image = match utils::storage::upload_file(ctx.storage.clone(), buf).await {
+        Ok(url) => url,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to upload image" })),
+            );
+        }
+    };
+
     match repository::meal::create(
         ctx.db_conn.clone(),
         repository::meal::CreateMealPayload {
             name: payload.name,
             description: payload.description,
-            price: payload.price,
-            cover_image_url: "".to_string(),
-            tags: payload.tags,
+            price: payload.price.0,
+            cover_image,
             kitchen_id: kitchen.id,
         },
     )
@@ -113,7 +168,6 @@ pub struct UpdateMealPayload {
     pub name: Option<String>,
     pub description: Option<String>,
     pub price: Option<BigDecimal>,
-    pub tags: Option<Vec<String>>,
 }
 
 async fn update_meal_by_id(
@@ -173,10 +227,9 @@ async fn update_meal_by_id(
             name: payload.name,
             description: payload.description,
             price: payload.price,
-            tags: payload.tags,
             rating: None,
             is_available: None,
-            cover_image_url: None,
+            cover_image: None,
             kitchen_id: None,
         },
     )
@@ -219,10 +272,19 @@ async fn delete_meal_by_id(
                 );
             };
 
-            if !repository::meal::is_owner(auth.user.clone(), kitchen, meal) {
+            if !repository::meal::is_owner(auth.user.clone(), kitchen, meal.clone()) {
                 return (
                     StatusCode::FORBIDDEN,
                     Json(json!({"error": "You are not the owner of this kitchen"})),
+                );
+            }
+
+            if let Err(_) =
+                utils::storage::delete_file(ctx.storage.clone(), meal.cover_image.clone()).await
+            {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Failed to delete meal" })),
                 );
             }
 

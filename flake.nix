@@ -20,6 +20,9 @@
     devShells.${system} = {
       default = pkgs.mkShell {
         buildInputs = with pkgs; [
+          just
+          openssl
+          pkg-config
           cargo
           cargo-watch
           rust-analyzer

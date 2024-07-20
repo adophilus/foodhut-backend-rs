@@ -1,6 +1,8 @@
+use crate::utils;
+use crate::utils::storage::UploadedMedia;
 use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::types::BigDecimal;
 use std::convert::Into;
@@ -14,42 +16,6 @@ use crate::utils::{
     pagination::{Paginated, Pagination},
 };
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct Tags(Vec<String>);
-
-impl Deref for Tags {
-    type Target = Vec<String>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Tags {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl From<serde_json::Value> for Tags {
-    fn from(value: serde_json::Value) -> Self {
-        match value {
-            serde_json::Value::Array(items) => Tags(
-                items
-                    .into_iter()
-                    .map(|item| match item {
-                        serde_json::Value::String(s) => Some(s),
-                        _ => None,
-                    })
-                    .filter(|item| item.is_some())
-                    .map(|item| item.unwrap())
-                    .collect(),
-            ),
-            _ => Tags(vec![]),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Meal {
     pub id: String,
@@ -58,8 +24,7 @@ pub struct Meal {
     pub rating: BigDecimal,
     pub price: BigDecimal,
     pub likes: i32,
-    pub tags: Tags,
-    pub cover_image_url: String,
+    pub cover_image: utils::storage::UploadedMedia,
     pub is_available: bool,
     pub kitchen_id: String,
     pub created_at: NaiveDateTime,
@@ -92,8 +57,7 @@ pub struct CreateMealPayload {
     pub name: String,
     pub description: String,
     pub price: BigDecimal,
-    pub tags: Vec<String>,
-    pub cover_image_url: String,
+    pub cover_image: utils::storage::UploadedMedia,
     pub kitchen_id: String,
 }
 
@@ -112,12 +76,11 @@ pub async fn create(db: DatabaseConnection, payload: CreateMealPayload) -> Resul
             price,
             rating, 
             likes,
-            tags, 
-            cover_image_url, 
+            cover_image, 
             is_available, 
             kitchen_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
     ",
         Ulid::new().to_string(),
@@ -126,8 +89,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateMealPayload) -> Resul
         payload.price,
         BigDecimal::new(BigInt::new(Sign::Plus, vec![0]), 2),
         0,
-        json!(payload.tags),
-        payload.cover_image_url,
+        json!(payload.cover_image),
         true,
         payload.kitchen_id,
     )
@@ -239,8 +201,7 @@ pub struct UpdateMealPayload {
     pub description: Option<String>,
     pub rating: Option<BigDecimal>,
     pub price: Option<BigDecimal>,
-    pub tags: Option<Vec<String>>,
-    pub cover_image_url: Option<String>,
+    pub cover_image: Option<UploadedMedia>,
     pub is_available: Option<bool>,
     pub kitchen_id: Option<String>,
 }
@@ -257,20 +218,18 @@ pub async fn update_by_id(
                 description = COALESCE($2, description),
                 rating = COALESCE($3, rating),
                 price = COALESCE($4, price),
-                tags = COALESCE($5, tags::jsonb),
-                cover_image_url = COALESCE($6, cover_image_url),
-                is_available = COALESCE($7, is_available),
-                kitchen_id = COALESCE($8, kitchen_id),
+                cover_image = COALESCE($5, cover_image),
+                is_available = COALESCE($6, is_available),
+                kitchen_id = COALESCE($7, kitchen_id),
                 updated_at = NOW()
             WHERE
-                id = $9
+                id = $8
         ",
         payload.name,
         payload.description,
         payload.rating,
         payload.price,
-        payload.tags.map(|t| json!(t)),
-        payload.cover_image_url,
+        json!(payload.cover_image),
         payload.is_available,
         payload.kitchen_id,
         id,

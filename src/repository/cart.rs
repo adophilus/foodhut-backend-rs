@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::types::BigDecimal;
 use std::{
-    convert::Into,
+    convert::{From, Into},
     ops::{Deref, DerefMut},
 };
 use ulid::Ulid;
@@ -18,35 +18,53 @@ use crate::utils::{
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum CartStatus {
+    #[serde(rename = "CHECKED_OUT")]
     CheckedOut,
+    #[serde(rename = "NOT_CHECKED_OUT")]
     NotCheckedOut,
 }
 
-impl Into<CartStatus> for String {
-    fn into(self) -> CartStatus {
-        match self.as_str() {
-            "CheckedOut" => CartStatus::CheckedOut,
-            _ => CartStatus::NotCheckedOut,
+impl From<String> for CartStatus {
+    fn from(value: String) -> Self {
+        match value.as_ref() {
+            "CHECKED_OUT" => CartStatus::CheckedOut,
+            "NOT_CHECKED_OUT" => CartStatus::NotCheckedOut,
+            status => unreachable!("Invalid cart status: {}", status),
         }
     }
 }
 
+impl ToString for CartStatus {
+    fn to_string(&self) -> String {
+        match self {
+            CartStatus::CheckedOut => String::from("CHECKED_OUT"),
+            CartStatus::NotCheckedOut => String::from("NOT_CHECKED_OUT"),
+        }
+    }
+}
+
+// impl Deserialize for CartStatus {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: serde::Deserializer<'de> {
+//         deserializer.
+//     }
+// }
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CartItem {
-    meal_id: String,
-    quantity: i32,
+    pub meal_id: String,
+    pub quantity: i32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CartItems {
-    items: Vec<CartItem>,
-}
+pub struct CartItems(pub Vec<CartItem>);
 
 impl Into<CartItems> for Value {
     fn into(self) -> CartItems {
         match serde_json::de::from_str::<Vec<CartItem>>(self.to_string().as_ref()) {
-            Ok(items) => CartItems { items },
-            Err(_) => CartItems { items: vec![] },
+            Ok(items) => CartItems(items),
+            Err(_) => CartItems(vec![]),
         }
     }
 }
@@ -55,13 +73,13 @@ impl Deref for CartItems {
     type Target = Vec<CartItem>;
 
     fn deref(&self) -> &Self::Target {
-        &self.items
+        &self.0
     }
 }
 
 impl DerefMut for CartItems {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.items
+        &mut self.0
     }
 }
 
@@ -83,8 +101,9 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateCartPayload) -> Result<(), Error> {
-    match sqlx::query!(
+pub async fn create(db: DatabaseConnection, payload: CreateCartPayload) -> Result<Cart, Error> {
+    match sqlx::query_as!(
+        Cart,
         "
         INSERT INTO carts (
             id,
@@ -93,16 +112,17 @@ pub async fn create(db: DatabaseConnection, payload: CreateCartPayload) -> Resul
             owner_id
         )
         VALUES ($1, $2, $3, $4)
+        RETURNING *
     ",
         Ulid::new().to_string(),
         json!([]),
-        "",
+        CartStatus::NotCheckedOut.to_string(),
         payload.owner_id
     )
-    .execute(&db.pool)
+    .fetch_one(&db.pool)
     .await
     {
-        Ok(_) => Ok(()),
+        Ok(cart) => Ok(cart),
         Err(err) => {
             tracing::error!("Error occurred while trying to create a cart: {}", err);
             Err(Error::UnexpectedError)
@@ -245,7 +265,7 @@ pub async fn find_many_by_owner_id(
 #[derive(Serialize)]
 pub struct UpdateCartPayload {
     pub items: Option<CartItems>,
-    pub status: Option<String>,
+    pub status: Option<CartStatus>,
 }
 
 pub async fn update_by_id(
@@ -256,14 +276,14 @@ pub async fn update_by_id(
     match sqlx::query!(
         "
             UPDATE carts SET
-                items = COALESCE($1, items),
+                items = COALESCE($1::json, items),
                 status = COALESCE($2, status),
                 updated_at = NOW()
             WHERE
                 id = $3
         ",
         json!(payload.items),
-        payload.status,
+        payload.status.map(|p| p.to_string()),
         id.clone(),
     )
     .execute(&db.pool)

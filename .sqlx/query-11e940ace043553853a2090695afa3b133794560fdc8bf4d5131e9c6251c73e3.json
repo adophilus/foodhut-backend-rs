@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO meals (\n            id, \n            name, \n            description, \n            price,\n            rating, \n            likes,\n            tags, \n            cover_image_url, \n            is_available, \n            kitchen_id\n        )\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n        RETURNING *\n    ",
+  "query": "\n        INSERT INTO meals (\n            id, \n            name, \n            description, \n            price,\n            rating, \n            likes,\n            cover_image, \n            is_available, \n            kitchen_id\n        )\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n        RETURNING *\n    ",
   "describe": {
     "columns": [
       {
@@ -30,36 +30,31 @@
       },
       {
         "ordinal": 5,
-        "name": "tags",
+        "name": "cover_image",
         "type_info": "Json"
       },
       {
         "ordinal": 6,
-        "name": "cover_image_url",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 7,
         "name": "is_available",
         "type_info": "Bool"
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "kitchen_id",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "updated_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "likes",
         "type_info": "Int4"
       }
@@ -73,7 +68,6 @@
         "Numeric",
         "Int4",
         "Json",
-        "Varchar",
         "Bool",
         "Varchar"
       ]
@@ -88,10 +82,9 @@
       false,
       false,
       false,
-      false,
       true,
       false
     ]
   },
-  "hash": "ee270ffb1cf9390e433237ea920a84efb278b76cfff75a29c56a12a8bb6c2c56"
+  "hash": "11e940ace043553853a2090695afa3b133794560fdc8bf4d5131e9c6251c73e3"
 }

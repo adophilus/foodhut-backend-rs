@@ -1,0 +1,106 @@
+use crate::types::StorageContext;
+use reqwest::{
+    multipart::{Form, Part},
+    Body, Client, StatusCode, Url,
+};
+use serde::Deserialize;
+use serde_json::json;
+use std::path::Path;
+use ulid::Ulid;
+
+#[derive(Debug)]
+pub enum Error {
+    UploadFailed,
+    DeleteFailed,
+}
+
+#[derive(Deserialize)]
+struct UploadResponse {
+    secure_url: String,
+}
+
+pub async fn upload_file(cfg: StorageContext, contents: Vec<u8>) -> Result<String, Error> {
+    let file_name = Ulid::new().to_string();
+    let part = Part::bytes(contents).file_name(file_name.clone());
+
+    let form = Form::new()
+        .text("upload_preset", cfg.upload_preset.clone())
+        .text("api_key", cfg.api_key.clone())
+        .text("public_id", file_name.clone())
+        .part("file", part);
+
+    let res = Client::new()
+        .post(cfg.upload_endpoint)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|err| {
+            tracing::error!("Error occurred while trying to upload a file: {:?}", err);
+            Error::UploadFailed
+        })?;
+
+    let data = res.text().await.map_err(|err| {
+        tracing::error!("Error occurred while processing return data: {:?}", err);
+        Error::UploadFailed
+    })?;
+
+    if res.status() != StatusCode::OK {
+        tracing::error!("Failed to upload file: {}", data);
+        return Err(Error::UploadFailed);
+    }
+
+    match serde_json::de::from_str::<UploadResponse>(data.as_ref()) {
+        Ok(res) => Ok(res.secure_url),
+        Err(err) => {
+            tracing::error!("Failed to deserialize cloudinary response: {:?}", err);
+            Err(Error::UploadFailed)
+        }
+    }
+}
+
+pub async fn delete_file(cfg: StorageContext, url: String) -> Result<(), Error> {
+    let url = Url::parse(url.as_ref()).map_err(|err| {
+        tracing::error!("Failed to parse url {}: {:?}", url, err);
+        Error::DeleteFailed
+    })?;
+
+    let base_name = url
+        .path_segments()
+        .map(|seg| seg.last())
+        .flatten()
+        .ok_or(Error::DeleteFailed)?;
+
+    let base_names = base_name.split(".").into_iter().collect::<Vec<_>>();
+    let public_id = base_names.first().ok_or(Error::DeleteFailed)?;
+
+    let res = Client::new()
+        .post(cfg.delete_endpoint)
+        .header("Content-Type", "application/json")
+        .body(
+            json!({
+                "public_id": public_id,
+                "api_key": cfg.api_key
+            })
+            .to_string(),
+        )
+        .send()
+        .await
+        .map_err(|err| {
+            tracing::error!("Failed to delete file {}: {:?}", url, err);
+            Error::DeleteFailed
+        })?;
+
+    let data = res.text().await.map_err(|err| {
+        tracing::error!("Failed to process delete file response {}: {:?}", url, err);
+        Error::DeleteFailed
+    })?;
+
+    // if res.status() != StatusCode::OK {
+    //     tracing::error!("Failed to delete uploaded file: {}", data);
+    //     return Err(Error::UploadFailed);
+    // }
+
+    tracing::debug!("Delete file response: {}", data);
+
+    Ok(())
+}
