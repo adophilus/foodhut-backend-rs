@@ -25,6 +25,11 @@ RUN cargo build --release --bin foodhut_backend_rs
 
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bookworm-slim AS runtime
+
 WORKDIR /app
+
+RUN apt-get update && apt install -y openssl
+
 COPY --from=builder /app/target/release/foodhut_backend_rs /usr/local/bin
+
 ENTRYPOINT ["/usr/local/bin/foodhut_backend_rs"]
