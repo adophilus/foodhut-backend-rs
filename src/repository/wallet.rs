@@ -284,7 +284,7 @@ pub async fn update_by_id(
     {
         Err(e) => {
             log::error!(
-                "Error occurred while trying to clean up verified OTP: {}",
+                "Error occurred while trying to update OTP by id: {}",
                 e
             );
             return Err(Error::UnexpectedError);

@@ -1,12 +1,11 @@
 use crate::utils;
 use crate::utils::storage::UploadedMedia;
+use bigdecimal::FromPrimitive;
 use chrono::NaiveDateTime;
-use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::types::BigDecimal;
 use std::convert::Into;
-use std::ops::{Deref, DerefMut};
 use ulid::Ulid;
 
 use crate::repository;
@@ -82,12 +81,12 @@ pub async fn create(db: DatabaseConnection, payload: CreateMealPayload) -> Resul
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
-    ",
+        ",
         Ulid::new().to_string(),
         payload.name,
         payload.description,
         payload.price,
-        BigDecimal::new(BigInt::new(Sign::Plus, vec![0]), 2),
+        BigDecimal::from_u8(0).unwrap(),
         0,
         json!(payload.cover_image),
         true,

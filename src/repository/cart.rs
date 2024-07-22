@@ -1,20 +1,18 @@
 use chrono::NaiveDateTime;
-use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::types::BigDecimal;
 use std::{
     convert::{From, Into},
     ops::{Deref, DerefMut},
 };
 use ulid::Ulid;
 
-use crate::repository;
-
 use crate::utils::{
     database::DatabaseConnection,
     pagination::{Paginated, Pagination},
 };
+
+use super::meal::Meal;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum CartStatus {
@@ -42,14 +40,6 @@ impl ToString for CartStatus {
         }
     }
 }
-
-// impl Deserialize for CartStatus {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de> {
-//         deserializer.
-//     }
-// }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CartItem {
@@ -97,6 +87,7 @@ pub struct CreateCartPayload {
     pub owner_id: String,
 }
 
+#[derive(Debug)]
 pub enum Error {
     UnexpectedError,
 }
@@ -295,12 +286,54 @@ pub async fn update_by_id(
                 id,
                 e
             );
-            return Err(Error::UnexpectedError);
+            Err(Error::UnexpectedError)
         }
         _ => Ok(()),
     }
 }
 
-pub fn is_owner(user: repository::user::User, cart: Cart) -> bool {
+pub async fn get_meals_from_cart_by_id(
+    db: DatabaseConnection,
+    id: String,
+) -> Result<Vec<Meal>, Error> {
+    match find_by_id(db.clone(), id.clone()).await {
+        Ok(Some(cart)) => {
+            let meal_ids = cart
+                .items
+                .iter()
+                .map(|item| item.meal_id.clone())
+                .collect::<Vec<_>>();
+            match sqlx::query_as!(
+                Meal,
+                "SELECT * FROM meals WHERE $1::jsonb @> meals.id::jsonb",
+                json!(meal_ids),
+            )
+            .fetch_all(&db.pool)
+            .await
+            {
+                Ok(meals) => Ok(meals),
+                Err(e) => {
+                    log::error!(
+                        "Error occurred while trying to get meals from cart by id {}: {}",
+                        id,
+                        e
+                    );
+                    Err(Error::UnexpectedError)
+                }
+            }
+        }
+        Ok(None) => Err(Error::UnexpectedError),
+        Err(e) => {
+            log::error!(
+                "Error occurred while trying to get meals from cart by id {}: {:?}",
+                id,
+                e
+            );
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
+pub fn is_owner(user: super::user::User, cart: Cart) -> bool {
     cart.owner_id == user.id
 }

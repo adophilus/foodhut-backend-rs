@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE orders SET\n                status = COALESCE($1, status),\n                updated_at = NOW()\n            WHERE\n                id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "835f95be8458f2ce5fd50a573057790a082f8bba7489ac95eb25448d670b3fd6"
+}

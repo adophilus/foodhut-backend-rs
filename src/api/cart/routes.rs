@@ -276,10 +276,18 @@ async fn remove_meal_from_cart(
     }
 }
 
+#[derive(Deserialize)]
+pub struct CheckoutCartByIdPayload {
+    payment_method: repository::order::PaymentMethod,
+    delivery_address: String,
+    dispatch_rider_note: String,
+}
+
 pub async fn checkout_cart_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
     auth: Auth,
+    Json(payload): Json<CheckoutCartByIdPayload>,
 ) -> impl IntoResponse {
     let cart = match repository::cart::find_by_id(ctx.db_conn.clone(), id.clone()).await {
         Err(_) => {
@@ -321,7 +329,7 @@ pub async fn checkout_cart_by_id(
         );
     }
 
-    match repository::cart::update_by_id(
+    if let Err(_) = repository::cart::update_by_id(
         ctx.db_conn.clone(),
         id,
         repository::cart::UpdateCartPayload {
@@ -331,9 +339,26 @@ pub async fn checkout_cart_by_id(
     )
     .await
     {
-        Ok(_) => (
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to checkout cart" })),
+        );
+    }
+
+    match repository::order::create(
+        ctx.db_conn.clone(),
+        repository::order::CreateOrderPayload {
+            cart: cart.clone(),
+            payment_method: payload.payment_method.clone(),
+            delivery_address: payload.delivery_address.clone(),
+            dispatch_rider_note: payload.dispatch_rider_note.clone(),
+        },
+    )
+    .await
+    {
+        Ok(order) => (
             StatusCode::OK,
-            Json(json!({ "message": "Cart checkedout successfully" })),
+            Json(json!({ "message": "Cart checkedout successfully", "id": order.id })),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,

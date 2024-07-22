@@ -1,0 +1,97 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO orders (\n            id,\n            status,\n            payment_method,\n            delivery_fee,\n            service_fee,\n            sub_total,\n            total,\n            delivery_address,\n            dispatch_rider_note,\n            cart_id\n        )\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n        RETURNING *\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "payment_method",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "delivery_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "service_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "sub_total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "delivery_address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "dispatch_rider_note",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "cart_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Numeric",
+        "Numeric",
+        "Numeric",
+        "Numeric",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ad41d68ca94238a0665d83e686534806f5e6466d04c699124b494b7874bdb6bf"
+}

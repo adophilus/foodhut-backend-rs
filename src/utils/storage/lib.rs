@@ -160,3 +160,69 @@ pub async fn delete_file(cfg: StorageContext, media: UploadedMedia) -> Result<()
 
     Ok(())
 }
+
+pub async fn update_file_by_id(
+    cfg: StorageContext,
+    id: String,
+    contents: Vec<u8>,
+) -> Result<UploadedMedia, Error> {
+    let file_name = Ulid::new().to_string();
+    let part = Part::bytes(contents).file_name(file_name.clone());
+
+    let timestamp = chrono::Utc::now().timestamp();
+    let data_to_sign = format!(
+        "timestamp={}&upload_preset={}{}",
+        timestamp, cfg.upload_preset, cfg.api_secret
+    );
+
+    let mut hasher = Sha256::new();
+    hasher.update(data_to_sign.clone());
+    let hash = hasher.finalize();
+    let signature = base16ct::lower::encode_string(&hash);
+
+    let form = Form::new()
+        .text("upload_preset", cfg.upload_preset.clone())
+        .text("api_key", cfg.api_key.clone())
+        .text("public_id", id)
+        .text("timestamp", format!("{}", timestamp))
+        .text("signature", signature)
+        .text("signature_algorithm", "sha256")
+        .part("file", part);
+
+    let res = Client::new()
+        .post(cfg.upload_endpoint)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|err| {
+            tracing::error!("Error occurred while trying to upload a file: {:?}", err);
+            Error::UploadFailed
+        })?;
+
+    if res.status() != StatusCode::OK {
+        let data = res.text().await.map_err(|err| {
+            tracing::error!("Error occurred while processing return data: {:?}", err);
+            Error::UploadFailed
+        })?;
+
+        tracing::error!("Failed to upload file: {}", data);
+        return Err(Error::UploadFailed);
+    }
+
+    let data = res.text().await.map_err(|err| {
+        tracing::error!("Error occurred while processing return data: {:?}", err);
+        Error::UploadFailed
+    })?;
+
+    match serde_json::de::from_str::<UploadResponse>(data.as_ref()) {
+        Ok(res) => Ok(UploadedMedia {
+            url: res.secure_url,
+            public_id: res.public_id,
+            timestamp,
+        }),
+        Err(err) => {
+            tracing::error!("Failed to deserialize cloudinary response: {:?}", err);
+            Err(Error::UploadFailed)
+        }
+    }
+}

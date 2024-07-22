@@ -60,7 +60,7 @@ impl TryFromField for Price {
 }
 
 #[derive(TryFromMultipart)]
-struct CreateMealPayload {
+pub struct CreateMealPayload {
     name: String,
     description: String,
     price: Price,
@@ -101,7 +101,7 @@ async fn create_meal(
     }
 
     let cover_image = match utils::storage::upload_file(ctx.storage.clone(), buf).await {
-        Ok(url) => url,
+        Ok(media) => media,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -163,18 +163,20 @@ async fn get_meal_by_id(
     }
 }
 
-#[derive(Deserialize, Validate)]
+#[derive(TryFromMultipart)]
 pub struct UpdateMealPayload {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub price: Option<BigDecimal>,
+    pub price: Option<Price>,
+    #[form_data(limit = "10MiB")]
+    cover_image: Option<FieldData<NamedTempFile>>,
 }
 
 async fn update_meal_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
     auth: Auth,
-    Json(payload): Json<UpdateMealPayload>,
+    TypedMultipart(mut payload): TypedMultipart<UpdateMealPayload>,
 ) -> impl IntoResponse {
     let kitchen = match repository::kitchen::find_by_owner_id(
         ctx.db_conn.clone(),
@@ -213,12 +215,45 @@ async fn update_meal_by_id(
         }
     };
 
-    if !repository::meal::is_owner(auth.user.clone(), kitchen, meal) {
+    if !repository::meal::is_owner(auth.user.clone(), kitchen, meal.clone()) {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({"error": "You are not the owner of this meal"})),
         );
     }
+
+    let cover_image = match payload.cover_image {
+        Some(mut cover_image) => {
+            let mut buf: Vec<u8> = vec![];
+
+            if let Err(err) = cover_image.contents.read_to_end(&mut buf) {
+                tracing::debug!("Failed to read the uploaded file {:?}", err);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Failed to upload image" })),
+                );
+            }
+
+            let media = match utils::storage::update_file_by_id(
+                ctx.storage.clone(),
+                meal.cover_image.public_id.clone(),
+                buf,
+            )
+            .await
+            {
+                Ok(media) => media,
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "error": "Failed to upload image" })),
+                    );
+                }
+            };
+
+            Some(media)
+        }
+        None => None,
+    };
 
     match repository::meal::update_by_id(
         ctx.db_conn.clone(),
@@ -226,10 +261,10 @@ async fn update_meal_by_id(
         repository::meal::UpdateMealPayload {
             name: payload.name,
             description: payload.description,
-            price: payload.price,
+            price: payload.price.map(|price| price.0),
             rating: None,
             is_available: None,
-            cover_image: None,
+            cover_image,
             kitchen_id: None,
         },
     )

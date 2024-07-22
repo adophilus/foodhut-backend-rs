@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM orders WHERE cart_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "payment_method",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "delivery_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "service_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "sub_total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "delivery_address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "dispatch_rider_note",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "cart_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9d4441a1126e4154a9d845a684eee0eecf2a2c4fb511234849dd624fa33b0f1d"
+}
