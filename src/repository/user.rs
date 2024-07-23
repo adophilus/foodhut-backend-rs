@@ -1,9 +1,26 @@
+use std::ops::Deref;
+
 use chrono::{NaiveDate, NaiveDateTime};
 use log;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
-use crate::utils::database::DatabaseConnection;
+use crate::utils::{self, database::DatabaseConnection};
 use ulid::Ulid;
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ProfilePicture(pub Option<utils::storage::UploadedMedia>);
+
+impl From<Option<serde_json::Value>> for ProfilePicture {
+    fn from(value: Option<serde_json::Value>) -> Self {
+        match value {
+            Some(value) => serde_json::de::from_str::<Self>(value.to_string().as_str())
+                .expect("Invalid user profile_picture found"),
+            None => ProfilePicture(None),
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct User {
@@ -16,7 +33,7 @@ pub struct User {
     pub has_kitchen: bool,
     pub birthday: NaiveDateTime,
     pub referral_code: Option<String>,
-    pub profile_picture_url: Option<String>,
+    pub profile_picture: ProfilePicture,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -57,19 +74,13 @@ pub async fn create(db: DatabaseConnection, payload: CreateUserPayload) -> Resul
 }
 
 pub async fn find_by_id(db: DatabaseConnection, id: String) -> Option<User> {
-    sqlx::query_as!(
-        User,
-        "
-        SELECT * FROM users WHERE id = $1
-    ",
-        id
-    )
-    .fetch_optional(&db.pool)
-    .await
-    .map_err(|err| {
-        log::error!("Error occurred while fetching user with id {}: {}", id, err);
-    })
-    .unwrap_or(None)
+    sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", id)
+        .fetch_optional(&db.pool)
+        .await
+        .map_err(|err| {
+            log::error!("Error occurred while fetching user with id {}: {}", id, err);
+        })
+        .unwrap_or(None)
 }
 
 pub async fn find_by_email(db: DatabaseConnection, email: String) -> Option<User> {
@@ -133,7 +144,7 @@ pub struct UpdateUserPayload {
     pub last_name: Option<String>,
     pub birthday: Option<NaiveDate>,
     pub has_kitchen: Option<bool>,
-    pub profile_picture_url: Option<String>,
+    pub profile_picture: Option<utils::storage::UploadedMedia>,
 }
 
 pub async fn update_by_id(
@@ -150,7 +161,10 @@ pub async fn update_by_id(
                 last_name = COALESCE($4, last_name),
                 birthday = COALESCE($5, birthday),
                 has_kitchen = COALESCE($6, has_kitchen),
-                profile_picture_url = COALESCE($7, profile_picture_url),
+                profile_picture = COALESCE(
+                    CASE WHEN $7::text = 'null' THEN NULL ELSE $7::json END, 
+                    profile_picture
+                ),
                 updated_at = NOW()
             WHERE
                 id = $8
@@ -161,7 +175,7 @@ pub async fn update_by_id(
         payload.last_name,
         payload.birthday,
         payload.has_kitchen,
-        payload.profile_picture_url,
+        json!(payload.profile_picture).to_string(),
         id,
     )
     .execute(&db.pool)

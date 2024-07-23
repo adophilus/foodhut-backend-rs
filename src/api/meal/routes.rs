@@ -1,8 +1,8 @@
-use std::{borrow::Cow, io::Read, sync::Arc};
+use std::{io::Read, sync::Arc};
 
+use crate::repository;
 use axum::{
     async_trait,
-    body::Bytes,
     extract::{multipart::Field, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -13,17 +13,11 @@ use axum_typed_multipart::{
     FieldData, TryFromField, TryFromMultipart, TypedMultipart, TypedMultipartError,
 };
 use bigdecimal::{BigDecimal, FromPrimitive};
-use num_bigint::{BigInt, Sign};
-use regex::Regex;
-use serde::Deserialize;
 use serde_json::json;
 use tempfile::NamedTempFile;
-use ulid::Ulid;
-use validator::{Validate, ValidationError};
 
 use crate::{
     api::auth::middleware::Auth,
-    repository::{self, user::User},
     types::Context,
     utils::{self, pagination::Pagination},
 };
@@ -234,9 +228,9 @@ async fn update_meal_by_id(
                 );
             }
 
-            let media = match utils::storage::update_file_by_id(
+            let media = match utils::storage::update_file(
                 ctx.storage.clone(),
-                meal.cover_image.public_id.clone(),
+                meal.cover_image.clone(),
                 buf,
             )
             .await

@@ -5,7 +5,7 @@ CREATE TABLE users (
   is_verified BOOLEAN NOT NULL,
   first_name VARCHAR NOT NULL,
   last_name VARCHAR NOT NULL,
-  profile_picture_url VARCHAR,
+  profile_picture JSON,
   birthday DATE NOT NULL,
   referral_code VARCHAR,
   created_at TIMESTAMP DEFAULT now() NOT NULL,

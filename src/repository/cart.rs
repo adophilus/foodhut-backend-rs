@@ -267,13 +267,16 @@ pub async fn update_by_id(
     match sqlx::query!(
         "
             UPDATE carts SET
-                items = COALESCE($1::json, items),
+                items = COALESCE(
+                    CASE WHEN $1::text = 'null' THEN NULL ELSE $1::json END, 
+                    items
+                ),
                 status = COALESCE($2, status),
                 updated_at = NOW()
             WHERE
                 id = $3
         ",
-        json!(payload.items),
+        json!(payload.items).to_string(),
         payload.status.map(|p| p.to_string()),
         id.clone(),
     )

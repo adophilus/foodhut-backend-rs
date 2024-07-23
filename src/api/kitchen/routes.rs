@@ -7,9 +7,12 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
+use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::json;
+use std::io::Read;
+use tempfile::NamedTempFile;
 use validator::{Validate, ValidationError};
 
 use crate::{
@@ -126,7 +129,7 @@ async fn create_kitchen(
             last_name: None,
             first_name: None,
             phone_number: None,
-            profile_picture_url: None,
+            profile_picture: None,
         },
     )
     .await
@@ -290,6 +293,7 @@ async fn update_kitchen_by_id(
             closing_time: payload.closing_time,
             preparation_time: payload.preparation_time,
             delivery_time: payload.delivery_time,
+            cover_image: None,
             rating: None,
             likes: None,
         },
@@ -341,6 +345,142 @@ async fn unlike_kitchen_by_id(
     }
 }
 
+#[derive(TryFromMultipart)]
+struct SetKitchenCoverImage {
+    cover_image: FieldData<NamedTempFile>,
+}
+
+async fn set_kitchen_cover_image_by_profile(
+    auth: Auth,
+    State(ctx): State<Arc<Context>>,
+    payload: TypedMultipart<SetKitchenCoverImage>,
+) -> impl IntoResponse {
+    let kitchen = match repository::kitchen::find_by_owner_id(
+        ctx.db_conn.clone(),
+        auth.user.id.clone(),
+    )
+    .await
+    {
+        Ok(Some(kitchen)) => kitchen,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Kitchen not found" })),
+            )
+                .into_response()
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to find kitchen" })),
+            )
+                .into_response()
+        }
+    };
+    return set_kitchen_cover_image(State(ctx), auth, kitchen, payload)
+        .await
+        .into_response();
+}
+
+async fn set_kitchen_cover_image_by_id(
+    State(ctx): State<Arc<Context>>,
+    auth: Auth,
+    Path(id): Path<String>,
+    payload: TypedMultipart<SetKitchenCoverImage>,
+) -> impl IntoResponse {
+    let kitchen = match repository::kitchen::find_by_id(ctx.db_conn.clone(), id).await {
+        Ok(Some(kitchen)) => kitchen,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Kitchen not found" })),
+            )
+                .into_response()
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to find kitchen" })),
+            )
+                .into_response()
+        }
+    };
+    return set_kitchen_cover_image(State(ctx), auth, kitchen, payload)
+        .await
+        .into_response();
+}
+
+async fn set_kitchen_cover_image(
+    State(ctx): State<Arc<Context>>,
+    auth: Auth,
+    kitchen: repository::kitchen::Kitchen,
+    TypedMultipart(mut payload): TypedMultipart<SetKitchenCoverImage>,
+) -> impl IntoResponse {
+    if !repository::kitchen::is_owner(auth.user, kitchen.clone()) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "You are not the owner of this kitchen" })),
+        );
+    }
+
+    let mut buf: Vec<u8> = vec![];
+
+    if let Err(err) = payload.cover_image.contents.read_to_end(&mut buf) {
+        tracing::debug!("Failed to read the uploaded file {:?}", err);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to upload image" })),
+        );
+    };
+
+    let profile_picture = match kitchen.cover_image.0 {
+        Some(cover_image) => {
+            utils::storage::update_file(ctx.storage.clone(), cover_image, buf).await
+        }
+        None => utils::storage::upload_file(ctx.storage.clone(), buf).await,
+    };
+
+    let cover_image = match profile_picture {
+        Ok(cover_image) => cover_image,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to upload image" })),
+            )
+        }
+    };
+
+    if let Err(_) = repository::kitchen::update_by_id(
+        ctx.db_conn.clone(),
+        kitchen.id,
+        repository::kitchen::UpdateKitchenPayload {
+            name: None,
+            address: None,
+            phone_number: None,
+            type_: None,
+            opening_time: None,
+            closing_time: None,
+            preparation_time: None,
+            delivery_time: None,
+            cover_image: Some(cover_image),
+            rating: None,
+            likes: None,
+        },
+    )
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to update profile picture" })),
+        );
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({ "message": "Profile picture updated successfully" })),
+    )
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", post(create_kitchen).get(get_kitchens))
@@ -348,7 +488,12 @@ pub fn get_router() -> Router<Arc<Context>> {
             "/profile",
             get(get_kitchen_by_profile).patch(update_kitchen_by_profile),
         )
+        .route(
+            "/profile/profile-picture",
+            put(set_kitchen_cover_image_by_profile),
+        )
         .route("/:id", get(get_kitchen_by_id).patch(update_kitchen_by_id))
+        .route("/:id/profile-picture", put(set_kitchen_cover_image_by_id))
         .route("/:id/like", put(like_kitchen_by_id))
         .route("/:id/unlike", put(unlike_kitchen_by_id))
         .route("/types", get(fetch_kitchen_types))

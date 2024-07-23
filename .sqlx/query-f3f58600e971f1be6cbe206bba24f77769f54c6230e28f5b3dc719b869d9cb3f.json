@@ -35,8 +35,8 @@
       },
       {
         "ordinal": 6,
-        "name": "profile_picture_url",
-        "type_info": "Varchar"
+        "name": "profile_picture",
+        "type_info": "Json"
       },
       {
         "ordinal": 7,

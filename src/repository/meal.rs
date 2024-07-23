@@ -217,7 +217,10 @@ pub async fn update_by_id(
                 description = COALESCE($2, description),
                 rating = COALESCE($3, rating),
                 price = COALESCE($4, price),
-                cover_image = COALESCE($5, cover_image),
+                cover_image = COALESCE(
+                    CASE WHEN $5::text = 'null' THEN NULL ELSE $5::json END, 
+                    cover_image
+                ),
                 is_available = COALESCE($6, is_available),
                 kitchen_id = COALESCE($7, kitchen_id),
                 updated_at = NOW()
@@ -228,7 +231,7 @@ pub async fn update_by_id(
         payload.description,
         payload.rating,
         payload.price,
-        json!(payload.cover_image),
+        json!(payload.cover_image).to_string(),
         payload.is_available,
         payload.kitchen_id,
         id,

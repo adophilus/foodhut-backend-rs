@@ -5,12 +5,28 @@ use sqlx::types::BigDecimal;
 use std::convert::Into;
 use std::ops::{Deref, DerefMut};
 use ulid::Ulid;
+use serde_json::json;
 
 use crate::repository;
 use crate::utils::{
     database::DatabaseConnection,
     pagination::{Paginated, Pagination},
+    storage,
 };
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CoverImage(pub Option<storage::UploadedMedia>);
+
+impl From<Option<serde_json::Value>> for CoverImage {
+    fn from(value: Option<serde_json::Value>) -> Self {
+        match value {
+            Some(value) => serde_json::de::from_str::<Self>(value.to_string().as_str())
+                .expect("Invalid kitchen cover_image found"),
+            None => CoverImage(None),
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Kitchen {
@@ -24,7 +40,7 @@ pub struct Kitchen {
     pub closing_time: String,
     pub preparation_time: String,
     pub delivery_time: String,
-    pub cover_image_url: Option<String>,
+    pub cover_image: CoverImage,
     pub rating: BigDecimal,
     pub likes: i32,
     pub owner_id: String,
@@ -70,7 +86,7 @@ pub struct KitchenUserLiked {
     pub closing_time: String,
     pub preparation_time: String,
     pub delivery_time: String,
-    pub cover_image_url: Option<String>,
+    pub cover_image: CoverImage,
     pub rating: BigDecimal,
     pub likes: i32,
     pub has_liked: HasLiked,
@@ -174,7 +190,7 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Kit
                 closing_time, 
                 preparation_time, 
                 delivery_time, 
-                cover_image_url, 
+                cover_image, 
                 rating, 
                 likes, 
                 owner_id, 
@@ -206,7 +222,7 @@ pub async fn find_by_id_user(
     match sqlx::query_as!(
         KitchenUserLiked,
         "
-            SELECT 
+            SELECT
                 id, 
                 name, 
                 address, 
@@ -216,7 +232,7 @@ pub async fn find_by_id_user(
                 closing_time, 
                 preparation_time, 
                 delivery_time, 
-                cover_image_url, 
+                cover_image, 
                 rating, 
                 likes, 
                 CASE
@@ -267,7 +283,7 @@ pub async fn find_by_owner_id(
                 closing_time, 
                 preparation_time, 
                 delivery_time, 
-                cover_image_url, 
+                cover_image,
                 rating, 
                 likes, 
                 owner_id, 
@@ -420,6 +436,7 @@ pub struct UpdateKitchenPayload {
     pub closing_time: Option<String>,
     pub preparation_time: Option<String>,
     pub delivery_time: Option<String>,
+    pub cover_image: Option<storage::UploadedMedia>,
     pub rating: Option<BigDecimal>,
     pub likes: Option<i32>,
 }
@@ -440,11 +457,15 @@ pub async fn update_by_id(
                 closing_time = COALESCE($6, closing_time),
                 preparation_time = COALESCE($7, preparation_time),
                 delivery_time = COALESCE($8, delivery_time),
-                rating = COALESCE($9, rating),
-                likes = COALESCE($10, likes),
+                cover_image = COALESCE(
+                    CASE WHEN $9::text = 'null' THEN NULL ELSE $9::json END, 
+                    cover_image
+                ),
+                rating = COALESCE($10, rating),
+                likes = COALESCE($11, likes),
                 updated_at = NOW()
             WHERE
-                id = $11
+                id = $12
         ",
         payload.name,
         payload.address,
@@ -454,6 +475,7 @@ pub async fn update_by_id(
         payload.closing_time,
         payload.preparation_time,
         payload.delivery_time,
+        json!(payload.cover_image).to_string(),
         payload.rating,
         payload.likes,
         id,

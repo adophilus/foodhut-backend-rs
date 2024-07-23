@@ -8,7 +8,7 @@ CREATE TABLE kitchens (
   closing_time VARCHAR NOT NULL,
   preparation_time VARCHAR NOT NULL,
   delivery_time VARCHAR NOT NULL,
-  cover_image_url VARCHAR,
+  cover_image JSON,
   rating NUMERIC NOT NULL,
   owner_id VARCHAR NOT NULL,
   created_at TIMESTAMP DEFAULT now() NOT NULL,

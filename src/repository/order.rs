@@ -128,6 +128,15 @@ pub struct OrderItem {
     pub updated_at: Option<NaiveDateTime>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct OrderUpdate {
+    pub id: i32,
+    status: OrderStatus,
+    order_id: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
 pub struct CreateOrderPayload {
     pub cart: Cart,
     pub payment_method: PaymentMethod,
@@ -148,11 +157,17 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
         Err(_) => return Err(Error::UnexpectedError),
     };
     let sub_total = meals
+        .clone()
         .into_iter()
         .map(|meal| meal.price)
         .reduce(|acc, price| acc + price)
         .unwrap();
     let total = sub_total.clone();
+
+    // FIX: should make use of a transaction
+
+    // TODO: create `order_items` based on the meals in the cart
+    // match meals {}
 
     match sqlx::query_as!(
         Order,
@@ -294,7 +309,7 @@ pub async fn find_many(
 
 #[derive(Serialize)]
 pub struct UpdateOrderPayload {
-    pub status: Option<OrderStatus>,
+    pub status: OrderStatus,
 }
 
 pub async fn update_by_id(
@@ -302,15 +317,32 @@ pub async fn update_by_id(
     id: String,
     payload: UpdateOrderPayload,
 ) -> Result<(), Error> {
+    // FIX: this should make use of a transaction
+
+    if let Err(err) = sqlx::query!(
+        "INSERT INTO order_updates (status, order_id) VALUES ($1, $2)",
+        payload.status.to_string(),
+        id
+    )
+    .execute(&db.pool)
+    .await
+    {
+        tracing::error!(
+            "Error occurred while trying to insert bookkeeping records for order updates: {}",
+            err
+        );
+        return Err(Error::UnexpectedError);
+    }
+
     match sqlx::query!(
         "
             UPDATE orders SET
-                status = COALESCE($1, status),
+                status = $1,
                 updated_at = NOW()
             WHERE
                 id = $2
         ",
-        payload.status.map(|s| s.to_string()),
+        payload.status.to_string(),
         id,
     )
     .execute(&db.pool)

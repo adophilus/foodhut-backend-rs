@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT \n                id, \n                name, \n                address, \n                type AS type_, \n                phone_number, \n                opening_time, \n                closing_time, \n                preparation_time, \n                delivery_time, \n                cover_image_url, \n                rating, \n                likes, \n                owner_id, \n                created_at, \n                updated_at\n            FROM kitchens WHERE owner_id = $1\n        ",
+  "query": "\n            SELECT\n                id, \n                name, \n                address, \n                type AS type_, \n                phone_number, \n                opening_time, \n                closing_time, \n                preparation_time, \n                delivery_time, \n                cover_image, \n                rating, \n                likes, \n                CASE\n                    WHEN EXISTS (\n                        SELECT 1\n                        FROM kitchen_user_reactions\n                        WHERE kitchen_user_reactions.user_id = $2\n                    )\n                    THEN true\n                    ELSE false\n                END AS has_liked,\n                owner_id, \n                created_at, \n                updated_at\n            FROM kitchens WHERE id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -50,8 +50,8 @@
       },
       {
         "ordinal": 9,
-        "name": "cover_image_url",
-        "type_info": "Varchar"
+        "name": "cover_image",
+        "type_info": "Json"
       },
       {
         "ordinal": 10,
@@ -65,22 +65,28 @@
       },
       {
         "ordinal": 12,
+        "name": "has_liked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
         "name": "owner_id",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "updated_at",
         "type_info": "Timestamp"
       }
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Text"
       ]
     },
@@ -97,10 +103,11 @@
       true,
       false,
       false,
+      null,
       false,
       false,
       true
     ]
   },
-  "hash": "c963a9846e3584602316a47df444aacfd7219d341f2f2c84f08d7c3ec8174139"
+  "hash": "71fc9ecc30237f9ef399f91960e4b2a02b409f73413df1fbb492af9f8216ad24"
 }
