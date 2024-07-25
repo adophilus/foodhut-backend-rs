@@ -40,12 +40,12 @@ impl TryFromField for Price {
                 })
             })
             .map_err(|err| {
-                tracing::debug!("Error occurred while parsing body: {}", err);
+                tracing::error!("Error occurred while parsing body: {}", err);
                 TypedMultipartError::InvalidRequestBody { source: err }
             })
             .unwrap()
             .map_err(|err| {
-                tracing::debug!("Error occurred while parsing body: {}", err);
+                tracing::error!("Error occurred while parsing body: {}", err);
                 TypedMultipartError::UnknownField {
                     field_name: String::from("price"),
                 }
@@ -87,7 +87,7 @@ async fn create_meal(
     let mut buf: Vec<u8> = vec![];
 
     if let Err(err) = payload.cover_image.contents.read_to_end(&mut buf) {
-        tracing::debug!("Failed to read the uploaded file {:?}", err);
+        tracing::error!("Failed to read the uploaded file {:?}", err);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to upload image" })),
@@ -221,7 +221,7 @@ async fn update_meal_by_id(
             let mut buf: Vec<u8> = vec![];
 
             if let Err(err) = cover_image.contents.read_to_end(&mut buf) {
-                tracing::debug!("Failed to read the uploaded file {:?}", err);
+                tracing::error!("Failed to read the uploaded file {:?}", err);
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({ "error": "Failed to upload image" })),

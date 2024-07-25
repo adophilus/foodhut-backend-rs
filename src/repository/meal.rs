@@ -126,8 +126,6 @@ impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
     fn into(self) -> DatabaseCountedResult {
         match self {
             Some(json) => {
-                tracing::debug!("{}", json);
-                tracing::debug!("{}", json["data"][0]);
                 match serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref()) {
                     Ok(v) => v,
                     Err(err) => {

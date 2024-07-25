@@ -426,7 +426,7 @@ async fn set_kitchen_cover_image(
     let mut buf: Vec<u8> = vec![];
 
     if let Err(err) = payload.cover_image.contents.read_to_end(&mut buf) {
-        tracing::debug!("Failed to read the uploaded file {:?}", err);
+        tracing::error!("Failed to read the uploaded file {:?}", err);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to upload image" })),

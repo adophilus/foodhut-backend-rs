@@ -12,7 +12,7 @@ pub async fn connect(database_url: &str) -> DatabaseConnection {
             .connect(database_url)
             .await
             .unwrap_or_else(|e| {
-                tracing::debug!("{:}", e);
+                tracing::error!("{:}", e);
                 panic!("Error connecting to database {}", database_url)
             }),
     }

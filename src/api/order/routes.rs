@@ -19,14 +19,14 @@ use crate::{
     utils::{self, pagination::Pagination},
 };
 
-const KITCHEN_TYPES: [&str; 4] = ["Chinese", "Cuisine", "Fast Food", "Local"];
+const order_TYPES: [&str; 4] = ["Chinese", "Cuisine", "Fast Food", "Local"];
 
 #[derive(Deserialize, Validate)]
-struct CreateKitchenPayload {
+struct CreateOrderPayload {
     pub name: String,
     pub address: String,
     pub phone_number: String,
-    #[validate(custom(function = "validate_kitchen_type"))]
+    #[validate(custom(function = "validate_order_type"))]
     #[serde(rename = "type")]
     pub type_: String,
     #[validate(custom(function = "validate_opening_time"))]
@@ -37,11 +37,11 @@ struct CreateKitchenPayload {
     pub delivery_time: String,
 }
 
-fn validate_kitchen_type(type_: &str) -> Result<(), ValidationError> {
-    match KITCHEN_TYPES.contains(&type_) {
+fn validate_order_type(type_: &str) -> Result<(), ValidationError> {
+    match order_TYPES.contains(&type_) {
         true => Ok(()),
-        false => Err(ValidationError::new("INVALID_KITCHEN_TYPE")
-            .with_message(Cow::from("Invalid kitchen type"))),
+        false => Err(ValidationError::new("INVALID_order_TYPE")
+            .with_message(Cow::from("Invalid order type"))),
     }
 }
 
@@ -69,18 +69,18 @@ fn validate_closing_time(time_str: &str) -> Result<(), ValidationError> {
     }
 }
 
-async fn create_kitchen(
+async fn create_order(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
-    Json(payload): Json<CreateKitchenPayload>,
+    Json(payload): Json<CreateOrderPayload>,
 ) -> impl IntoResponse {
     if let Err(errors) = payload.validate() {
         return utils::validation::into_response(errors);
     }
 
-    match repository::kitchen::create(
+    match repository::order::create(
         ctx.db_conn.clone(),
-        repository::kitchen::CreateKitchenPayload {
+        repository::order::CreateOrderPayload {
             name: payload.name,
             address: payload.address,
             type_: payload.type_,
@@ -96,69 +96,69 @@ async fn create_kitchen(
     {
         Ok(_) => (
             StatusCode::CREATED,
-            Json(json!({ "message": "Kitchen created!"})),
+            Json(json!({ "message": "Order created!"})),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Kitchen creation failed"})),
+            Json(json!({ "error": "Order creation failed"})),
         ),
     }
 }
 
-async fn get_kitchens(
+async fn get_orders(
     State(ctx): State<Arc<Context>>,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    match repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await {
-        Ok(paginated_kitchens) => (StatusCode::OK, Json(json!(paginated_kitchens))),
+    match repository::order::find_many(ctx.db_conn.clone(), pagination.clone()).await {
+        Ok(paginated_orders) => (StatusCode::OK, Json(json!(paginated_orders))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch kitchens"})),
+            Json(json!({"error": "Failed to fetch orders"})),
         ),
     }
 }
 
-async fn get_kitchen_by_profile(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {
-    match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
-        Ok(Some(kitchen)) => (StatusCode::OK, Json(json!(kitchen))),
+async fn get_order_by_profile(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {
+    match repository::order::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
+        Ok(Some(order)) => (StatusCode::OK, Json(json!(order))),
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Kitchen not found" })),
+            Json(json!({ "error": "Order not found" })),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch kitchen"})),
+            Json(json!({"error": "Failed to fetch order"})),
         ),
     }
 }
 
-async fn get_kitchen_by_id(
+async fn get_order_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
 ) -> impl IntoResponse {
-    match repository::kitchen::find_by_id(ctx.db_conn.clone(), id).await {
-        Ok(Some(kitchen)) => (StatusCode::OK, Json(json!(kitchen))),
+    match repository::order::find_by_id(ctx.db_conn.clone(), id).await {
+        Ok(Some(order)) => (StatusCode::OK, Json(json!(order))),
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Kitchen not found" })),
+            Json(json!({ "error": "Order not found" })),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch kitchens"})),
+            Json(json!({"error": "Failed to fetch orders"})),
         ),
     }
 }
 
-async fn fetch_kitchen_types() -> impl IntoResponse {
-    Json(json!(KITCHEN_TYPES))
+async fn fetch_order_types() -> impl IntoResponse {
+    Json(json!(order_TYPES))
 }
 
 #[derive(Deserialize, Validate)]
-pub struct UpdateKitchenPayload {
+pub struct UpdateOrderPayload {
     pub name: Option<String>,
     pub address: Option<String>,
     pub phone_number: Option<String>,
-    #[validate(custom(function = "validate_kitchen_type"))]
+    #[validate(custom(function = "validate_order_type"))]
     #[serde(rename = "type")]
     pub type_: Option<String>,
     #[validate(custom(function = "validate_opening_time"))]
@@ -169,39 +169,39 @@ pub struct UpdateKitchenPayload {
     pub delivery_time: Option<String>,
 }
 
-async fn update_kitchen_by_profile(
+async fn update_order_by_profile(
     auth: Auth,
     State(ctx): State<Arc<Context>>,
-    Json(payload): Json<UpdateKitchenPayload>,
+    Json(payload): Json<UpdateOrderPayload>,
 ) -> Response {
-    match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
-        Ok(Some(kitchen)) => {
-            update_kitchen_by_id(Path { 0: kitchen.id }, State(ctx), Json(payload))
+    match repository::order::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
+        Ok(Some(order)) => {
+            update_order_by_id(Path { 0: order.id }, State(ctx), Json(payload))
                 .await
                 .into_response()
         }
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Kitchen not found" })),
+            Json(json!({ "error": "Order not found" })),
         )
             .into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Failed to fetch kitchen" })),
+            Json(json!({ "error": "Failed to fetch order" })),
         )
             .into_response(),
     }
 }
 
-async fn update_kitchen_by_id(
+async fn update_order_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
-    Json(payload): Json<UpdateKitchenPayload>,
+    Json(payload): Json<UpdateOrderPayload>,
 ) -> impl IntoResponse {
-    match repository::kitchen::update_by_id(
+    match repository::order::update_by_id(
         ctx.db_conn.clone(),
         id,
-        repository::kitchen::UpdateKitchenPayload {
+        repository::order::UpdateOrderPayload {
             name: payload.name,
             address: payload.address,
             phone_number: payload.phone_number,
@@ -217,22 +217,22 @@ async fn update_kitchen_by_id(
     {
         Ok(_) => (
             StatusCode::OK,
-            Json(json!({ "message": "Kitchen updated successfully" })),
+            Json(json!({ "message": "Order updated successfully" })),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "message": "Failed to update kitchen" })),
+            Json(json!({ "message": "Failed to update order" })),
         ),
     }
 }
 
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
-        .route("/", post(create_kitchen).get(get_kitchens))
+        .route("/", post(create_order).get(get_orders))
         .route(
             "/profile",
-            get(get_kitchen_by_profile).patch(update_kitchen_by_profile),
+            get(get_order_by_profile).patch(update_order_by_profile),
         )
-        .route("/:id", get(get_kitchen_by_id).patch(update_kitchen_by_id))
-        .route("/types", get(fetch_kitchen_types))
+        .route("/:id", get(get_order_by_id).patch(update_order_by_id))
+        .route("/types", get(fetch_order_types))
 }

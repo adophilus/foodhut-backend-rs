@@ -306,9 +306,10 @@ pub async fn get_meals_from_cart_by_id(
                 .iter()
                 .map(|item| item.meal_id.clone())
                 .collect::<Vec<_>>();
+
             match sqlx::query_as!(
                 Meal,
-                "SELECT * FROM meals WHERE $1::jsonb @> meals.id::jsonb",
+                "SELECT * FROM meals WHERE $1 @> TO_JSONB(meals.id)",
                 json!(meal_ids),
             )
             .fetch_all(&db.pool)

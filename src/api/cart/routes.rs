@@ -329,6 +329,26 @@ pub async fn checkout_cart_by_id(
         );
     }
 
+    let order = match repository::order::create(
+        ctx.db_conn.clone(),
+        repository::order::CreateOrderPayload {
+            cart: cart.clone(),
+            payment_method: payload.payment_method.clone(),
+            delivery_address: payload.delivery_address.clone(),
+            dispatch_rider_note: payload.dispatch_rider_note.clone(),
+        },
+    )
+    .await
+    {
+        Ok(order) => order,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to checkout cart" })),
+            );
+        }
+    };
+
     if let Err(_) = repository::cart::update_by_id(
         ctx.db_conn.clone(),
         id,
@@ -343,28 +363,12 @@ pub async fn checkout_cart_by_id(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to checkout cart" })),
         );
-    }
+    };
 
-    match repository::order::create(
-        ctx.db_conn.clone(),
-        repository::order::CreateOrderPayload {
-            cart: cart.clone(),
-            payment_method: payload.payment_method.clone(),
-            delivery_address: payload.delivery_address.clone(),
-            dispatch_rider_note: payload.dispatch_rider_note.clone(),
-        },
+    (
+        StatusCode::OK,
+        Json(json!({ "message": "Cart checkedout successfully", "id": order.id })),
     )
-    .await
-    {
-        Ok(order) => (
-            StatusCode::OK,
-            Json(json!({ "message": "Cart checkedout successfully", "id": order.id })),
-        ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Failed to checkout cart" })),
-        ),
-    }
 }
 
 pub fn get_router() -> Router<Arc<Context>> {

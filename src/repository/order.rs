@@ -2,6 +2,7 @@ use bigdecimal::FromPrimitive;
 use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::types::BigDecimal;
 use std::{convert::Into, str::FromStr};
 use ulid::Ulid;
@@ -156,6 +157,11 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
         Ok(meals) => meals,
         Err(_) => return Err(Error::UnexpectedError),
     };
+    let meal_ids = meals
+        .clone()
+        .into_iter()
+        .map(|meal| meal.id)
+        .collect::<Vec<_>>();
     let sub_total = meals
         .clone()
         .into_iter()
@@ -166,10 +172,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
 
     // FIX: should make use of a transaction
 
-    // TODO: create `order_items` based on the meals in the cart
-    // match meals {}
-
-    match sqlx::query_as!(
+    let order = match sqlx::query_as!(
         Order,
         "
         INSERT INTO orders (
@@ -201,12 +204,30 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
     .fetch_one(&db.pool)
     .await
     {
-        Ok(order) => Ok(order),
+        Ok(order) => order,
         Err(err) => {
             tracing::error!("Error occurred while trying to create a order: {}", err);
-            Err(Error::UnexpectedError)
+            return Err(Error::UnexpectedError);
         }
-    }
+    };
+
+    match sqlx::query!("
+        WITH cte_meals AS (SELECT * FROM JSONB_ARRAY_ELEMENTS($1) AS meal_id LEFT JOIN meals ON meal_id#>>'{}' = meals.id)
+        INSERT INTO order_items (status, price, meal_id, order_id)
+        SELECT $2, cte_meals.price, cte_meals.id, $3 FROM cte_meals;
+    ",
+        json!(meal_ids), OrderStatus::Pending.to_string(), order.id
+    )
+    .execute(&db.pool)
+    .await {
+        Ok(_) => (),
+        Err(err) => {
+            tracing::error!("Failed to create order items from meal ids {:?}: {}", meal_ids, err);
+            return Err(Error::UnexpectedError);
+        }
+    };
+
+    Ok(order)
 }
 
 pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Order>, Error> {

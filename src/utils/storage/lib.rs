@@ -93,7 +93,6 @@ pub async fn upload_file(cfg: StorageContext, contents: Vec<u8>) -> Result<Uploa
 
     match serde_json::de::from_str::<UploadResponse>(data.as_ref()) {
         Ok(res) => {
-            tracing::debug!("Here's res.public_id: {}", res.public_id.clone());
             Ok(UploadedMedia {
                 url: res.secure_url,
                 public_id: res.public_id,
@@ -130,8 +129,6 @@ pub async fn delete_file(cfg: StorageContext, media: UploadedMedia) -> Result<()
         "timestamp": media.timestamp,
     })
     .to_string();
-
-    tracing::debug!("{}", body.clone());
 
     let res = Client::new()
         .post(cfg.delete_endpoint)
@@ -171,8 +168,6 @@ pub async fn update_file(
 ) -> Result<UploadedMedia, Error> {
     let file_name = Ulid::new().to_string();
     let part = Part::bytes(contents).file_name(file_name.clone());
-
-    tracing::debug!("Here's media.public_id: {}", media.public_id.clone());
 
     let timestamp = chrono::Utc::now().timestamp();
     let data_to_sign = format!(

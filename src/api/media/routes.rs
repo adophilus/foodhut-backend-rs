@@ -51,7 +51,7 @@ async fn delete_media(Path(id): Path<String>) -> impl IntoResponse {
     match std::fs::remove_file(format!("public/uploads/{}", id)) {
         Ok(_) => (StatusCode::OK, Json(json!({ "message": "Deleted file" }))),
         Err(err) => {
-            tracing::debug!("Failed to delete uploaded file {}: {:?}", id, err);
+            tracing::error!("Failed to delete uploaded file {}: {:?}", id, err);
             (
                 StatusCode::NOT_FOUND,
                 Json(json!({ "error": "Failed to delete file"})),
