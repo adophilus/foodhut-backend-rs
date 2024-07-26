@@ -105,10 +105,7 @@ async fn create_order(
     }
 }
 
-async fn get_orders(
-    State(ctx): State<Arc<Context>>,
-    pagination: Pagination,
-) -> impl IntoResponse {
+async fn get_orders(State(ctx): State<Arc<Context>>, pagination: Pagination) -> impl IntoResponse {
     match repository::order::find_many(ctx.db_conn.clone(), pagination.clone()).await {
         Ok(paginated_orders) => (StatusCode::OK, Json(json!(paginated_orders))),
         Err(_) => (
@@ -175,11 +172,9 @@ async fn update_order_by_profile(
     Json(payload): Json<UpdateOrderPayload>,
 ) -> Response {
     match repository::order::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
-        Ok(Some(order)) => {
-            update_order_by_id(Path { 0: order.id }, State(ctx), Json(payload))
-                .await
-                .into_response()
-        }
+        Ok(Some(order)) => update_order_by_id(Path { 0: order.id }, State(ctx), Json(payload))
+            .await
+            .into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "Order not found" })),
@@ -226,6 +221,21 @@ async fn update_order_by_id(
     }
 }
 
+struct PayForOrderPayload {
+    with: repository::order::PaymentMethod,
+}
+
+async fn pay_for_order(
+    State(state): State<Arc<Context>>,
+    auth: Auth,
+    Json(payload): Json<PayForOrderPayload>,
+) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(json!({ "message": "Payment successful!" })),
+    )
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", post(create_order).get(get_orders))
@@ -234,5 +244,6 @@ pub fn get_router() -> Router<Arc<Context>> {
             get(get_order_by_profile).patch(update_order_by_profile),
         )
         .route("/:id", get(get_order_by_id).patch(update_order_by_id))
+        .route("/:id/pay", post(pay_for_order))
         .route("/types", get(fetch_order_types))
 }

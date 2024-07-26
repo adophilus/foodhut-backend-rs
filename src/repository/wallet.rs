@@ -11,111 +11,71 @@ use crate::utils::{
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Kitchen {
+enum WalletBackend {
+    Paystack,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct WalletMetadata {
+    pub backend: WalletBackend,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Wallet {
     pub id: String,
-    pub name: String,
-    pub address: String,
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub phone_number: String,
-    pub opening_time: String,
-    pub closing_time: String,
-    pub preparation_time: String,
-    pub delivery_time: String,
-    pub cover_image_url: Option<String>,
-    pub rating: BigDecimal,
+    pub balance: String,
+    pub metadata: WalletMetadata,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
 
-pub struct CreateKitchenPayload {
-    pub name: String,
-    pub address: String,
-    pub phone_number: String,
-    pub type_: String,
-    pub opening_time: String,
-    pub closing_time: String,
-    pub preparation_time: String,
-    pub delivery_time: String,
+pub struct CreateWalletPayload {
     pub owner_id: String,
+    pub metadata: WalletMetadata,
 }
 
 pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateKitchenPayload) -> Result<(), Error> {
+pub async fn create(db: DatabaseConnection, payload: CreateWalletPayload) -> Result<(), Error> {
     match sqlx::query!(
         "
-        INSERT INTO kitchens (
+        INSERT INTO wallets (
             id,
-            name,
-            address,
-            type,
-            phone_number,
-            opening_time,
-            closing_time,
-            preparation_time,
-            delivery_time,
-            rating,
-            owner_id
+            balance,
+            metadata,
+            owner_id,
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4)
     ",
         Ulid::new().to_string(),
-        payload.name,
-        payload.address,
-        payload.type_,
-        payload.phone_number,
-        payload.opening_time,
-        payload.closing_time,
-        payload.preparation_time,
-        payload.delivery_time,
-        BigDecimal::new(BigInt::new(Sign::Plus, vec![0]), 2),
-        payload.owner_id
+        0,
+        json!(payload.metadata),
+        payload.owner_id,
     )
     .execute(&db.pool)
     .await
     {
         Ok(_) => Ok(()),
         Err(err) => {
-            tracing::error!("Error occurred while trying to create a kitchen: {}", err);
+            tracing::error!("Error occurred while trying to create a wallet: {}", err);
             Err(Error::UnexpectedError)
         }
     }
 }
 
-pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Kitchen>, Error> {
-    match sqlx::query_as!(
-        Kitchen,
-        "
-            SELECT 
-                id, 
-                name, 
-                address, 
-                type AS type_, 
-                phone_number, 
-                opening_time, 
-                closing_time, 
-                preparation_time, 
-                delivery_time, 
-                cover_image_url, 
-                rating, 
-                owner_id, 
-                created_at, 
-                updated_at
-            FROM kitchens WHERE id = $1
-        ",
-        id
-    )
-    .fetch_optional(&db.pool)
-    .await
+pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Wallet>, Error> {
+    match sqlx::query_as!(Wallet, "SELECT * FROM wallets WHERE id = $1", id)
+        .fetch_optional(&db.pool)
+        .await
     {
-        Ok(maybe_kitchen) => Ok(maybe_kitchen),
+        Ok(maybe_wallet) => Ok(maybe_wallet),
         Err(err) => {
             tracing::error!(
-                "Error occurred while trying to fetch many kitchens: {}",
+                "Error occurred while trying to fetch a wallet by id {}: {}",
+                id,
                 err
             );
             Err(Error::UnexpectedError)
@@ -126,36 +86,20 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Kit
 pub async fn find_by_owner_id(
     db: DatabaseConnection,
     owner_id: String,
-) -> Result<Option<Kitchen>, Error> {
+) -> Result<Option<Wallet>, Error> {
     match sqlx::query_as!(
-        Kitchen,
-        "
-            SELECT 
-                id, 
-                name, 
-                address, 
-                type AS type_, 
-                phone_number, 
-                opening_time, 
-                closing_time, 
-                preparation_time, 
-                delivery_time, 
-                cover_image_url, 
-                rating, 
-                owner_id, 
-                created_at, 
-                updated_at
-            FROM kitchens WHERE owner_id = $1
-        ",
+        Wallet,
+        "SELECT * FROM wallets WHERE owner_id = $1",
         owner_id
     )
     .fetch_optional(&db.pool)
     .await
     {
-        Ok(maybe_kitchen) => Ok(maybe_kitchen),
+        Ok(maybe_wallet) => Ok(maybe_wallet),
         Err(err) => {
             tracing::error!(
-                "Error occurred while trying to fetch many kitchens: {}",
+                "Error occurred while trying to fetch a wallet by owner_id {}: {}",
+                owner_id,
                 err
             );
             Err(Error::UnexpectedError)
@@ -165,7 +109,7 @@ pub async fn find_by_owner_id(
 
 #[derive(Deserialize)]
 struct DatabaseCountedResult {
-    data: Vec<Kitchen>,
+    data: Vec<Wallet>,
     total: u32,
 }
 
@@ -192,19 +136,19 @@ struct DatabaseCounted {
 pub async fn find_many(
     db: DatabaseConnection,
     pagination: Pagination,
-) -> Result<Paginated<Kitchen>, Error> {
+) -> Result<Paginated<Wallet>, Error> {
     match sqlx::query_as!(
         DatabaseCounted,
         "
             WITH filtered_data AS (
                 SELECT *
-                FROM kitchens 
+                FROM wallets 
                 LIMIT $1
                 OFFSET $2
             ), 
             total_count AS (
                 SELECT COUNT(id) AS total_rows
-                FROM kitchens
+                FROM wallets
             )
             SELECT JSONB_BUILD_OBJECT(
                 'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
@@ -225,68 +169,46 @@ pub async fn find_many(
             pagination.per_page,
         )),
         Err(err) => {
-            tracing::error!(
-                "Error occurred while trying to fetch many kitchens: {}",
-                err
-            );
+            tracing::error!("Error occurred while trying to fetch many wallets: {}", err);
             Err(Error::UnexpectedError)
         }
     }
 }
 
 #[derive(Serialize)]
-pub struct UpdateKitchenPayload {
-    pub name: Option<String>,
-    pub address: Option<String>,
-    pub phone_number: Option<String>,
-    pub type_: Option<String>,
-    pub opening_time: Option<String>,
-    pub closing_time: Option<String>,
-    pub preparation_time: Option<String>,
-    pub delivery_time: Option<String>,
-    pub rating: Option<BigDecimal>,
+enum UpdateWalletOperation {
+    Credit,
+    Debit,
+}
+
+#[derive(Serialize)]
+pub struct UpdateWalletPayload {
+    pub operation: UpdateWalletOperation,
+    pub amount: String,
 }
 
 pub async fn update_by_id(
     db: DatabaseConnection,
     id: String,
-    payload: UpdateKitchenPayload,
+    payload: UpdateWalletPayload,
 ) -> Result<(), Error> {
     match sqlx::query!(
         "
-            UPDATE kitchens SET
-                name = COALESCE($1, name),
-                address = COALESCE($2, address),
-                type = COALESCE($3, type),
-                phone_number = COALESCE($4, phone_number),
-                opening_time = COALESCE($5, opening_time),
-                closing_time = COALESCE($6, closing_time),
-                preparation_time = COALESCE($7, preparation_time),
-                delivery_time = COALESCE($8, delivery_time),
-                rating = COALESCE($9, rating),
-                updated_at = NOW()
+            UPDATE wallets SET
+                 balance = CASE WHEN $1 = $2 THEN balance + $2 ELSE balance - $2 END
             WHERE
-                id = $10
+                id = $3
         ",
-        payload.name,
-        payload.address,
-        payload.type_,
-        payload.phone_number,
-        payload.opening_time,
-        payload.closing_time,
-        payload.preparation_time,
-        payload.delivery_time,
-        payload.rating,
-        id,
+        payload.operation,
+        UpdateWalletOperation::Credit,
+        payload.amount,
+        id
     )
     .execute(&db.pool)
     .await
     {
         Err(e) => {
-            log::error!(
-                "Error occurred while trying to update OTP by id: {}",
-                e
-            );
+            log::error!("Error occurred while trying to update wallet by id: {}", e);
             return Err(Error::UnexpectedError);
         }
         _ => Ok(()),
