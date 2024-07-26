@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO wallets (\n            id,\n            balance,\n            metadata,\n            owner_id\n        )\n        VALUES ($1, $2, $3, $4)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Numeric",
+        "Json",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "78efc2addf05cdd33dbcd82f4c0463c712237340cf6563edebedee3aeb1ac099"
+}

@@ -1,3 +1,4 @@
+use super::meal::Meal;
 use bigdecimal::FromPrimitive;
 use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
@@ -145,6 +146,7 @@ pub struct CreateOrderPayload {
     pub dispatch_rider_note: String,
 }
 
+#[derive(Debug)]
 pub enum Error {
     UnexpectedError,
 }
@@ -255,6 +257,30 @@ pub async fn find_by_owner_id(
         Ok(orders) => Ok(orders),
         Err(err) => {
             tracing::error!("Error occurred while trying to fetch many orders: {}", err);
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
+pub async fn find_order_items_by_id(
+    db: DatabaseConnection,
+    id: String,
+) -> Result<Vec<OrderItem>, Error> {
+    match sqlx::query_as!(
+        OrderItem,
+        "SELECT * FROM order_items WHERE order_id = $1",
+        id
+    )
+    .fetch_all(&db.pool)
+    .await
+    {
+        Ok(items) => Ok(items),
+        Err(err) => {
+            tracing::error!(
+                "Error occurred while trying to fetch many order items by id {}: {}",
+                id,
+                err
+            );
             Err(Error::UnexpectedError)
         }
     }
@@ -374,5 +400,46 @@ pub async fn update_by_id(
             return Err(Error::UnexpectedError);
         }
         _ => Ok(()),
+    }
+}
+
+pub async fn get_meals_from_order_by_id(
+    db: DatabaseConnection,
+    id: String,
+) -> Result<Vec<Meal>, Error> {
+    match find_order_items_by_id(db.clone(), id.clone()).await {
+        Ok(items) => {
+            let meal_ids = items
+                .iter()
+                .map(|item| item.meal_id.clone())
+                .collect::<Vec<_>>();
+
+            match sqlx::query_as!(
+                Meal,
+                "SELECT * FROM meals WHERE $1 @> TO_JSONB(meals.id)",
+                json!(meal_ids),
+            )
+            .fetch_all(&db.pool)
+            .await
+            {
+                Ok(meals) => Ok(meals),
+                Err(e) => {
+                    log::error!(
+                        "Error occurred while trying to get meals from order by id {}: {}",
+                        id,
+                        e
+                    );
+                    Err(Error::UnexpectedError)
+                }
+            }
+        }
+        Err(e) => {
+            log::error!(
+                "Error occurred while trying to get meals from order by id {}: {:?}",
+                id,
+                e
+            );
+            Err(Error::UnexpectedError)
+        }
     }
 }

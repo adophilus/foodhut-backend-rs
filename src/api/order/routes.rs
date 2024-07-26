@@ -228,12 +228,33 @@ struct PayForOrderPayload {
 async fn pay_for_order(
     State(state): State<Arc<Context>>,
     auth: Auth,
+    Path(id): Path<String>,
     Json(payload): Json<PayForOrderPayload>,
 ) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(json!({ "message": "Payment successful!" })),
-    )
+    let order = match repository::order::find_by_id(db, id).await {
+        Ok(Some(order)) => order,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Order not found" })),
+            )
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to find order by id"})),
+            )
+        }
+    };
+
+    match payload.with {
+        Online => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "This feature has not been implemented yet" })),
+        ),
+        // TODO: refactor to 'initialize payment'
+        Wallet => utils::wallet::pay_for_order(db, order, auth.user).await,
+    }
 }
 
 pub fn get_router() -> Router<Arc<Context>> {

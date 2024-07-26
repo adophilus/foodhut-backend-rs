@@ -1,6 +1,8 @@
+use bigdecimal::FromPrimitive;
 use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::types::BigDecimal;
 use std::convert::Into;
 use ulid::Ulid;
@@ -20,10 +22,21 @@ struct WalletMetadata {
     pub backend: WalletBackend,
 }
 
+impl From<serde_json::Value> for WalletMetadata {
+    fn from(value: serde_json::Value) -> Self {
+        serde_json::from_str::<Self>(
+            value
+                .as_str()
+                .expect("Not possible to decode from NULL data"),
+        )
+        .expect("Invalid WalletMetadata type")
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Wallet {
     pub id: String,
-    pub balance: String,
+    pub balance: BigDecimal,
     pub metadata: WalletMetadata,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
@@ -46,12 +59,12 @@ pub async fn create(db: DatabaseConnection, payload: CreateWalletPayload) -> Res
             id,
             balance,
             metadata,
-            owner_id,
+            owner_id
         )
         VALUES ($1, $2, $3, $4)
     ",
         Ulid::new().to_string(),
-        0,
+        BigDecimal::from_u8(0).unwrap(),
         json!(payload.metadata),
         payload.owner_id,
     )
@@ -176,15 +189,26 @@ pub async fn find_many(
 }
 
 #[derive(Serialize)]
-enum UpdateWalletOperation {
+pub enum UpdateWalletOperation {
+    #[serde(rename = "CREDIT")]
     Credit,
+    #[serde(rename = "DEBIT")]
     Debit,
+}
+
+impl ToString for UpdateWalletOperation {
+    fn to_string(&self) -> String {
+        match *self {
+            UpdateWalletOperation::Credit => String::from("CREDIT"),
+            UpdateWalletOperation::Debit => String::from("DEBIT"),
+        }
+    }
 }
 
 #[derive(Serialize)]
 pub struct UpdateWalletPayload {
     pub operation: UpdateWalletOperation,
-    pub amount: String,
+    pub amount: BigDecimal,
 }
 
 pub async fn update_by_id(
@@ -192,15 +216,17 @@ pub async fn update_by_id(
     id: String,
     payload: UpdateWalletPayload,
 ) -> Result<(), Error> {
+    // FIX: checks need to be made so that the user's balance cannot be negagtive
+
     match sqlx::query!(
         "
             UPDATE wallets SET
-                 balance = CASE WHEN $1 = $2 THEN balance + $2 ELSE balance - $2 END
+                 balance = CASE WHEN $1 = $2 THEN balance + $3::numeric ELSE balance - $3::numeric END
             WHERE
-                id = $3
+                id = $4
         ",
-        payload.operation,
-        UpdateWalletOperation::Credit,
+        payload.operation.to_string(),
+        UpdateWalletOperation::Credit.to_string(),
         payload.amount,
         id
     )
