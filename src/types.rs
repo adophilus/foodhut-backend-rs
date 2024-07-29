@@ -1,5 +1,5 @@
 pub use crate::utils::database;
-use async_convert::{async_trait, TryFrom};
+use async_trait::async_trait;
 use std::env;
 
 #[derive(Clone)]
@@ -88,7 +88,7 @@ impl Default for Config {
         let payment_public_key =
             env::var("PAYSTACK_PUBLIC_KEY").expect("PAYSTACK_PUBLIC_KEY not set");
         let payment_secret_key =
-            env::var("PAYMENT_SECRET_KEY").expect("PAYMENT_SECRET_KEY not set");
+            env::var("PAYSTACK_SECRET_KEY").expect("PAYSTACK_SECRET_KEY not set");
 
         return Self {
             database: DatabaseConfig { url: database_url },

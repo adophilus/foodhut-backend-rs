@@ -15,7 +15,7 @@ pub enum Error {
     InsufficientFunds,
 }
 
-pub struct InitializePaymentForMeal {
+struct InitializePaymentForMeal {
     payer: User,
     meal: Meal,
 }
@@ -67,12 +67,12 @@ async fn initialize_payment_for_meal(
     Ok(())
 }
 
-struct InitializePaymentForOrder {
-    order: Order,
-    payer: User,
+pub struct InitializePaymentForOrder {
+    pub order: Order,
+    pub payer: User,
 }
 
-async fn initialize_payment_for_order(
+pub async fn initialize_payment_for_order(
     db: DatabaseConnection,
     payload: InitializePaymentForOrder,
 ) -> Result<(), Error> {
