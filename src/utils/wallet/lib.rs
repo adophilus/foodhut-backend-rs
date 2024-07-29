@@ -15,12 +15,15 @@ pub enum Error {
     InsufficientFunds,
 }
 
-pub struct PayForMeal {
+pub struct InitializePaymentForMeal {
     payer: User,
     meal: Meal,
 }
 
-async fn pay_for_meal(db: DatabaseConnection, payload: PayForMeal) -> Result<(), Error> {
+async fn initialize_payment_for_meal(
+    db: DatabaseConnection,
+    payload: InitializePaymentForMeal,
+) -> Result<(), Error> {
     let wallet = match wallet::find_by_owner_id(db.clone(), payload.payer.id.clone()).await {
         Ok(Some(wallet)) => wallet,
         Ok(None) => return Err(Error::WalletNotFound),
@@ -64,12 +67,15 @@ async fn pay_for_meal(db: DatabaseConnection, payload: PayForMeal) -> Result<(),
     Ok(())
 }
 
-struct PayForOrder {
+struct InitializePaymentForOrder {
     order: Order,
     payer: User,
 }
 
-async fn pay_for_order(db: DatabaseConnection, payload: PayForOrder) -> Result<(), Error> {
+async fn initialize_payment_for_order(
+    db: DatabaseConnection,
+    payload: InitializePaymentForOrder,
+) -> Result<(), Error> {
     let wallet = match wallet::find_by_owner_id(db.clone(), payload.payer.id.clone()).await {
         Ok(Some(wallet)) => wallet,
         Ok(None) => return Err(Error::WalletNotFound),
@@ -86,9 +92,9 @@ async fn pay_for_order(db: DatabaseConnection, payload: PayForOrder) -> Result<(
     };
 
     for meal in meals {
-        match pay_for_meal(
+        match initialize_payment_for_meal(
             db.clone(),
-            PayForMeal {
+            InitializePaymentForMeal {
                 meal,
                 payer: payload.payer.clone(),
             },

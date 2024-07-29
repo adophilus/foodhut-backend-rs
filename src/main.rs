@@ -3,7 +3,7 @@ mod repository;
 mod types;
 mod utils;
 
-use crate::utils::{config, database};
+use crate::types::{Config, Context, ToContext};
 use axum::{extract::DefaultBodyLimit, Extension, Router};
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
@@ -16,47 +16,24 @@ fn init_tracing() {
         .init();
 }
 
-async fn make_context(config: config::Config) -> types::Context {
-    let db_conn = database::connect(config.database.url.as_str()).await;
-    database::migrate(db_conn.clone()).await;
-
-    types::Context {
-        app: types::AppContext {
-            host: config.app.host,
-            port: config.app.port,
-            url: config.app.url,
-        },
-        db_conn: db_conn.clone(),
-        storage: types::StorageContext {
-            api_key: config.storage.api_key,
-            api_secret: config.storage.api_secret,
-            upload_endpoint: config.storage.upload_endpoint,
-            delete_endpoint: config.storage.delete_endpoint,
-            upload_preset: config.storage.upload_preset,
-        },
-    }
-}
-
 #[tokio::main]
 async fn main() {
-    let config = config::get_config();
-    let ctx = Arc::new(make_context(config.clone()).await);
+    let ctx: Arc<Context>= Arc::new(Config::default().to_context().await);
 
     init_tracing();
 
     let app = Router::new()
         .nest("/api", api::get_router())
         .with_state(ctx.clone())
-        .layer(Extension(ctx))
+        .layer(Extension(ctx.clone()))
         .layer(DefaultBodyLimit::max(1024 * 1024 * 10))
         .layer(TraceLayer::new_for_http());
 
-    let listener =
-        tokio::net::TcpListener::bind(format!("{}:{}", config.app.host, config.app.port))
-            .await
-            .unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("{}:{}", ctx.app.host, ctx.app.port))
+        .await
+        .unwrap();
 
-    tracing::debug!("App is running on {}:{}", config.app.host, config.app.port);
+    tracing::debug!("App is running on {}:{}", ctx.app.host, ctx.app.port);
 
     axum::serve(listener, app).await.unwrap();
 }

@@ -17,10 +17,10 @@ use super::cart::{self, Cart};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum OrderStatus {
-    #[serde(rename = "PENDING")]
-    Pending,
-    #[serde(rename = "ACCEPTED")]
-    Accepted,
+    #[serde(rename = "AWAITING_PAYMENT")]
+    AwaitingPayment,
+    #[serde(rename = "AWAITING_ACKNOWLEDGEMENT")]
+    AwaitingAcknowledgement,
     #[serde(rename = "PREPARING")]
     Preparing,
     #[serde(rename = "IN_TRANSIT")]
@@ -34,8 +34,10 @@ pub enum OrderStatus {
 impl ToString for OrderStatus {
     fn to_string(&self) -> String {
         match self {
-            OrderStatus::Pending => String::from("PENDING"),
-            OrderStatus::Accepted => String::from("ACCEPTED"),
+            OrderStatus::AwaitingPayment => String::from("AWAITING_PAYMENT"),
+            OrderStatus::AwaitingAcknowledgement => {
+                String::from("AWAITING AWAITING_ACKNOWLEDGEMENT")
+            }
             OrderStatus::Preparing => String::from("PREPARING"),
             OrderStatus::InTransit => String::from("IN_TRANSIT"),
             OrderStatus::Delivered => String::from("DELIVERED"),
@@ -49,8 +51,8 @@ impl FromStr for OrderStatus {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "PENDING" => Ok(OrderStatus::Pending),
-            "ACCEPTED" => Ok(OrderStatus::Accepted),
+            "AWAITING_PAYMENT" => Ok(OrderStatus::AwaitingPayment),
+            "AWAITING_ACKNOWLEDGEMENT" => Ok(OrderStatus::AwaitingAcknowledgement),
             "PREPARING" => Ok(OrderStatus::Preparing),
             "IN_TRANSIT" => Ok(OrderStatus::InTransit),
             "DELIVERED" => Ok(OrderStatus::Delivered),
@@ -193,7 +195,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
         RETURNING *
         ",
         Ulid::new().to_string(),
-        OrderStatus::Pending.to_string(),
+        OrderStatus::AwaitingPayment.to_string(),
         payload.payment_method.to_string(),
         delivery_fee,
         service_fee,
@@ -218,7 +220,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
         INSERT INTO order_items (status, price, meal_id, order_id)
         SELECT $2, cte_meals.price, cte_meals.id, $3 FROM cte_meals;
     ",
-        json!(meal_ids), OrderStatus::Pending.to_string(), order.id
+        json!(meal_ids), OrderStatus::AwaitingPayment.to_string(), order.id
     )
     .execute(&db.pool)
     .await {
