@@ -28,7 +28,7 @@ FROM debian:bookworm-slim AS runtime
 
 WORKDIR /app
 
-RUN apt-get update && apt install -y openssl
+RUN apt-get update && apt install -y openssl ca-certificates
 
 COPY --from=builder /app/target/release/foodhut_backend_rs /usr/local/bin
 
