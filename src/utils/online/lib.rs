@@ -1,5 +1,5 @@
 use axum::http::{HeaderMap, HeaderValue};
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, FromPrimitive};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -40,7 +40,10 @@ async fn create_payment_link(
 
     let payload = json!({
         "email": payload.payer.email,
-        "amount": payload.order.total
+        "amount": payload.order.total * BigDecimal::from_u8(100).expect("Invalid primitive value to convert from"),
+        "metatadata": {
+            "order_id": payload.order.id.clone()
+        }
     })
     .to_string();
 
