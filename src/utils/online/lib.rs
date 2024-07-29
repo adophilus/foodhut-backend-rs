@@ -45,20 +45,23 @@ async fn create_payment_link(
     .to_string();
 
     let mut headers = HeaderMap::new();
+    let auth_header = format!("Bearer {}", ctx.payment.secret_key);
     headers.insert(
         "Authorization",
-        ctx.payment.secret_key.clone().try_into().map_err(|err| {
-            tracing::error!(
-                "Failed to parse header value {}: {}",
-                ctx.payment.secret_key.clone(),
-                err
-            );
-            Error::UnexpectedError
-        })?,
+        auth_header
+            .clone()
+            .try_into()
+            .expect("Invalid auth header value"),
+    );
+    headers.insert(
+        "Content-Type",
+        "application/json"
+            .try_into()
+            .expect("Invalid content type header value"),
     );
 
     let res = reqwest::Client::new()
-        .post("https://api.paystack.co/paymentrequest")
+        .post("https://api.paystack.co/transaction/initialize")
         .headers(headers)
         .body(payload.clone())
         .send()
