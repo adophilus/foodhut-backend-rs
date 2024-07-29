@@ -3,7 +3,7 @@ use serde_json::json;
 
 use crate::{
     // api::{auth, cart, kitchen, meal, order, user, wallet},
-    api::{auth, cart, kitchen, meal, media, user},
+    api::{auth, cart, kitchen, meal, media, order, user},
     types::Context,
 };
 use std::sync::Arc;
@@ -24,7 +24,7 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/kitchens", kitchen::get_router())
         .nest("/meals", meal::get_router())
         .nest("/carts", cart::get_router())
-    // .nest("/orders", order::get_router())
+        .nest("/orders", order::get_router())
     // .nest("/wallets", wallet::get_router())
     // .layer(axum::middleware::from_fn(auth::middleware::auth))
 }

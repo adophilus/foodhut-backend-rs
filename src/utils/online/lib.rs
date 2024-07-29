@@ -1,4 +1,7 @@
+use axum::http::{HeaderMap, HeaderValue};
 use bigdecimal::BigDecimal;
+use reqwest::StatusCode;
+use serde_json::json;
 
 use crate::{
     repository::{
@@ -10,45 +13,96 @@ use crate::{
     types::Context,
     utils::database::DatabaseConnection,
 };
+use std::sync::Arc;
 
 pub enum Error {
     UnexpectedError,
 }
 
-async fn create_payment_link(ctx: Context, amount: BigDecimal) -> Result<String, Error> {
-
+pub struct InitializePaymentForOrder {
+    pub order: Order,
+    pub payer: User,
 }
 
-struct InitializePaymentForOrder {
-    order: Order,
-    payer: User,
-}
-
-async fn initialize_payment_for_order(
-    ctx: Context,
+async fn create_payment_link(
+    ctx: Arc<Context>,
     payload: InitializePaymentForOrder,
-) -> Result<(), Error> {
-    let meals = match order::get_meals_from_order_by_id(db.clone(), payload.order.id).await {
+) -> Result<String, Error> {
+    let meals = match order::get_meals_from_order_by_id(
+        ctx.db_conn.clone(),
+        payload.order.id.clone(),
+    )
+    .await
+    {
         Ok(meals) => meals,
         Err(_) => return Err(Error::UnexpectedError),
     };
 
-    let payment_link = create_payment_link(ctx, payload.order.total);
+    let payload = json!({
+        "email": payload.payer.email,
+        "amount": payload.order.total
+    })
+    .to_string();
 
-    for meal in meals {
-        match initialize_payment_for_meal(
-            db.clone(),
-            InitializePaymentForMeal {
-                meal,
-                payer: payload.payer.clone(),
-            },
-        )
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "Authorization",
+        ctx.payment.secret_key.clone().try_into().map_err(|err| {
+            tracing::error!(
+                "Failed to parse header value {}: {}",
+                ctx.payment.secret_key.clone(),
+                err
+            );
+            Error::UnexpectedError
+        })?,
+    );
+
+    let res = reqwest::Client::new()
+        .post("https://api.paystack.co/paymentrequest")
+        .headers(headers)
+        .body(payload.clone())
+        .send()
         .await
-        {
-            Ok(_) => (),
-            Err(_) => return Err(Error::UnexpectedError),
-        }
+        .map_err(|err| {
+            tracing::error!("Failed to create payment link: {}", err);
+            Error::UnexpectedError
+        })?;
+
+    if res.status() != StatusCode::OK {
+        let data = res.text().await.map_err(|err| {
+            tracing::error!(
+                "Failed to process create payment link response for payload {}: {:?}",
+                payload,
+                err
+            );
+            Error::UnexpectedError
+        })?;
+
+        tracing::error!("Failed to create payment link: {}", data);
+        return Err(Error::UnexpectedError);
     }
+
+    let data = res.text().await.map_err(|err| {
+        tracing::error!(
+            "Failed to process create payment link response for payload {}: {:?}",
+            payload.clone(),
+            err
+        );
+        Error::UnexpectedError
+    })?;
+
+    tracing::debug!("Response received from paystack server: {}", data);
+
+    Ok(String::new())
+}
+
+pub async fn initialize_payment_for_order(
+    ctx: Arc<Context>,
+    payload: InitializePaymentForOrder,
+) -> Result<(), Error> {
+    let payment_link = create_payment_link(ctx.clone(), payload).await?;
+
+    tracing::debug!("Payment link: {}", payment_link);
 
     Ok(())
 }

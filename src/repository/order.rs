@@ -1,4 +1,5 @@
 use super::meal::Meal;
+use super::user::User;
 use bigdecimal::FromPrimitive;
 use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
@@ -247,23 +248,6 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Ord
     }
 }
 
-pub async fn find_by_owner_id(
-    db: DatabaseConnection,
-    owner_id: String,
-) -> Result<Vec<Order>, Error> {
-    // FIX: this query is so wrong!
-    match sqlx::query_as!(Order, "SELECT * FROM orders WHERE cart_id = $1", owner_id)
-        .fetch_all(&db.pool)
-        .await
-    {
-        Ok(orders) => Ok(orders),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to fetch many orders: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
-}
-
 pub async fn find_order_items_by_id(
     db: DatabaseConnection,
     id: String,
@@ -339,6 +323,52 @@ pub async fn find_many(
         ",
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
+    )
+    .fetch_one(&db.pool)
+    .await
+    {
+        Ok(counted) => Ok(Paginated::new(
+            counted.result.data,
+            counted.result.total,
+            pagination.page,
+            pagination.per_page,
+        )),
+        Err(err) => {
+            tracing::error!("Error occurred while trying to fetch many orders: {}", err);
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
+pub async fn find_many_by_owner_id(
+    db: DatabaseConnection,
+    owner_id: String,
+    pagination: Pagination,
+) -> Result<Paginated<Order>, Error> {
+    match sqlx::query_as!(
+        DatabaseCounted,
+        "
+            WITH filtered_data AS (
+                SELECT orders.*
+                FROM orders 
+                LEFT JOIN carts ON cart_id = carts.id
+                WHERE owner_id = $3
+                LIMIT $1
+                OFFSET $2
+            ), 
+            total_count AS (
+                SELECT COUNT(id) AS total_rows
+                FROM orders
+            )
+            SELECT JSONB_BUILD_OBJECT(
+                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
+                'total', (SELECT total_rows FROM total_count)
+            ) AS result
+            FROM filtered_data;
+        ",
+        pagination.per_page as i64,
+        ((pagination.page - 1) * pagination.per_page) as i64,
+        owner_id,
     )
     .fetch_one(&db.pool)
     .await
