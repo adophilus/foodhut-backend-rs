@@ -167,6 +167,7 @@ pub async fn find_many(
             WITH filtered_data AS (
                 SELECT *
                 FROM meals 
+                WHERE kitchen_id = COALESCE($3, kitchen_id)
                 LIMIT $1
                 OFFSET $2
             ), 
@@ -182,6 +183,7 @@ pub async fn find_many(
         ",
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
+        filters.kitchen_id,
     )
     .fetch_one(&db.pool)
     .await
