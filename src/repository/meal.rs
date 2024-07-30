@@ -174,6 +174,7 @@ pub async fn find_many(
             total_count AS (
                 SELECT COUNT(id) AS total_rows
                 FROM meals
+                WHERE kitchen_id = COALESCE($3, kitchen_id)
             )
             SELECT JSONB_BUILD_OBJECT(
                 'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
