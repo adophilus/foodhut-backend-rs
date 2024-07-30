@@ -62,6 +62,21 @@ async fn get_carts(
     }
 }
 
+async fn get_active_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl IntoResponse {
+    match repository::cart::find_active_by_owner_id(ctx.db_conn.clone(), auth.user.id.clone()).await
+    {
+        Ok(Some(cart)) => (StatusCode::OK, Json(json!(cart))),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "No active cart found" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to fetch active cart" })),
+        ),
+    }
+}
+
 async fn get_cart_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
@@ -98,34 +113,40 @@ pub struct SetMealInCartPayload {
     quantity: i32,
 }
 
-async fn set_meal_in_cart(
-    Path((id, meal_id)): Path<(String, String)>,
+async fn set_meal_in_active_cart(
+    Path(meal_id): Path<String>,
     State(ctx): State<Arc<Context>>,
     auth: Auth,
     Json(payload): Json<SetMealInCartPayload>,
 ) -> impl IntoResponse {
-    let cart = match repository::cart::find_by_id(ctx.db_conn.clone(), id.clone()).await {
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Failed to find cart"})),
+    let cart =
+        match repository::cart::find_active_by_owner_id(ctx.db_conn.clone(), auth.user.id.clone())
+            .await
+        {
+            Ok(None) => match repository::cart::create(
+                ctx.db_conn.clone(),
+                repository::cart::CreateCartPayload {
+                    owner_id: auth.user.id.clone(),
+                },
             )
-        }
-        Ok(Some(cart)) => cart,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": "Cart not found"})),
-            )
-        }
-    };
-
-    if !repository::cart::is_owner(auth.user.clone(), cart.clone()) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(json!({"error": "You are not the owner of this cart"})),
-        );
-    }
+            .await
+            {
+                Ok(cart) => cart,
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"error": "Failed to set item in cart"})),
+                    )
+                }
+            },
+            Ok(Some(cart)) => cart,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "Failed to set item in cart"})),
+                )
+            }
+        };
 
     let meal = match repository::meal::find_by_id(ctx.db_conn.clone(), meal_id).await {
         Ok(Some(meal)) => meal,
@@ -169,7 +190,7 @@ async fn set_meal_in_cart(
 
     match repository::cart::update_by_id(
         ctx.db_conn.clone(),
-        id,
+        cart.id.clone(),
         repository::cart::UpdateCartPayload {
             items: Some(CartItems(items)),
             status: None,
@@ -188,33 +209,29 @@ async fn set_meal_in_cart(
     }
 }
 
-async fn remove_meal_from_cart(
-    Path((id, meal_id)): Path<(String, String)>,
+async fn remove_meal_from_active_cart(
+    Path(meal_id): Path<String>,
     State(ctx): State<Arc<Context>>,
     auth: Auth,
 ) -> impl IntoResponse {
-    let cart = match repository::cart::find_by_id(ctx.db_conn.clone(), id.clone()).await {
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Failed to find cart"})),
-            )
-        }
-        Ok(Some(cart)) => cart,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": "Cart not found"})),
-            )
-        }
-    };
-
-    if !repository::cart::is_owner(auth.user.clone(), cart.clone()) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(json!({"error": "You are not the owner of this cart"})),
-        );
-    }
+    let cart =
+        match repository::cart::find_active_by_owner_id(ctx.db_conn.clone(), auth.user.id.clone())
+            .await
+        {
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "Failed to find cart"})),
+                )
+            }
+            Ok(Some(cart)) => cart,
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": "Cart not found"})),
+                )
+            }
+        };
 
     let meal = match repository::meal::find_by_id(ctx.db_conn.clone(), meal_id).await {
         Ok(Some(meal)) => meal,
@@ -257,7 +274,7 @@ async fn remove_meal_from_cart(
 
     match repository::cart::update_by_id(
         ctx.db_conn.clone(),
-        id,
+        cart.id.clone(),
         repository::cart::UpdateCartPayload {
             items: Some(CartItems(new_items)),
             status: None,
@@ -283,34 +300,29 @@ pub struct CheckoutCartByIdPayload {
     dispatch_rider_note: String,
 }
 
-pub async fn checkout_cart_by_id(
-    Path(id): Path<String>,
+pub async fn checkout_active_cart(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
     Json(payload): Json<CheckoutCartByIdPayload>,
 ) -> impl IntoResponse {
-    let cart = match repository::cart::find_by_id(ctx.db_conn.clone(), id.clone()).await {
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Failed to find cart"})),
-            )
-        }
-        Ok(Some(cart)) => cart,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": "Cart not found"})),
-            )
-        }
-    };
-
-    if !repository::cart::is_owner(auth.user.clone(), cart.clone()) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(json!({"error": "You are not the owner of this cart"})),
-        );
-    }
+    let cart =
+        match repository::cart::find_active_by_owner_id(ctx.db_conn.clone(), auth.user.id.clone())
+            .await
+        {
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "Failed to find cart"})),
+                )
+            }
+            Ok(Some(cart)) => cart,
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": "Cart not found"})),
+                )
+            }
+        };
 
     match cart.status {
         repository::cart::CartStatus::CheckedOut => {
@@ -351,7 +363,7 @@ pub async fn checkout_cart_by_id(
 
     if let Err(_) = repository::cart::update_by_id(
         ctx.db_conn.clone(),
-        id,
+        cart.id.clone(),
         repository::cart::UpdateCartPayload {
             items: None,
             status: Some(repository::cart::CartStatus::CheckedOut),
@@ -373,11 +385,12 @@ pub async fn checkout_cart_by_id(
 
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
-        .route("/", post(create_cart).get(get_carts))
+        .route("/", get(get_carts))
+        .route("/active", get(get_active_cart))
         .route("/:id", get(get_cart_by_id))
-        .route("/:id/checkout", post(checkout_cart_by_id))
+        .route("/active/checkout", post(checkout_active_cart))
         .route(
-            "/:id/items/:meal_id",
-            put(set_meal_in_cart).delete(remove_meal_from_cart),
+            "/active/items/:meal_id",
+            put(set_meal_in_active_cart).delete(remove_meal_from_active_cart),
         )
 }

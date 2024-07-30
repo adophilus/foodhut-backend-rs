@@ -140,6 +140,31 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Car
     }
 }
 
+pub async fn find_active_by_owner_id(
+    db: DatabaseConnection,
+    owner_id: String,
+) -> Result<Option<Cart>, Error> {
+    match sqlx::query_as!(
+        Cart,
+        "SELECT * FROM carts WHERE owner_id = $1 AND status = $2",
+        owner_id,
+        CartStatus::NotCheckedOut.to_string(),
+    )
+    .fetch_optional(&db.pool)
+    .await
+    {
+        Ok(maybe_cart) => Ok(maybe_cart),
+        Err(err) => {
+            tracing::error!(
+                "Error occurred while trying to fetch cart by owner id {}: {}",
+                owner_id,
+                err
+            );
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct DatabaseCountedResult {
     data: Vec<Cart>,

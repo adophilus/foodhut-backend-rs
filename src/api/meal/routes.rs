@@ -3,7 +3,7 @@ use std::{io::Read, sync::Arc};
 use crate::repository;
 use axum::{
     async_trait,
-    extract::{multipart::Field, Path, State},
+    extract::{multipart::Field, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -13,6 +13,7 @@ use axum_typed_multipart::{
     FieldData, TryFromField, TryFromMultipart, TypedMultipart, TypedMultipartError,
 };
 use bigdecimal::{BigDecimal, FromPrimitive};
+use serde::Deserialize;
 use serde_json::json;
 use tempfile::NamedTempFile;
 
@@ -130,8 +131,12 @@ async fn create_meal(
     }
 }
 
-async fn get_meals(State(ctx): State<Arc<Context>>, pagination: Pagination) -> impl IntoResponse {
-    match repository::meal::find_many(ctx.db_conn.clone(), pagination.clone()).await {
+async fn get_meals(
+    State(ctx): State<Arc<Context>>,
+    pagination: Pagination,
+    Query(filters): Query<repository::meal::Filters>,
+) -> impl IntoResponse {
+    match repository::meal::find_many(ctx.db_conn.clone(), pagination.clone(), filters).await {
         Ok(paginated_meals) => (StatusCode::OK, Json(json!(paginated_meals))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,

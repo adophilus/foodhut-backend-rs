@@ -150,9 +150,16 @@ struct DatabaseCounted {
     result: DatabaseCountedResult,
 }
 
+#[derive(Deserialize)]
+pub struct Filters {
+    kitchen_id: Option<String>,
+}
+
 pub async fn find_many(
     db: DatabaseConnection,
     pagination: Pagination,
+    // TODO: implement filters for kitchen_id
+    filters: Filters,
 ) -> Result<Paginated<Meal>, Error> {
     match sqlx::query_as!(
         DatabaseCounted,
