@@ -29,6 +29,7 @@
           rustfmt
           clippy
           sqlx-cli
+          mitmproxy
         ];
       };
     };

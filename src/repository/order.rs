@@ -248,6 +248,32 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Ord
     }
 }
 
+pub async fn find_by_id_and_owner_id(
+    db: DatabaseConnection,
+    id: String,
+    owner_id: String,
+) -> Result<Option<Order>, Error> {
+    match sqlx::query_as!(
+        Order,
+        "
+        SELECT orders.* FROM orders
+        LEFT JOIN carts ON orders.cart_id = carts.id
+        WHERE orders.id = $1 AND owner_id = $2
+        ",
+        id,
+        owner_id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    {
+        Ok(maybe_order) => Ok(maybe_order),
+        Err(err) => {
+            tracing::error!("Error occurred while trying to fetch order by id: {}", err);
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
 pub async fn find_order_items_by_id(
     db: DatabaseConnection,
     id: String,

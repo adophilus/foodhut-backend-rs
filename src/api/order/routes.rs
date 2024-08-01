@@ -41,9 +41,10 @@ async fn get_orders(
 
 async fn get_order_by_id(
     Path(id): Path<String>,
+    auth: Auth,
     State(ctx): State<Arc<Context>>,
 ) -> impl IntoResponse {
-    match repository::order::find_by_id(ctx.db_conn.clone(), id).await {
+    match repository::order::find_by_id_and_owner_id(ctx.db_conn.clone(), id, auth.user.id).await {
         Ok(Some(order)) => (StatusCode::OK, Json(json!(order))),
         Ok(None) => (
             StatusCode::NOT_FOUND,

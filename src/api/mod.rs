@@ -5,7 +5,8 @@ pub mod meal;
 pub mod media;
 pub mod order;
 pub mod user;
+pub mod webhooks;
 // pub mod wallet;
 
-mod lib;
-pub use lib::get_router;
+mod router;
+pub use router::get_router;
