@@ -13,6 +13,7 @@ base16ct = { version = "0.2.0", features = ["alloc"] }
 bigdecimal = { version = "0.3.0", features = ["serde"] }
 chrono = { version = "0.4.38", features = ["serde"] }
 cloudinary = "0.4.0"
+crypto-common = "0.1.6"
 env_logger = "0.11.3"
 hex = "0.4.3"
 hmac = "0.12.1"

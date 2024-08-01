@@ -1,6 +1,7 @@
 use axum::http::{HeaderMap, HeaderValue};
 use bigdecimal::{BigDecimal, FromPrimitive};
 use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
@@ -17,6 +18,16 @@ use std::sync::Arc;
 
 pub enum Error {
     UnexpectedError,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Metadata {
+    pub order_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct PaystackResponse {
+    url: String,
 }
 
 pub struct InitializePaymentForOrder {
@@ -38,12 +49,14 @@ async fn create_payment_link(
         Err(_) => return Err(Error::UnexpectedError),
     };
 
+    let metadata = Metadata {
+        order_id: payload.order.id.clone(),
+    };
+
     let payload = json!({
         "email": payload.payer.email,
         "amount": payload.order.total * BigDecimal::from_u8(100).expect("Invalid primitive value to convert from"),
-        "metatadata": {
-            "order_id": payload.order.id.clone()
-        }
+        "metatadata": metadata,
     })
     .to_string();
 
@@ -99,16 +112,17 @@ async fn create_payment_link(
 
     tracing::debug!("Response received from paystack server: {}", data);
 
-    Ok(String::new())
+    let paystack_response = serde_json::de::from_str::<PaystackResponse>(data.as_str())
+        .map_err(|_| Error::UnexpectedError)?;
+
+    Ok(paystack_response.url)
 }
 
 pub async fn initialize_payment_for_order(
     ctx: Arc<Context>,
     payload: InitializePaymentForOrder,
-) -> Result<(), Error> {
+) -> Result<serde_json::Value, Error> {
     let payment_link = create_payment_link(ctx.clone(), payload).await?;
 
-    tracing::debug!("Payment link: {}", payment_link);
-
-    Ok(())
+    Ok(json!({ "url": payment_link }))
 }

@@ -16,7 +16,7 @@ use crate::utils::{
 
 use super::cart::{self, Cart};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OrderStatus {
     #[serde(rename = "AWAITING_PAYMENT")]
     AwaitingPayment,
@@ -109,7 +109,7 @@ impl From<String> for PaymentMethod {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Order {
     pub id: String,
-    status: OrderStatus,
+    pub status: OrderStatus,
     pub payment_method: PaymentMethod,
     pub delivery_fee: BigDecimal,
     pub service_fee: BigDecimal,
@@ -125,10 +125,10 @@ pub struct Order {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrderItem {
     pub id: i32,
-    status: OrderStatus,
-    price: BigDecimal,
-    meal_id: String,
-    order_id: String,
+    pub status: OrderStatus,
+    pub price: BigDecimal,
+    pub meal_id: String,
+    pub order_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -136,8 +136,8 @@ pub struct OrderItem {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrderUpdate {
     pub id: i32,
-    status: OrderStatus,
-    order_id: String,
+    pub status: OrderStatus,
+    pub order_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
