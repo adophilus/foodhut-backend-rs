@@ -26,8 +26,14 @@ pub struct Metadata {
 }
 
 #[derive(Deserialize)]
+pub struct PaystackResponseData {
+    pub authorization_url: String,
+}
+
+#[derive(Deserialize)]
 pub struct PaystackResponse {
-    url: String,
+    pub status: bool,
+    pub data: PaystackResponseData,
 }
 
 pub struct InitializePaymentForOrder {
@@ -56,7 +62,7 @@ async fn create_payment_link(
     let payload = json!({
         "email": payload.payer.email,
         "amount": payload.order.total * BigDecimal::from_u8(100).expect("Invalid primitive value to convert from"),
-        "metatadata": metadata,
+        "metadata": metadata,
     })
     .to_string();
 
@@ -115,7 +121,7 @@ async fn create_payment_link(
     let paystack_response = serde_json::de::from_str::<PaystackResponse>(data.as_str())
         .map_err(|_| Error::UnexpectedError)?;
 
-    Ok(paystack_response.url)
+    Ok(paystack_response.data.authorization_url)
 }
 
 pub async fn initialize_payment_for_order(

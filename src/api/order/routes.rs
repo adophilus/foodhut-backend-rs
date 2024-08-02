@@ -129,11 +129,7 @@ async fn pay_for_order(
     )
     .await
     {
-        // TODO: this payment detais should actually be presented to the user
-        Ok(details) => (
-            StatusCode::OK,
-            Json(json!({ "message": "Payment successful" })),
-        ),
+        Ok(details) => (StatusCode::OK, Json(json!(details))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Payment failed!" })),

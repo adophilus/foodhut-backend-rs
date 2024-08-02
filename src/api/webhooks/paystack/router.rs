@@ -5,30 +5,22 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
-    Json, Router,
+    Router,
 };
 use bigdecimal::BigDecimal;
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
-use serde_json::json;
 use sha2::Sha512;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
+#[serde(tag = "event", content = "data")]
 enum PaystackEvent {
-    TransactionSuccessful(TransactionSuccessful),
-}
-
-#[derive(Deserialize)]
-struct TransactionSuccessfulData {
-    amount: BigDecimal,
-    metadata: utils::online::Metadata,
-}
-
-#[derive(Deserialize)]
-struct TransactionSuccessful {
-    event: String,
-    data: TransactionSuccessfulData,
+    #[serde(rename = "charge.success")]
+    TransactionSuccessful {
+        amount: BigDecimal,
+        metadata: utils::online::Metadata,
+    },
 }
 
 fn verify_header(ctx: Arc<Context>, header: String, body: String) -> bool {
@@ -57,11 +49,7 @@ async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Respon
                 .expect("Header couldn't be converted to string"),
         ),
         None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "Invalid header" })),
-            )
-                .into_response();
+            return StatusCode::BAD_REQUEST.into_response();
         }
     };
     let body = match axum::body::to_bytes(req.into_body(), usize::MAX).await {
@@ -69,11 +57,7 @@ async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Respon
             String::from_utf8(bytes.to_vec()).expect("Body couldn't be converted to string")
         }
         Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "Invalid body" })),
-            )
-                .into_response();
+            return StatusCode::BAD_REQUEST.into_response();
         }
     };
 
@@ -81,23 +65,23 @@ async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Respon
         return StatusCode::BAD_REQUEST.into_response();
     }
 
+    tracing::debug!("Header verified!");
+
     let payload = match serde_json::de::from_str::<PaystackEvent>(body.as_str()) {
         Ok(payload) => payload,
         Err(_) => return StatusCode::BAD_REQUEST.into_response(),
     };
 
+    tracing::debug!("Payload parsed!");
+
     match payload {
-        PaystackEvent::TransactionSuccessful(event) => {
-            let order = match repository::order::find_by_id(
-                ctx.db_conn.clone(),
-                event.data.metadata.order_id,
-            )
-            .await
-            {
-                Ok(Some(order)) => order,
-                Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            };
+        PaystackEvent::TransactionSuccessful { amount, metadata } => {
+            let order =
+                match repository::order::find_by_id(ctx.db_conn.clone(), metadata.order_id).await {
+                    Ok(Some(order)) => order,
+                    Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+                    Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                };
 
             if let Err(_) = utils::payment::confirm_payment_for_order(ctx.clone(), order).await {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
