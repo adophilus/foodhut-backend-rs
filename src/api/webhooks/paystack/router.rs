@@ -7,7 +7,7 @@ use axum::{
     routing::post,
     Router,
 };
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, FromPrimitive};
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use sha2::Sha512;
@@ -65,14 +65,12 @@ async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Respon
         return StatusCode::BAD_REQUEST.into_response();
     }
 
-    tracing::debug!("Header verified!");
+    tracing::debug!("Trying to parse body: {}", body.as_str());
 
     let payload = match serde_json::de::from_str::<PaystackEvent>(body.as_str()) {
         Ok(payload) => payload,
         Err(_) => return StatusCode::BAD_REQUEST.into_response(),
     };
-
-    tracing::debug!("Payload parsed!");
 
     match payload {
         PaystackEvent::TransactionSuccessful { amount, metadata } => {
@@ -82,6 +80,12 @@ async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Respon
                     Ok(None) => return StatusCode::NOT_FOUND.into_response(),
                     Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
                 };
+
+            if amount / BigDecimal::from_u8(100).expect("Invalid primitive value to convert from")
+                < order.total
+            {
+                return StatusCode::BAD_REQUEST.into_response();
+            }
 
             if let Err(_) = utils::payment::confirm_payment_for_order(ctx.clone(), order).await {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();

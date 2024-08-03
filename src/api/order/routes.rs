@@ -130,6 +130,10 @@ async fn pay_for_order(
     .await
     {
         Ok(details) => (StatusCode::OK, Json(json!(details))),
+        Err(utils::payment::Error::AlreadyPaid) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Payment has already been made" })),
+        ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Payment failed!" })),
@@ -138,6 +142,7 @@ async fn pay_for_order(
 }
 
 pub fn get_router() -> Router<Arc<Context>> {
+    // TODO: add endpoint for manually verifying online payment
     Router::new()
         .route("/", get(get_orders))
         .route("/:id", get(get_order_by_id).patch(update_order_by_id))

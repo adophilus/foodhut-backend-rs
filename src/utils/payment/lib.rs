@@ -22,10 +22,6 @@ pub struct InitializePaymentForOrder {
     pub order: Order,
 }
 
-pub struct PaymentUrl {
-    pub url: Option<String>,
-}
-
 #[derive(Serialize)]
 pub struct PaymentDetails(serde_json::Value);
 

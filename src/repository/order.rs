@@ -37,7 +37,7 @@ impl ToString for OrderStatus {
         match self {
             OrderStatus::AwaitingPayment => String::from("AWAITING_PAYMENT"),
             OrderStatus::AwaitingAcknowledgement => {
-                String::from("AWAITING AWAITING_ACKNOWLEDGEMENT")
+                String::from("AWAITING_ACKNOWLEDGEMENT")
             }
             OrderStatus::Preparing => String::from("PREPARING"),
             OrderStatus::InTransit => String::from("IN_TRANSIT"),

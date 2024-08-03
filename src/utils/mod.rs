@@ -6,3 +6,4 @@ pub mod payment;
 pub mod storage;
 pub mod validation;
 pub mod wallet;
+pub mod notification;
