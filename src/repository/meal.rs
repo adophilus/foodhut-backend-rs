@@ -153,12 +153,12 @@ struct DatabaseCounted {
 #[derive(Deserialize)]
 pub struct Filters {
     kitchen_id: Option<String>,
+    search: Option<String>,
 }
 
 pub async fn find_many(
     db: DatabaseConnection,
     pagination: Pagination,
-    // TODO: implement filters for kitchen_id
     filters: Filters,
 ) -> Result<Paginated<Meal>, Error> {
     match sqlx::query_as!(
@@ -167,14 +167,18 @@ pub async fn find_many(
             WITH filtered_data AS (
                 SELECT *
                 FROM meals 
-                WHERE kitchen_id = COALESCE($3, kitchen_id)
+                WHERE
+                    kitchen_id = COALESCE($3, kitchen_id)
+                    AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
                 LIMIT $1
                 OFFSET $2
             ), 
             total_count AS (
                 SELECT COUNT(id) AS total_rows
                 FROM meals
-                WHERE kitchen_id = COALESCE($3, kitchen_id)
+                WHERE
+                    kitchen_id = COALESCE($3, kitchen_id)
+                    AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
             )
             SELECT JSONB_BUILD_OBJECT(
                 'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
@@ -185,6 +189,7 @@ pub async fn find_many(
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
         filters.kitchen_id,
+        filters.search,
     )
     .fetch_one(&db.pool)
     .await

@@ -1,11 +1,11 @@
 use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::types::BigDecimal;
 use std::convert::Into;
 use std::ops::{Deref, DerefMut};
 use ulid::Ulid;
-use serde_json::json;
 
 use crate::repository;
 use crate::utils::{
@@ -26,7 +26,6 @@ impl From<Option<serde_json::Value>> for CoverImage {
         }
     }
 }
-
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Kitchen {
@@ -333,9 +332,17 @@ struct DatabaseCounted {
     result: DatabaseCountedResult,
 }
 
+#[derive(Deserialize)]
+pub struct FindManyFilters {
+    #[serde(rename = "type")]
+    type_: Option<String>,
+    search: Option<String>,
+}
+
 pub async fn find_many(
     db: DatabaseConnection,
     pagination: Pagination,
+    filters: FindManyFilters,
 ) -> Result<Paginated<Kitchen>, Error> {
     match sqlx::query_as!(
         DatabaseCounted,
@@ -343,12 +350,18 @@ pub async fn find_many(
             WITH filtered_data AS (
                 SELECT *
                 FROM kitchens 
+                WHERE
+                    type = COALESCE($3, type)
+                    AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
                 LIMIT $1
                 OFFSET $2
             ), 
             total_count AS (
                 SELECT COUNT(id) AS total_rows
                 FROM kitchens
+                WHERE
+                    type = COALESCE($3, type)
+                    AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
             )
             SELECT JSONB_BUILD_OBJECT(
                 'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
@@ -358,6 +371,8 @@ pub async fn find_many(
         ",
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
+        filters.type_,
+        filters.search,
     )
     .fetch_one(&db.pool)
     .await

@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH filtered_data AS (\n                SELECT *\n                FROM meals \n                WHERE\n                    kitchen_id = COALESCE($3, kitchen_id)\n                    AND name ILIKE CONCAT('%', COALESCE($4, name), '%')\n                LIMIT $1\n                OFFSET $2\n            ), \n            total_count AS (\n                SELECT COUNT(id) AS total_rows\n                FROM meals\n                WHERE\n                    kitchen_id = COALESCE($3, kitchen_id)\n                    AND name ILIKE CONCAT('%', COALESCE($4, name), '%')\n            )\n            SELECT JSONB_BUILD_OBJECT(\n                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),\n                'total', (SELECT total_rows FROM total_count)\n            ) AS result\n            FROM filtered_data;\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "result",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0a3c5d1d6863f00a2a1c74088593d4e06e2db06d6bb7ebded7a09f960a37d1d6"
+}

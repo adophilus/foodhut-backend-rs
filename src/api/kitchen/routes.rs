@@ -146,26 +146,12 @@ async fn create_kitchen(
     )
 }
 
-#[derive(Deserialize)]
-struct GetKitchenQueryParams {
-    #[serde(rename = "type")]
-    type_: Option<String>,
-}
-
 async fn get_kitchens(
     State(ctx): State<Arc<Context>>,
-    Query(query): Query<GetKitchenQueryParams>,
+    Query(filters): Query<repository::kitchen::FindManyFilters>,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    let res = match query.type_ {
-        None => repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone()).await,
-        Some(type_) => {
-            repository::kitchen::find_many_by_type(ctx.db_conn.clone(), pagination.clone(), type_)
-                .await
-        }
-    };
-
-    match res {
+    match repository::kitchen::find_many(ctx.db_conn.clone(), pagination.clone(), filters).await {
         Ok(paginated_kitchens) => (StatusCode::OK, Json(json!(paginated_kitchens))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
