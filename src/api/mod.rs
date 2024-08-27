@@ -1,3 +1,4 @@
+pub mod ad;
 pub mod auth;
 pub mod cart;
 pub mod kitchen;

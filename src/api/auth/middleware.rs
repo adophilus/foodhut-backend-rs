@@ -92,7 +92,32 @@ impl<S: Send + Sync> FromRequestParts<S> for Auth {
 
         get_user_from_header(ctx.db_conn.clone(), auth_header.to_string())
             .await
-            .map(|user| Auth { user })
+            .map(|user| Self { user })
             .map_err(|_| err.clone().into_response())
+    }
+}
+
+#[derive(Serialize, Clone)]
+pub struct AdminAuth {
+    pub user: User,
+}
+
+#[async_trait]
+impl<S: Send + Sync> FromRequestParts<S> for AdminAuth {
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        use axum::RequestPartsExt;
+        let Extension(auth) = parts.extract::<Extension<Auth>>().await.unwrap();
+        let headers = parts.extract::<HeaderMap>().await.unwrap();
+
+        if !repository::user::is_admin(&auth.user) {
+            let err = (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "Invalid session token"})),
+            );
+        }
+
+        Ok(Self { user: auth.user })
     }
 }
