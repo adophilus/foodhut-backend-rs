@@ -24,13 +24,19 @@ async fn get_orders(
     auth: Auth,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    match repository::order::find_many_by_owner_id(
-        ctx.db_conn.clone(),
-        auth.user.id.clone(),
-        pagination.clone(),
-    )
-    .await
-    {
+    let orders = match repository::user::is_admin(&auth.user) {
+        true => repository::order::find_many(ctx.db_conn.clone(), pagination.clone()).await,
+        false => {
+            repository::order::find_many_by_owner_id(
+                ctx.db_conn.clone(),
+                auth.user.id.clone(),
+                pagination.clone(),
+            )
+            .await
+        }
+    };
+
+    match orders {
         Ok(paginated_orders) => (StatusCode::OK, Json(json!(paginated_orders))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -44,7 +50,13 @@ async fn get_order_by_id(
     auth: Auth,
     State(ctx): State<Arc<Context>>,
 ) -> impl IntoResponse {
-    match repository::order::find_by_id_and_owner_id(ctx.db_conn.clone(), id, auth.user.id).await {
+    let maybe_order = match repository::user::is_admin(&auth.user) {
+        true => repository::order::find_by_id(ctx.db_conn.clone(), id).await,
+        false => {
+            repository::order::find_by_id_and_owner_id(ctx.db_conn.clone(), id, auth.user.id).await
+        }
+    };
+    match maybe_order {
         Ok(Some(order)) => (StatusCode::OK, Json(json!(order))),
         Ok(None) => (
             StatusCode::NOT_FOUND,

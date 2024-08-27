@@ -21,6 +21,32 @@ impl From<Option<serde_json::Value>> for ProfilePicture {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum Role {
+    #[serde(rename = "ADMIN")]
+    Admin,
+    #[serde(rename = "USER")]
+    User,
+}
+
+impl From<String> for Role {
+    fn from(value: String) -> Self {
+        match value.as_ref() {
+            "ADMIN" => Role::Admin,
+            "USER" => Role::User,
+            role => unreachable!("Invalid user role: {}", role),
+        }
+    }
+}
+
+impl ToString for Role {
+    fn to_string(&self) -> String {
+        match self {
+            Role::Admin => String::from("ADMIN"),
+            Role::User => String::from("USER"),
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct User {
@@ -30,6 +56,7 @@ pub struct User {
     pub is_verified: bool,
     pub first_name: String,
     pub last_name: String,
+    pub role: Role,
     pub has_kitchen: bool,
     pub birthday: NaiveDateTime,
     pub referral_code: Option<String>,
@@ -191,4 +218,35 @@ pub async fn update_by_id(
         }
         _ => Ok(()),
     }
+}
+
+pub async fn set_role_by_id(db: DatabaseConnection, id: String, role: Role) -> Result<(), Error> {
+    match sqlx::query!(
+        "
+            UPDATE users SET
+                role = COALESCE($1, role),
+                updated_at = NOW()
+            WHERE
+                id = $2
+        ",
+        role.to_string(),
+        id,
+    )
+    .execute(&db.pool)
+    .await
+    {
+        Err(e) => {
+            log::error!(
+                "Error occurred while trying to set a user's role by id {}: {}",
+                id,
+                e
+            );
+            return Err(Error::UnexpectedError);
+        }
+        _ => Ok(()),
+    }
+}
+
+pub fn is_admin(user: &User) -> bool {
+    return user.role == Role::Admin;
 }

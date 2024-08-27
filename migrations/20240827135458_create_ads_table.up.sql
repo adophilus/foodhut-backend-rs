@@ -1,0 +1,8 @@
+CREATE TABLE ads (
+  id VARCHAR PRIMARY KEY NOT NULL,
+  banner_image JSON NOT NULL,
+  link VARCHAR NOT NULL,
+  duration INTEGER NOT NULL,
+  created_at TIMESTAMP DEFAULT now() NOT NULL,
+  updated_at TIMESTAMP
+);
