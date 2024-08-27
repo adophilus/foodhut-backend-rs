@@ -1,7 +1,7 @@
 use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use serde_json::json;
 
-use super::{auth, cart, kitchen, meal, media, order, user, webhooks};
+use super::{ad, auth, cart, kitchen, meal, media, order, user, webhooks};
 use crate::types::Context;
 use std::sync::Arc;
 
@@ -15,6 +15,7 @@ async fn health_check() -> impl IntoResponse {
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", get(health_check))
+        .nest("/ads", ad::get_router())
         .nest("/auth", auth::get_router())
         .nest("/media", media::get_router())
         .nest("/users", user::get_router())

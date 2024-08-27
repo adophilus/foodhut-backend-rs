@@ -16,7 +16,7 @@ use tempfile::NamedTempFile;
 use validator::{Validate, ValidationError};
 
 use crate::{
-    api::auth::middleware::Auth,
+    api::auth::middleware::{AdminAuth, Auth},
     repository::{self, kitchen::Kitchen, user::User},
     types::Context,
     utils::{self, pagination::Pagination},
@@ -467,6 +467,28 @@ async fn set_kitchen_cover_image(
     )
 }
 
+async fn block_kitchen_by_id(
+    State(ctx): State<Arc<Context>>,
+    auth: AdminAuth,
+) -> impl IntoResponse {
+    // TODO: this needs to be implemented
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({ "message": "Not implemented yet!" })),
+    )
+}
+
+async fn unblock_kitchen_by_id(
+    State(ctx): State<Arc<Context>>,
+    auth: AdminAuth,
+) -> impl IntoResponse {
+    // TODO: this needs to be implemented
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({ "message": "Not implemented yet!" })),
+    )
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", post(create_kitchen).get(get_kitchens))
@@ -482,5 +504,7 @@ pub fn get_router() -> Router<Arc<Context>> {
         .route("/:id/profile-picture", put(set_kitchen_cover_image_by_id))
         .route("/:id/like", put(like_kitchen_by_id))
         .route("/:id/unlike", put(unlike_kitchen_by_id))
+        .route("/:id/block", put(block_kitchen_by_id))
+        .route("/:id/unblock", put(unblock_kitchen_by_id))
         .route("/types", get(fetch_kitchen_types))
 }

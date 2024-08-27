@@ -71,29 +71,37 @@ pub struct Auth {
     pub user: User,
 }
 
+async fn get_user_from_request<State: Send + Sync>(
+    parts: &mut Parts,
+    state: &State,
+) -> Result<User, Response> {
+    use axum::RequestPartsExt;
+    let Extension(ctx) = parts.extract::<Extension<Arc<Context>>>().await.unwrap();
+    let headers = parts.extract::<HeaderMap>().await.unwrap();
+
+    let err = (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({"error": "Invalid session token"})),
+    );
+
+    let auth_header = headers
+        .get(http::header::AUTHORIZATION)
+        .and_then(|header| header.to_str().ok())
+        .ok_or(err.clone().into_response())?;
+
+    get_user_from_header(ctx.db_conn.clone(), auth_header.to_string())
+        .await
+        .map_err(|_| err.clone().into_response())
+}
+
 #[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for Auth {
     type Rejection = Response;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        use axum::RequestPartsExt;
-        let Extension(ctx) = parts.extract::<Extension<Arc<Context>>>().await.unwrap();
-        let headers = parts.extract::<HeaderMap>().await.unwrap();
-
-        let err = (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({"error": "Invalid session token"})),
-        );
-
-        let auth_header = headers
-            .get(http::header::AUTHORIZATION)
-            .and_then(|header| header.to_str().ok())
-            .ok_or(err.clone().into_response())?;
-
-        get_user_from_header(ctx.db_conn.clone(), auth_header.to_string())
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        get_user_from_request(parts, state)
             .await
             .map(|user| Self { user })
-            .map_err(|_| err.clone().into_response())
     }
 }
 
@@ -106,18 +114,9 @@ pub struct AdminAuth {
 impl<S: Send + Sync> FromRequestParts<S> for AdminAuth {
     type Rejection = Response;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        use axum::RequestPartsExt;
-        let Extension(auth) = parts.extract::<Extension<Auth>>().await.unwrap();
-        let headers = parts.extract::<HeaderMap>().await.unwrap();
-
-        if !repository::user::is_admin(&auth.user) {
-            let err = (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"error": "Invalid session token"})),
-            );
-        }
-
-        Ok(Self { user: auth.user })
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        get_user_from_request(parts, state)
+            .await
+            .map(|user| Self { user })
     }
 }

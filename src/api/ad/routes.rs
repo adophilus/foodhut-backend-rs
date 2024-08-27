@@ -246,3 +246,5 @@ pub fn get_router() -> Router<Arc<Context>> {
                 .delete(delete_ad_by_id),
         )
 }
+
+// TODO: have a cron worker run nightly to delete stale/expired ads
