@@ -77,24 +77,25 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateUserPayload) -> Result<(), Error> {
-    let res = sqlx::query!(
-        "INSERT INTO users (id, email, phone_number, first_name, last_name, birthday, is_verified) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+pub async fn create(db: DatabaseConnection, payload: CreateUserPayload) -> Result<User, Error> {
+    match sqlx::query_as!(
+        User,
+        "
+        INSERT INTO users (id, email, phone_number, first_name, last_name, birthday, is_verified) VALUES ($1, $2, $3, $4, $5, $6, false)
+        RETURNING *
+        ",
         Ulid::new().to_string(),
         payload.email,
         payload.phone_number,
         payload.first_name,
         payload.last_name,
         payload.birthday.into(),
-        false
     )
-    .execute(&db.pool)
-    .await;
-
-    match res {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            log::error!("{}", e);
+    .fetch_one(&db.pool)
+    .await {
+        Ok(user) => Ok(user),
+        Err(err) => {
+            log::error!("Error occured while creating a user account: {}", err);
             Err(Error::UnexpectedError)
         }
     }

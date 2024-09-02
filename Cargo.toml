@@ -18,6 +18,7 @@ env_logger = "0.11.3"
 hex = "0.4.3"
 hmac = "0.12.1"
 hyper = "1.4.1"
+lettre = { version = "0.11.7", features = ["tokio1", "builder", "tokio1-native-tls"] }
 log = "0.4.22"
 num-bigint = "0.4.6"
 regex = "1.10.5"
@@ -26,7 +27,13 @@ serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.120"
 sha1 = "0.10.6"
 sha2 = "0.10.8"
-sqlx = { version = "0.7.4", features = ["postgres", "runtime-tokio", "chrono", "macros", "bigdecimal"] }
+sqlx = { version = "0.7.4", features = [
+    "postgres",
+    "runtime-tokio",
+    "chrono",
+    "macros",
+    "bigdecimal",
+] }
 tempfile = "3.10.1"
 tokio = { version = "1.38.0", features = ["full"] }
 tokio-util = "0.7.11"

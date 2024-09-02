@@ -1,6 +1,7 @@
 use crate::repository;
 use crate::types::Context;
 use crate::utils;
+use crate::utils::notification;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{
@@ -37,38 +38,48 @@ async fn sign_up(
         repository::user::find_by_phone_number(ctx.db_conn.clone(), payload.phone_number.clone())
             .await,
     ) {
-        (None, None) => {
-            let res = repository::user::create(
-                ctx.db_conn.clone(),
-                repository::user::CreateUserPayload {
-                    email: payload.email.clone(),
-                    phone_number: payload.phone_number.clone(),
-                    first_name: payload.first_name.clone(),
-                    last_name: payload.last_name.clone(),
-                    birthday: payload.birthday.clone(),
-                },
+        (None, None) => (),
+        (Some(_), _) => return (StatusCode::CONFLICT, Json(json!({"error": "Email taken"}))),
+        (_, Some(_)) => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({ "error": "Phone number taken"})),
+            )
+        }
+    };
+
+    match repository::user::create(
+        ctx.db_conn.clone(),
+        repository::user::CreateUserPayload {
+            email: payload.email.clone(),
+            phone_number: payload.phone_number.clone(),
+            first_name: payload.first_name.clone(),
+            last_name: payload.last_name.clone(),
+            birthday: payload.birthday.clone(),
+        },
+    )
+    .await
+    {
+        Ok(user) => {
+            notification::send(
+                ctx.clone(),
+                notification::Notification::registered(user),
+                notification::Backend::Email,
             )
             .await;
 
-            match res {
-                Ok(_) => (
-                    StatusCode::CREATED,
-                    Json(json!({
-                        "message": "Sign up successful"
-                    })),
-                ),
-                Err(_) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({
-                        "error": "Sign up failed!"
-                    })),
-                ),
-            }
+            (
+                StatusCode::CREATED,
+                Json(json!({
+                    "message": "Sign up successful"
+                })),
+            )
         }
-        (Some(_), _) => (StatusCode::CONFLICT, Json(json!({"error": "Email taken"}))),
-        (_, Some(_)) => (
-            StatusCode::CONFLICT,
-            Json(json!({ "error": "Phone number taken"})),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "Sign up failed!"
+            })),
         ),
     }
 }

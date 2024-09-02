@@ -2,7 +2,7 @@ use super::{email, push};
 use crate::{repository, types};
 use std::sync::Arc;
 
-pub enum NotificationBackend {
+pub enum Backend {
     Email,
     Push,
 }
@@ -12,25 +12,37 @@ pub enum NotificationRecipient {
 }
 
 pub enum NotificationType {
+    Registered,
     OrderPaid { order: repository::order::Order },
 }
 
 pub struct Notification {
-    type_: NotificationType,
-    recipient: NotificationRecipient,
+    pub type_: NotificationType,
+    pub recipient: NotificationRecipient,
 }
 
-pub enum Error {}
+impl Notification {
+    pub fn registered(user: repository::user::User) -> Self {
+        Self {
+            type_: NotificationType::Registered,
+            recipient: NotificationRecipient::SingleRecipient(user),
+        }
+    }
+}
+
+pub enum Error {
+    NotSent,
+}
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub async fn send(
     ctx: Arc<types::Context>,
     notification: Notification,
-    backend: NotificationBackend,
+    backend: Backend,
 ) -> Result<()> {
     match backend {
-        NotificationBackend::Email => email::send(ctx, notification).await,
-        NotificationBackend::Push => push::send(ctx, notification).await,
+        Backend::Email => email::send(ctx, notification).await,
+        Backend::Push => push::send(ctx, notification).await,
     }
 }

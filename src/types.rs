@@ -1,5 +1,6 @@
 pub use crate::utils::database;
 use async_trait::async_trait;
+use axum_extra::headers::AcceptRanges;
 use std::env;
 
 #[derive(Clone)]
@@ -25,11 +26,26 @@ pub struct PaymentContext {
 }
 
 #[derive(Clone)]
+pub struct MailContext {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub sender_name: String,
+    pub sender_email: String,
+}
+
+#[derive(Clone)]
 pub struct Context {
     pub app: AppContext,
     pub db_conn: database::DatabaseConnection,
     pub storage: StorageContext,
     pub payment: PaymentContext,
+    pub mail: MailContext,
+}
+
+impl MailContext {
+    pub fn update_access_token(&mut self, access_token: String) -> () {
+        self.access_token = access_token;
+    }
 }
 
 #[derive(Clone)]
@@ -60,11 +76,20 @@ pub struct PaymentConfig {
 }
 
 #[derive(Clone)]
+pub struct MailConfig {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub sender_name: String,
+    pub sender_email: String,
+}
+
+#[derive(Clone)]
 pub struct Config {
     pub database: DatabaseConfig,
     pub app: AppConfig,
     pub storage: StorageConfig,
     pub payment: PaymentConfig,
+    pub mail: MailConfig,
 }
 
 impl Default for Config {
@@ -89,6 +114,11 @@ impl Default for Config {
             env::var("PAYSTACK_PUBLIC_KEY").expect("PAYSTACK_PUBLIC_KEY not set");
         let payment_secret_key =
             env::var("PAYSTACK_SECRET_KEY").expect("PAYSTACK_SECRET_KEY not set");
+        let mail_access_token = env::var("MAIL_ACCESS_TOKEN").expect("MAIL_ACCESS_TOKEN not set");
+        let mail_refresh_token =
+            env::var("MAIL_REFRESH_TOKEN").expect("MAIL_REFRESH_TOKEN not set");
+        let mail_sender_name = env::var("MAIL_SENDER_NAME").expect("MAIL_SENDER_NAME not set");
+        let mail_sender_email = env::var("MAIL_SENDER_EMAIL").expect("MAIL_SENDER_EMAIL not set");
 
         return Self {
             database: DatabaseConfig { url: database_url },
@@ -103,6 +133,12 @@ impl Default for Config {
             payment: PaymentConfig {
                 public_key: payment_public_key,
                 secret_key: payment_secret_key,
+            },
+            mail: MailConfig {
+                access_token: mail_access_token,
+                refresh_token: mail_refresh_token,
+                sender_name: mail_sender_name,
+                sender_email: mail_sender_email,
             },
         };
     }
@@ -136,6 +172,12 @@ impl ToContext for Config {
             payment: PaymentContext {
                 public_key: self.payment.public_key,
                 secret_key: self.payment.secret_key,
+            },
+            mail: MailContext {
+                access_token: self.mail.access_token,
+                refresh_token: self.mail.refresh_token,
+                sender_name: self.mail.sender_name,
+                sender_email: self.mail.sender_email,
             },
         }
     }
