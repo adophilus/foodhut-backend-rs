@@ -1,6 +1,7 @@
 pub use crate::utils::database;
 use async_trait::async_trait;
-use axum_extra::headers::AcceptRanges;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::env;
 
 #[derive(Clone)]
@@ -29,8 +30,15 @@ pub struct PaymentContext {
 pub struct MailContext {
     pub access_token: String,
     pub refresh_token: String,
+    pub refresh_endpoint: String,
     pub sender_name: String,
     pub sender_email: String,
+}
+
+#[derive(Clone)]
+pub struct GoogleContext {
+    pub client_id: String,
+    pub client_secret: String,
 }
 
 #[derive(Clone)]
@@ -40,6 +48,7 @@ pub struct Context {
     pub storage: StorageContext,
     pub payment: PaymentContext,
     pub mail: MailContext,
+    pub google: GoogleContext,
 }
 
 impl MailContext {
@@ -79,8 +88,15 @@ pub struct PaymentConfig {
 pub struct MailConfig {
     pub access_token: String,
     pub refresh_token: String,
+    pub refresh_endpoint: String,
     pub sender_name: String,
     pub sender_email: String,
+}
+
+#[derive(Clone)]
+pub struct GoogleConfig {
+    pub client_id: String,
+    pub client_secret: String,
 }
 
 #[derive(Clone)]
@@ -90,6 +106,26 @@ pub struct Config {
     pub storage: StorageConfig,
     pub payment: PaymentConfig,
     pub mail: MailConfig,
+    pub google: GoogleConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Job(DateTime<Utc>);
+
+impl apalis::prelude::Job for Job {
+    const NAME: &'static str = "apalis::Job";
+}
+
+impl From<DateTime<Utc>> for Job {
+    fn from(t: DateTime<Utc>) -> Self {
+        Self(t)
+    }
+}
+
+#[async_trait::async_trait]
+pub trait SchedulableJob: Send + Sync + Clone {
+    fn schedule(&self) -> apalis::cron::Schedule;
+    async fn run(&self);
 }
 
 impl Default for Config {
@@ -117,8 +153,13 @@ impl Default for Config {
         let mail_access_token = env::var("MAIL_ACCESS_TOKEN").expect("MAIL_ACCESS_TOKEN not set");
         let mail_refresh_token =
             env::var("MAIL_REFRESH_TOKEN").expect("MAIL_REFRESH_TOKEN not set");
+        let mail_refresh_endpoint =
+            env::var("MAIL_REFRESH_ENDPOINT").expect("MAIL_REFRESH_ENDPOINT not set");
         let mail_sender_name = env::var("MAIL_SENDER_NAME").expect("MAIL_SENDER_NAME not set");
         let mail_sender_email = env::var("MAIL_SENDER_EMAIL").expect("MAIL_SENDER_EMAIL not set");
+        let google_client_id = env::var("GOOGLE_CLIENT_ID").expect("GOOGLE_CLIENT_ID not set");
+        let google_client_secret =
+            env::var("GOOGLE_CLIENT_SECRET").expect("GOOGLE_CLIENT_SECRET not set");
 
         return Self {
             database: DatabaseConfig { url: database_url },
@@ -137,8 +178,13 @@ impl Default for Config {
             mail: MailConfig {
                 access_token: mail_access_token,
                 refresh_token: mail_refresh_token,
+                refresh_endpoint: mail_refresh_endpoint,
                 sender_name: mail_sender_name,
                 sender_email: mail_sender_email,
+            },
+            google: GoogleConfig {
+                client_id: google_client_id,
+                client_secret: google_client_secret,
             },
         };
     }
@@ -176,8 +222,13 @@ impl ToContext for Config {
             mail: MailContext {
                 access_token: self.mail.access_token,
                 refresh_token: self.mail.refresh_token,
+                refresh_endpoint: self.mail.refresh_endpoint,
                 sender_name: self.mail.sender_name,
                 sender_email: self.mail.sender_email,
+            },
+            google: GoogleContext {
+                client_id: self.google.client_id,
+                client_secret: self.google.client_secret,
             },
         }
     }

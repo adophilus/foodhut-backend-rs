@@ -8,7 +8,74 @@ use lettre::{
 use lettre::{AsyncTransport, Tokio1Executor};
 use std::sync::Arc;
 
-pub async fn refresh_token() {}
+pub mod jobs {
+    use std::str::FromStr;
+    use std::sync::Arc;
+
+    use crate::types;
+    use apalis::cron::Schedule;
+    use hyper::StatusCode;
+
+    #[derive(Clone)]
+    struct RefreshToken {
+        ctx: Arc<types::Context>,
+    }
+
+    #[async_trait::async_trait]
+    impl types::SchedulableJob for RefreshToken {
+        fn schedule(&self) -> apalis::cron::Schedule {
+            Schedule::from_str("* * * * * *").expect("Couldn't start the scheduler!")
+        }
+
+        async fn run(&self) {
+            tracing::info!(
+                "Attempting to refresh token... {}",
+                self.ctx.mail.refresh_endpoint.clone()
+            );
+            let params = 
+                    [("client_id", self.ctx.google.client_id),(client_secret,self.ctx.google.client_sec),(refresh_token,self.ctx.mail.refresh_token),("grant_type","refresh_token")],
+
+            match reqwest::Client::new()
+                .post(self.ctx.mail.refresh_endpoint.clone())
+                .form(&params)
+                .send()
+                .await
+            {
+                Ok(res) => {
+                    if res.status() != StatusCode::OK {
+                        match res.text().await {
+                            Ok(data) => {
+                                tracing::error!("Failed to refresh mail access_token: {}", data);
+                            }
+                            Err(err) => {
+                                tracing::error!("Failed to get response body: {}", err);
+                            }
+                        }
+                    } else {
+                        match res.text().await {
+                            Ok(data) => {
+                                tracing::info!("Server response: {}", data);
+                            }
+                            Err(err) => {
+                                tracing::error!("Failed to get response body: {}", err);
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::error!(
+                        "Error occurred while trying to send request to refresh token: {:?}",
+                        err
+                    );
+                }
+            }
+        }
+    }
+
+    pub async fn list(ctx: Arc<types::Context>) -> Vec<impl types::SchedulableJob> {
+        vec![RefreshToken { ctx }]
+    }
+}
 
 pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Result<()> {
     match notification.recipient {

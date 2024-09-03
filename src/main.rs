@@ -1,4 +1,5 @@
 mod api;
+mod jobs;
 mod repository;
 mod types;
 mod utils;
@@ -18,7 +19,7 @@ fn init_tracing() {
 
 #[tokio::main]
 async fn main() {
-    let ctx: Arc<Context>= Arc::new(Config::default().to_context().await);
+    let ctx: Arc<Context> = Arc::new(Config::default().to_context().await);
 
     init_tracing();
 
@@ -35,5 +36,10 @@ async fn main() {
 
     tracing::debug!("App is running on {}:{}", ctx.app.host, ctx.app.port);
 
-    axum::serve(listener, app).await.unwrap();
+    let http = async { axum::serve(listener, app).await.unwrap() };
+    let job_monitor = async { jobs::monitor(ctx.clone()).await.run().await.unwrap() };
+
+    let _res = tokio::join!(http, job_monitor);
+
+    // Ok(())
 }

@@ -1,4 +1,4 @@
-mod email;
+pub mod email;
 mod lib;
-mod push;
+pub mod push;
 pub use lib::*;

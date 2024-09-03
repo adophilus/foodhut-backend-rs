@@ -253,7 +253,7 @@ pub async fn update_by_id(
     .await
     {
         Err(e) => {
-            log::error!(
+            tracing::error!(
                 "Error occurred while trying to update a meal by id {}: {}",
                 id,
                 e
@@ -270,7 +270,7 @@ pub async fn delete_by_id(db: DatabaseConnection, id: String) -> Result<(), Erro
         .await
     {
         Err(e) => {
-            log::error!(
+            tracing::error!(
                 "Error occurred while trying to delete a meal by id {}: {}",
                 id,
                 e
