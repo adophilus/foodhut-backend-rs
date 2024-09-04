@@ -122,10 +122,10 @@ impl From<DateTime<Utc>> for Job {
     }
 }
 
-#[async_trait::async_trait]
+// #[async_trait::async_trait]
 pub trait SchedulableJob: Send + Sync + Clone {
     fn schedule(&self) -> apalis::cron::Schedule;
-    async fn run(&self);
+    fn run(&self) -> impl std::future::Future<Output = ()> + Send;
 }
 
 impl Default for Config {

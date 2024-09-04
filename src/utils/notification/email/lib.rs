@@ -13,7 +13,6 @@ pub mod jobs {
     use std::sync::Arc;
 
     use crate::types;
-    use apalis::cron::Schedule;
     use hyper::StatusCode;
 
     #[derive(Clone)]
@@ -21,10 +20,10 @@ pub mod jobs {
         ctx: Arc<types::Context>,
     }
 
-    #[async_trait::async_trait]
+    // #[async_trait::async_trait]
     impl types::SchedulableJob for RefreshToken {
         fn schedule(&self) -> apalis::cron::Schedule {
-            Schedule::from_str("* * * * * *").expect("Couldn't start the scheduler!")
+            apalis::cron::Schedule::from_str("* * * * * *").expect("Couldn't create schedule!")
         }
 
         async fn run(&self) {
@@ -32,8 +31,12 @@ pub mod jobs {
                 "Attempting to refresh token... {}",
                 self.ctx.mail.refresh_endpoint.clone()
             );
-            let params = 
-                    [("client_id", self.ctx.google.client_id),(client_secret,self.ctx.google.client_sec),(refresh_token,self.ctx.mail.refresh_token),("grant_type","refresh_token")],
+            let params = [
+                ("client_id", self.ctx.google.client_id.clone()),
+                ("client_secret", self.ctx.google.client_secret.clone()),
+                ("refresh_token", self.ctx.mail.refresh_token.clone()),
+                ("grant_type", "refresh_token".to_string()),
+            ];
 
             match reqwest::Client::new()
                 .post(self.ctx.mail.refresh_endpoint.clone())
