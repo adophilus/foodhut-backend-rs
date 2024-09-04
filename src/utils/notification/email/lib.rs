@@ -9,11 +9,11 @@ use lettre::{AsyncTransport, Tokio1Executor};
 use std::sync::Arc;
 
 pub mod jobs {
+    use serde::{Deserialize, Serialize};
     use std::str::FromStr;
     use std::sync::Arc;
 
     use crate::types;
-    use apalis::cron::Schedule;
     use hyper::StatusCode;
 
     #[derive(Clone)]
@@ -21,10 +21,15 @@ pub mod jobs {
         ctx: Arc<types::Context>,
     }
 
-    #[async_trait::async_trait]
+    #[derive(Serialize, Deserialize, Debug)]
+    struct RefreshTokenServerResponse {
+        access_token: String,
+    }
+
     impl types::SchedulableJob for RefreshToken {
-        fn schedule() -> apalis::cron::Schedule {
-            Schedule::from_str("* * * * * *").expect("Couldn't start the scheduler!")
+        fn schedule(&self) -> apalis::cron::Schedule {
+            // apalis::cron::Schedule::from_str("* */30 * * * *").expect("Couldn't create schedule!")
+            apalis::cron::Schedule::from_str("*/10 * * * * *").expect("Couldn't create schedule!")
         }
 
         async fn run() {
@@ -32,8 +37,12 @@ pub mod jobs {
                 "Attempting to refresh token... {}",
                 self.ctx.mail.refresh_endpoint.clone()
             );
-            let params = 
-                    [("client_id", self.ctx.google.client_id),(client_secret,self.ctx.google.client_sec),(refresh_token,self.ctx.mail.refresh_token),("grant_type","refresh_token")],
+            let params = [
+                ("client_id", self.ctx.google.client_id.clone()),
+                ("client_secret", self.ctx.google.client_secret.clone()),
+                ("refresh_token", self.ctx.mail.refresh_token.clone()),
+                ("grant_type", "refresh_token".to_string()),
+            ];
 
             match reqwest::Client::new()
                 .post(self.ctx.mail.refresh_endpoint.clone())
@@ -54,7 +63,11 @@ pub mod jobs {
                     } else {
                         match res.text().await {
                             Ok(data) => {
-                                tracing::info!("Server response: {}", data);
+                                let structured_data =
+                                    serde_json::from_str::<RefreshTokenServerResponse>(&data)
+                                        .expect("Invalid server response received");
+                                *self.ctx.mail.access_token.lock().unwrap() =
+                                    structured_data.access_token;
                             }
                             Err(err) => {
                                 tracing::error!("Failed to get response body: {}", err);
@@ -103,13 +116,17 @@ pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Resul
                 .body(String::from("Welcome to FoodHut"))
                 .unwrap();
 
+            let access_token = {
+                let token = ctx.mail.access_token.lock().unwrap().clone();
+                token
+            };
             let transport: AsyncSmtpTransport<Tokio1Executor> =
                 AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
                     .unwrap()
                     .authentication(vec![Mechanism::Xoauth2])
                     .credentials(Credentials::new(
                         ctx.mail.sender_email.clone(),
-                        ctx.mail.access_token.clone(),
+                        access_token,
                     ))
                     .build();
 
