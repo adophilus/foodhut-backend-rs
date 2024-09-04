@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct AppContext {
@@ -28,7 +29,7 @@ pub struct PaymentContext {
 
 #[derive(Clone)]
 pub struct MailContext {
-    pub access_token: String,
+    pub access_token: Arc<Mutex<String>>,
     pub refresh_token: String,
     pub refresh_endpoint: String,
     pub sender_name: String,
@@ -49,12 +50,6 @@ pub struct Context {
     pub payment: PaymentContext,
     pub mail: MailContext,
     pub google: GoogleContext,
-}
-
-impl MailContext {
-    pub fn update_access_token(&mut self, access_token: String) -> () {
-        self.access_token = access_token;
-    }
 }
 
 #[derive(Clone)]
@@ -122,7 +117,6 @@ impl From<DateTime<Utc>> for Job {
     }
 }
 
-// #[async_trait::async_trait]
 pub trait SchedulableJob: Send + Sync + Clone {
     fn schedule(&self) -> apalis::cron::Schedule;
     fn run(&self) -> impl std::future::Future<Output = ()> + Send;
@@ -220,7 +214,7 @@ impl ToContext for Config {
                 secret_key: self.payment.secret_key,
             },
             mail: MailContext {
-                access_token: self.mail.access_token,
+                access_token: Arc::new(Mutex::new(self.mail.access_token)),
                 refresh_token: self.mail.refresh_token,
                 refresh_endpoint: self.mail.refresh_endpoint,
                 sender_name: self.mail.sender_name,
