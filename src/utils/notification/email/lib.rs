@@ -23,11 +23,11 @@ pub mod jobs {
 
     #[async_trait::async_trait]
     impl types::SchedulableJob for RefreshToken {
-        fn schedule(&self) -> apalis::cron::Schedule {
+        fn schedule() -> apalis::cron::Schedule {
             Schedule::from_str("* * * * * *").expect("Couldn't start the scheduler!")
         }
 
-        async fn run(&self) {
+        async fn run() {
             tracing::info!(
                 "Attempting to refresh token... {}",
                 self.ctx.mail.refresh_endpoint.clone()
