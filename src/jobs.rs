@@ -1,21 +1,16 @@
 use crate::types::SchedulableJob;
-use std::str::FromStr;
 use std::sync::Arc;
 
-use apalis::cron::{CronStream, Schedule};
-use apalis::redis;
+use apalis::cron::CronStream;
+use apalis::prelude::*;
 use apalis::utils::TokioExecutor;
-use apalis::{prelude::*, redis::RedisStorage};
 
 use crate::{types, utils};
 
 pub async fn monitor(ctx: Arc<types::Context>) -> apalis::prelude::Monitor<TokioExecutor> {
     let all_jobs = utils::notification::email::jobs::list(ctx).await;
 
-    let conn = redis::connect("redis://127.0.0.1/")
-        .await
-        .expect("Failed to connect to redis server");
-    let storage = RedisStorage::<types::Job>::new(conn);
+    let storage = types::JobStorage::new();
     let mut monitor = apalis::prelude::Monitor::<TokioExecutor>::new();
 
     for job in all_jobs {

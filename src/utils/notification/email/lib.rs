@@ -28,11 +28,10 @@ pub mod jobs {
 
     impl types::SchedulableJob for RefreshToken {
         fn schedule(&self) -> apalis::cron::Schedule {
-            // apalis::cron::Schedule::from_str("* */30 * * * *").expect("Couldn't create schedule!")
-            apalis::cron::Schedule::from_str("*/10 * * * * *").expect("Couldn't create schedule!")
+            apalis::cron::Schedule::from_str("* */30 * * * *").expect("Couldn't create schedule!")
         }
 
-        async fn run() {
+        async fn run(&self) -> Result<(), apalis::prelude::Error> {
             tracing::info!(
                 "Attempting to refresh token... {}",
                 self.ctx.mail.refresh_endpoint.clone()
@@ -54,32 +53,61 @@ pub mod jobs {
                     if res.status() != StatusCode::OK {
                         match res.text().await {
                             Ok(data) => {
-                                tracing::error!("Failed to refresh mail access_token: {}", data);
+                                let formatted_err =
+                                    format!("Failed to refresh mail access_token: {}", data);
+                                tracing::error!(formatted_err);
+                                return Err(apalis::prelude::Error::WorkerError(
+                                    apalis::prelude::WorkerError::ProcessingError(formatted_err),
+                                ));
                             }
                             Err(err) => {
-                                tracing::error!("Failed to get response body: {}", err);
+                                let formatted_err = format!("Failed to get response body: {}", err);
+                                tracing::error!(formatted_err);
+                                return Err(apalis::prelude::Error::WorkerError(
+                                    apalis::prelude::WorkerError::ProcessingError(formatted_err),
+                                ));
                             }
                         }
                     } else {
                         match res.text().await {
                             Ok(data) => {
-                                let structured_data =
-                                    serde_json::from_str::<RefreshTokenServerResponse>(&data)
-                                        .expect("Invalid server response received");
-                                *self.ctx.mail.access_token.lock().unwrap() =
-                                    structured_data.access_token;
+                                match serde_json::from_str::<RefreshTokenServerResponse>(&data) {
+                                    Ok(structured_data) => {
+                                        *self.ctx.mail.access_token.lock().unwrap() =
+                                            structured_data.access_token;
+                                        return Ok(());
+                                    }
+                                    Err(err) => {
+                                        let formatted_err =
+                                            format!("Failed to get response body: {}", err);
+                                        tracing::error!(formatted_err);
+                                        return Err(apalis::prelude::Error::WorkerError(
+                                            apalis::prelude::WorkerError::ProcessingError(
+                                                formatted_err,
+                                            ),
+                                        ));
+                                    }
+                                }
                             }
                             Err(err) => {
-                                tracing::error!("Failed to get response body: {}", err);
+                                let formatted_err = format!("Failed to get response body: {}", err);
+                                tracing::error!(formatted_err);
+                                return Err(apalis::prelude::Error::WorkerError(
+                                    apalis::prelude::WorkerError::ProcessingError(formatted_err),
+                                ));
                             }
                         }
                     }
                 }
                 Err(err) => {
-                    tracing::error!(
+                    let formatted_err = format!(
                         "Error occurred while trying to send request to refresh token: {:?}",
                         err
                     );
+                    tracing::error!(formatted_err);
+                    return Err(apalis::prelude::Error::WorkerError(
+                        apalis::prelude::WorkerError::ProcessingError(formatted_err),
+                    ));
                 }
             }
         }

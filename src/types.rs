@@ -1,6 +1,8 @@
 pub use crate::utils::database;
+use apalis::prelude::MemoryStorage;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use core::time::Duration;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::{Arc, Mutex};
@@ -117,9 +119,97 @@ impl From<DateTime<Utc>> for Job {
     }
 }
 
+#[derive(Clone)]
+pub struct JobStorage {
+    memory_storage: apalis::prelude::MemoryStorage<Job>,
+    storage: Vec<Job>,
+}
+
+impl JobStorage {
+    pub fn new() -> Self {
+        Self {
+            memory_storage: MemoryStorage::<Job>::new(),
+            storage: vec![],
+        }
+    }
+}
+
+impl apalis::prelude::Backend<apalis::prelude::Request<Job>> for JobStorage {
+    type Stream = apalis::prelude::BackendStream<
+        apalis::prelude::RequestStream<apalis::prelude::Request<Job>>,
+    >;
+
+    type Layer = tower::ServiceBuilder<tower::layer::util::Identity>;
+
+    fn common_layer(&self, worker: apalis::prelude::WorkerId) -> Self::Layer {
+        self.memory_storage.common_layer(worker)
+    }
+
+    fn poll(self, worker: apalis::prelude::WorkerId) -> apalis::prelude::Poller<Self::Stream> {
+        self.memory_storage.poll(worker)
+    }
+}
+
+impl apalis::prelude::Storage for JobStorage {
+    type Job = Job;
+
+    type Error = apalis::prelude::Error;
+
+    type Identifier = usize;
+
+    async fn push(&mut self, job: Self::Job) -> Result<Self::Identifier, Self::Error> {
+        tracing::debug!("Job pushed to storage");
+        self.storage.push(job);
+        Ok(self.storage.len())
+    }
+
+    async fn schedule(&mut self, job: Self::Job, on: i64) -> Result<Self::Identifier, Self::Error> {
+        tracing::debug!("Job pushed into the schedule set");
+        todo!()
+    }
+
+    async fn len(&self) -> Result<i64, Self::Error> {
+        tracing::debug!("Returning number of pending jobs");
+        Ok(self.storage.len() as i64)
+    }
+
+    async fn fetch_by_id(
+        &self,
+        job_id: &Self::Identifier,
+    ) -> Result<Option<apalis::prelude::Request<Self::Job>>, Self::Error> {
+        tracing::debug!("Fetching job by id: {}", job_id);
+        // let job = self.jobs.get(job_id);
+        todo!()
+    }
+
+    async fn update(&self, job: apalis::prelude::Request<Self::Job>) -> Result<(), Self::Error> {
+        tracing::debug!("Updating job details");
+        todo!()
+    }
+
+    async fn reschedule(
+        &mut self,
+        job: apalis::prelude::Request<Self::Job>,
+        wait: Duration,
+    ) -> Result<(), Self::Error> {
+        tracing::debug!("Rescheduling job");
+        todo!()
+    }
+
+    async fn is_empty(&self) -> Result<bool, Self::Error> {
+        tracing::debug!("Determining whether there's still any job in the storage");
+        todo!()
+    }
+
+    async fn vacuum(&self) -> Result<usize, Self::Error> {
+        tracing::debug!("Vacuuming queue");
+        todo!()
+    }
+}
+
 pub trait SchedulableJob: Send + Sync + Clone {
     fn schedule(&self) -> apalis::cron::Schedule;
-    fn run(&self) -> impl std::future::Future<Output = ()> + Send;
+    fn run(&self) -> impl std::future::Future<Output = Result<(), apalis::prelude::Error>> + Send;
 }
 
 impl Default for Config {
