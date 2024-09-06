@@ -15,6 +15,7 @@ pub async fn monitor(ctx: Arc<types::Context>) -> apalis::prelude::Monitor<Tokio
 
     for job in all_jobs {
         let job_clone = job.clone();
+        job.run().await;
         let worker = WorkerBuilder::new("crate::utils::notification::email::jobs::refresh_token")
             .with_storage(storage.clone())
             .stream(CronStream::new(job.schedule()).into_stream())
