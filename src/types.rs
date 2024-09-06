@@ -1,8 +1,8 @@
 pub use crate::utils::database;
-use apalis::prelude::MemoryStorage;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use core::time::Duration;
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::{Arc, Mutex};
@@ -121,14 +121,16 @@ impl From<DateTime<Utc>> for Job {
 
 #[derive(Clone)]
 pub struct JobStorage {
-    memory_storage: apalis::prelude::MemoryStorage<Job>,
+    controller: apalis::prelude::Controller,
+    inner: apalis::prelude::MemoryWrapper<Job>,
     storage: Vec<Job>,
 }
 
 impl JobStorage {
     pub fn new() -> Self {
         Self {
-            memory_storage: MemoryStorage::<Job>::new(),
+            controller: apalis::prelude::Controller::new(),
+            inner: apalis::prelude::MemoryWrapper::<Job>::new(),
             storage: vec![],
         }
     }
@@ -142,11 +144,21 @@ impl apalis::prelude::Backend<apalis::prelude::Request<Job>> for JobStorage {
     type Layer = tower::ServiceBuilder<tower::layer::util::Identity>;
 
     fn common_layer(&self, worker: apalis::prelude::WorkerId) -> Self::Layer {
-        self.memory_storage.common_layer(worker)
+        tower::ServiceBuilder::new()
     }
 
     fn poll(self, worker: apalis::prelude::WorkerId) -> apalis::prelude::Poller<Self::Stream> {
-        self.memory_storage.poll(worker)
+        let stream = self
+            .inner
+            .map(|r| Ok(Some(apalis::prelude::Request::new(r))))
+            .boxed();
+        apalis::prelude::Poller::new(
+            apalis::prelude::BackendStream::new(stream, self.controller),
+            async {},
+            // async {
+            // heartbeat: Box::pin(async {}),
+            // }
+        )
     }
 }
 
