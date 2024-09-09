@@ -36,9 +36,7 @@ impl ToString for OrderStatus {
     fn to_string(&self) -> String {
         match self {
             OrderStatus::AwaitingPayment => String::from("AWAITING_PAYMENT"),
-            OrderStatus::AwaitingAcknowledgement => {
-                String::from("AWAITING_ACKNOWLEDGEMENT")
-            }
+            OrderStatus::AwaitingAcknowledgement => String::from("AWAITING_ACKNOWLEDGEMENT"),
             OrderStatus::Preparing => String::from("PREPARING"),
             OrderStatus::InTransit => String::from("IN_TRANSIT"),
             OrderStatus::Delivered => String::from("DELIVERED"),
@@ -308,6 +306,7 @@ impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
     fn into(self) -> DatabaseCountedResult {
         match self {
             Some(json) => {
+                tracing::info!("About to deserialize: {}", json);
                 serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref())
                     .unwrap()
             }

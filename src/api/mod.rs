@@ -8,6 +8,8 @@ pub mod order;
 pub mod user;
 pub mod webhooks;
 // pub mod wallet;
+pub mod dashboard;
+pub mod notification;
 
 mod router;
 pub use router::get_router;
