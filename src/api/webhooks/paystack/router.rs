@@ -87,6 +87,8 @@ async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Respon
                 return StatusCode::BAD_REQUEST.into_response();
             }
 
+            // TODO: determine whether to credit and debit wallet or just count as a single transaction
+            // repository::transaction::create(db_conn, payload);
             if let Err(_) = utils::payment::confirm_payment_for_order(ctx.clone(), order).await {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
