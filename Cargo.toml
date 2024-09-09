@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-apalis = { version = "0.5.3", features = ["redis", "cron"] }
+apalis = { version = "0.5.3", features = ["redis", "cron", "retry"] }
 async-convert = "1.0.0"
 async-trait = "0.1.81"
 axum = "0.7.5"

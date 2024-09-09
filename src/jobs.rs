@@ -2,6 +2,7 @@ use crate::types::SchedulableJob;
 use std::sync::Arc;
 
 use apalis::cron::CronStream;
+use apalis::layers::retry::{RetryLayer, RetryPolicy};
 use apalis::prelude::*;
 use apalis::utils::TokioExecutor;
 
@@ -19,6 +20,7 @@ pub async fn monitor(ctx: Arc<types::Context>) -> apalis::prelude::Monitor<Tokio
         let worker = WorkerBuilder::new("crate::utils::notification::email::jobs::refresh_token")
             .with_storage(storage.clone())
             .stream(CronStream::new(job.schedule()).into_stream())
+            .layer(RetryLayer::new(RetryPolicy::retries(3)))
             .build_fn(move |j: types::Job| {
                 let job_clone = job_clone.clone();
                 async move { job_clone.run().await }
