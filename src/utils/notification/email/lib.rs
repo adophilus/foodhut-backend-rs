@@ -28,7 +28,7 @@ pub mod jobs {
 
     impl types::SchedulableJob for RefreshToken {
         fn schedule(&self) -> apalis::cron::Schedule {
-            apalis::cron::Schedule::from_str("* */30 * * * *").expect("Couldn't create schedule!")
+            apalis::cron::Schedule::from_str("* * */30 * * *").expect("Couldn't create schedule!")
         }
 
         async fn run(&self) -> Result<(), apalis::prelude::Error> {
