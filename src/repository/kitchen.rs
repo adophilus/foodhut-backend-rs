@@ -364,7 +364,7 @@ pub async fn find_many(
                     AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
             )
             SELECT JSONB_BUILD_OBJECT(
-                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
+                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
                 'total', (SELECT total_rows FROM total_count)
             ) AS result
             FROM filtered_data;
@@ -413,7 +413,7 @@ pub async fn find_many_by_type(
                 WHERE type = $3
             )
             SELECT JSONB_BUILD_OBJECT(
-                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
+                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
                 'total', (SELECT total_rows FROM total_count)
             ) AS result
             FROM filtered_data;

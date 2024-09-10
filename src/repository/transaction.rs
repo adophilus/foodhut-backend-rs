@@ -1,42 +1,11 @@
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use std::convert::Into;
 use std::str::FromStr;
 use ulid::Ulid;
 
 use crate::utils::database::DatabaseConnection;
-
-#[derive(Serialize, Deserialize)]
-struct OnlineTransaction {
-    pub id: String,
-    pub amount: BigDecimal,
-    pub note: Option<String>,
-    pub type_: TransactionType,
-    pub user_id: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: Option<NaiveDateTime>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct WalletTransaction {
-    pub id: String,
-    pub amount: BigDecimal,
-    pub note: Option<String>,
-    pub type_: TransactionType,
-    pub wallet_id: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: Option<NaiveDateTime>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum Transaction {
-    OnlineTransaction,
-    WalletTransaction,
-}
-
-pub enum Error {
-    UnexpectedError,
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TransactionType {
@@ -74,11 +43,62 @@ impl From<String> for TransactionType {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct OnlineTransaction {
+    pub id: String,
+    pub amount: BigDecimal,
+    pub note: Option<String>,
+    pub r#type: TransactionType,
+    pub user_id: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct WalletTransaction {
+    pub id: String,
+    pub amount: BigDecimal,
+    pub note: Option<String>,
+    pub r#type: TransactionType,
+    pub wallet_id: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct DbTransaction {
+    pub id: String,
+    pub amount: BigDecimal,
+    pub note: Option<String>,
+    pub r#type: TransactionType,
+    pub wallet_id: Option<String>,
+    pub user_id: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+impl Into<Transaction> for DbTransaction {
+    fn into(self) -> Transaction {
+        serde_json::de::from_str(&serde_json::json!(self).to_string())
+            .map_err(|e| format!("Invalid transaction type found for {:?}: {}", self, e))
+            .unwrap()
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Transaction {
+    Online(OnlineTransaction),
+    Wallet(WalletTransaction),
+}
+
+pub enum Error {
+    UnexpectedError,
+}
+
 #[derive(Debug)]
 pub struct CreateOnlineTransactionPayload {
     pub amount: BigDecimal,
-    #[serde(rename = "type")]
-    pub type_: TransactionType,
+    pub r#type: TransactionType,
     pub user_id: String,
     pub note: Option<String>,
 }
@@ -86,26 +106,21 @@ pub struct CreateOnlineTransactionPayload {
 #[derive(Debug)]
 pub struct CreateWalletTransactionPayload {
     pub amount: BigDecimal,
-    #[serde(rename = "type")]
-    pub type_: TransactionType,
+    pub r#type: TransactionType,
     pub wallet_id: String,
     pub note: Option<String>,
 }
 
 #[derive(Debug)]
 pub enum CreatePayload {
-    CreateWalletTransactionPayload,
-    CreateOnlineTransactionPayload,
+    Online(CreateOnlineTransactionPayload),
+    Wallet(CreateWalletTransactionPayload),
 }
 
 pub async fn create(db: DatabaseConnection, payload: CreatePayload) -> Result<Transaction, Error> {
     match payload {
-        CreatePayload::CreateOnlineTransactionPayload(payload) => {
-            create_online_transaction(db, payload).await
-        }
-        CreatePayload::CreateWalletTransactionPayload(payload) => {
-            create_wallet_transaction(db, payload).await
-        }
+        CreatePayload::Online(payload) => create_online_transaction(db, payload).await,
+        CreatePayload::Wallet(payload) => create_wallet_transaction(db, payload).await,
     }
 }
 
@@ -114,18 +129,20 @@ async fn create_online_transaction(
     payload: CreateOnlineTransactionPayload,
 ) -> Result<Transaction, Error> {
     match sqlx::query_as!(
-        Transaction,
+    DbTransaction,
         "INSERT INTO transactions (id, amount, type, note, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         Ulid::new().to_string(),
         payload.amount,
-        payload.type_,
+        payload.r#type.to_string(),
         payload.note,
         payload.user_id
     )
     .fetch_one(&db.pool)
     .await
     {
-        Ok(transaction) => Ok(transaction),
+        Ok(tx) => {
+            Ok(tx.into())
+        },
         Err(err) => {
             tracing::error!(
                 "Error occurred while trying to create transaction {:?}: {}",
@@ -142,18 +159,18 @@ async fn create_wallet_transaction(
     payload: CreateWalletTransactionPayload,
 ) -> Result<Transaction, Error> {
     match sqlx::query_as!(
-        Transaction,
+        DbTransaction,
         "INSERT INTO transactions (id, amount, type, note, wallet_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         Ulid::new().to_string(),
         payload.amount,
-        payload.type_,
+        payload.r#type.to_string(),
         payload.note,
         payload.wallet_id
     )
     .fetch_one(&db.pool)
     .await
     {
-        Ok(transaction) => Ok(transaction),
+        Ok(tx) => Ok(tx.into()),
         Err(err) => {
             tracing::error!(
                 "Error occurred while trying to create transaction {:?}: {}",

@@ -132,7 +132,7 @@ pub async fn find_many(
                     link ILIKE CONCAT('%', COALESCE($3, link), '%')
             )
             SELECT JSONB_BUILD_OBJECT(
-                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
+                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
                 'total', (SELECT total_rows FROM total_count)
             ) AS result
             FROM filtered_data;

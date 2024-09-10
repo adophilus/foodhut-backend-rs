@@ -32,10 +32,7 @@ pub mod jobs {
         }
 
         async fn run(&self) -> Result<(), apalis::prelude::Error> {
-            tracing::info!(
-                "Attempting to refresh token... {}",
-                self.ctx.mail.refresh_endpoint.clone()
-            );
+            tracing::debug!("Attempting to refresh token...");
             let params = [
                 ("client_id", self.ctx.google.client_id.clone()),
                 ("client_secret", self.ctx.google.client_secret.clone()),
@@ -75,6 +72,7 @@ pub mod jobs {
                                     Ok(structured_data) => {
                                         *self.ctx.mail.access_token.lock().unwrap() =
                                             structured_data.access_token;
+                                        tracing::debug!("Successfully refreshed token");
                                         return Ok(());
                                     }
                                     Err(err) => {

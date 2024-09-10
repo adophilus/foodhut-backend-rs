@@ -139,7 +139,7 @@ pub async fn find_many(
                     user_id = COALESCE($3, user_id)
             )
             SELECT JSONB_BUILD_OBJECT(
-                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
+                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
                 'total', (SELECT total_rows FROM total_count)
             ) AS result
             FROM filtered_data;

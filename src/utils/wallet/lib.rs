@@ -53,11 +53,12 @@ async fn initialize_payment_for_meal(
 
     if let Err(_) = transaction::create(
         db.clone(),
-        transaction::CreatePayload {
+        transaction::CreatePayload::Wallet(transaction::CreateWalletTransactionPayload {
             amount: payload.meal.price.clone(),
+            r#type: transaction::TransactionType::Debit,
             note: Some(format!("Paid for {}", payload.meal.name.clone())),
             wallet_id: wallet.id.clone(),
-        },
+        }),
     )
     .await
     {

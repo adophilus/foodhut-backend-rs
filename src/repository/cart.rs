@@ -209,7 +209,7 @@ pub async fn find_many(
                 FROM carts
             )
             SELECT JSONB_BUILD_OBJECT(
-                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
+                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
                 'total', (SELECT total_rows FROM total_count)
             ) AS result
             FROM filtered_data;
@@ -253,7 +253,7 @@ pub async fn find_many_by_owner_id(
                 FROM carts
             )
             SELECT JSONB_BUILD_OBJECT(
-                'data', JSONB_AGG(ROW_TO_JSON(filtered_data)),
+                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
                 'total', (SELECT total_rows FROM total_count)
             ) AS result
             FROM filtered_data;
