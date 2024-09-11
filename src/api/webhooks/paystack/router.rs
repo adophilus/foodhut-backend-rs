@@ -87,8 +87,33 @@ async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Respon
                 return StatusCode::BAD_REQUEST.into_response();
             }
 
-            // TODO: determine whether to credit and debit wallet or just count as a single transaction
-            // repository::transaction::create(db_conn, payload);
+            let cart = match repository::cart::find_by_id(
+                ctx.db_conn.clone(),
+                order.cart_id.clone(),
+            )
+            .await
+            {
+                Ok(Some(cart)) => cart,
+                Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            };
+
+            if let Err(_) = repository::transaction::create(
+                ctx.db_conn.clone(),
+                repository::transaction::CreatePayload::Online(
+                    repository::transaction::CreateOnlineTransactionPayload {
+                        amount: order.total.clone(),
+                        r#type: repository::transaction::TransactionType::Debit,
+                        note: Some(format!("Paid for order {}", order.id.clone())),
+                        user_id: cart.owner_id.clone(),
+                    },
+                ),
+            )
+            .await
+            {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+
             if let Err(_) = utils::payment::confirm_payment_for_order(ctx.clone(), order).await {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }

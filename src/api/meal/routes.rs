@@ -167,6 +167,7 @@ pub struct UpdateMealPayload {
     pub name: Option<String>,
     pub description: Option<String>,
     pub price: Option<Price>,
+    pub is_available: Option<bool>,
     #[form_data(limit = "10MiB")]
     cover_image: Option<FieldData<NamedTempFile>>,
 }
@@ -262,7 +263,7 @@ async fn update_meal_by_id(
             description: payload.description,
             price: payload.price.map(|price| price.0),
             rating: None,
-            is_available: None,
+            is_available: payload.is_available,
             cover_image,
             kitchen_id: None,
         },
