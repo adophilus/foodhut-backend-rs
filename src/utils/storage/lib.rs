@@ -92,13 +92,11 @@ pub async fn upload_file(cfg: StorageContext, contents: Vec<u8>) -> Result<Uploa
     })?;
 
     match serde_json::de::from_str::<UploadResponse>(data.as_ref()) {
-        Ok(res) => {
-            Ok(UploadedMedia {
-                url: res.secure_url,
-                public_id: res.public_id,
-                timestamp,
-            })
-        }
+        Ok(res) => Ok(UploadedMedia {
+            url: res.secure_url,
+            public_id: res.public_id,
+            timestamp,
+        }),
         Err(err) => {
             tracing::error!("Failed to deserialize cloudinary response: {:?}", err);
             Err(Error::UploadFailed)

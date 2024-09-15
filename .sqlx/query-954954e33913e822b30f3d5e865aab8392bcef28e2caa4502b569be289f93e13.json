@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM password_reset WHERE hash_proof = $1",
+  "query": "SELECT * FROM password_reset WHERE user_id = $1",
   "describe": {
     "columns": [
       {
@@ -15,26 +15,21 @@
       },
       {
         "ordinal": 2,
-        "name": "hash_proof",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 3,
         "name": "user_id",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "expires_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamp"
       }
@@ -50,9 +45,8 @@
       false,
       false,
       false,
-      false,
       true
     ]
   },
-  "hash": "3784171339bcad898d74b604c9f5e94a91c7879da9934263f70db21f58e5dce3"
+  "hash": "954954e33913e822b30f3d5e865aab8392bcef28e2caa4502b569be289f93e13"
 }

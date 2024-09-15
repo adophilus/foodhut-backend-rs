@@ -15,26 +15,21 @@
       },
       {
         "ordinal": 2,
-        "name": "hash_proof",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 3,
         "name": "user_id",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "expires_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamp"
       }
@@ -45,7 +40,6 @@
       ]
     },
     "nullable": [
-      false,
       false,
       false,
       false,

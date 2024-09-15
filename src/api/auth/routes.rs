@@ -13,6 +13,7 @@ use axum::{
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use validator::Validate;
 
@@ -94,23 +95,26 @@ async fn verification_send_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SendVerificationOtpPayload>,
 ) -> impl IntoResponse {
-    match repository::user::find_by_phone_number(ctx.db_conn.clone(), payload.phone_number.clone())
-        .await
+    let user = match repository::user::find_by_phone_number(
+        ctx.db_conn.clone(),
+        payload.phone_number.clone(),
+    )
+    .await
     {
-        Some(user) => {
-            if user.is_verified {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({ "error" : "User already verified"})),
-                );
-            }
-        }
+        Some(user) => user,
         None => {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({ "error" : "User not found"})),
             );
         }
+    };
+
+    if user.is_verified {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error" : "User already verified"})),
+        );
     }
 
     match repository::otp::create(
@@ -144,9 +148,6 @@ async fn send_password_reset_email(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SendPasswordResetEmailPayload>,
 ) -> impl IntoResponse {
-    let code = String::from("code");
-    let hash_proof = String::from("");
-
     let user = match repository::user::find_by_email(ctx.db_conn.clone(), payload.email).await {
         Some(user) => user,
         None => {
@@ -162,29 +163,76 @@ async fn send_password_reset_email(
           // }
     };
 
-    match repository::password_reset::create(
-        ctx.db_conn.clone(),
-        repository::password_reset::CreatePasswordResetPayload {
-            code,
-            hash_proof,
-            expires_at: Utc::now().naive_utc() + chrono::Duration::minutes(5),
-            user_id: user.id.clone(),
-        },
-    )
-    .await
-    {
-        Ok(_) => {}
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Failed to create password reset entry" })),
-            );
-        }
+    if user.is_verified == false {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": "User not verified"
+            })),
+        );
+    }
+
+    let expires_at = Utc::now().naive_utc() + chrono::Duration::minutes(5);
+    let code = {
+        let data = format!("{}-{}", user.id, expires_at);
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        let hash = hasher.finalize();
+        base16ct::lower::encode_string(&hash)
     };
+
+    let password_reset =
+        match repository::password_reset::find_by_user_id(ctx.db_conn.clone(), user.id.clone())
+            .await
+        {
+            Ok(Some(pr)) => {
+                match repository::password_reset::update_by_id(
+                    ctx.db_conn.clone(),
+                    pr.id,
+                    repository::password_reset::UpdatePasswordResetPayload { code },
+                )
+                .await
+                {
+                    Ok(pr) => pr,
+                    Err(_) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": "Failed to create password reset entry" })),
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                match repository::password_reset::create(
+                    ctx.db_conn.clone(),
+                    repository::password_reset::CreatePasswordResetPayload {
+                        code,
+                        expires_at,
+                        user_id: user.id.clone(),
+                    },
+                )
+                .await
+                {
+                    Ok(pr) => pr,
+                    Err(_) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": "Failed to create password reset entry" })),
+                        );
+                    }
+                }
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Failed to create password reset entry" })),
+                );
+            }
+        };
 
     match notification::send(
         ctx.clone(),
-        notification::Notification::password_reset_requested(user),
+        notification::Notification::password_reset_requested(user, password_reset),
         notification::Backend::Email,
     )
     .await
@@ -200,8 +248,40 @@ async fn send_password_reset_email(
     }
 }
 
-async fn reset_password(Path(hash): Path<String>) -> impl IntoResponse {
-    "Password reset successful!"
+async fn reset_password(
+    State(ctx): State<Arc<Context>>,
+    Path(code): Path<String>,
+) -> impl IntoResponse {
+    let password_reset =
+        match repository::password_reset::find_by_code(ctx.db_conn.clone(), code).await {
+            Ok(Some(pr)) => pr,
+            Ok(None) => {
+                (return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": "Invalid request" })),
+                ))
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Server error occurred" })),
+                )
+            }
+        };
+
+    if Utc::now().naive_utc() > password_reset.expires_at {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Invalid request" })),
+        );
+    }
+
+    unimplemented!();
+
+    (
+        StatusCode::OK,
+        Json(json!({ "message": "Password reset successful!" })),
+    )
 }
 
 #[derive(Deserialize)]
@@ -252,23 +332,26 @@ async fn sign_in_send_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SignInSendOtpPayload>,
 ) -> impl IntoResponse {
-    match repository::user::find_by_phone_number(ctx.db_conn.clone(), payload.phone_number.clone())
-        .await
+    let user = match repository::user::find_by_phone_number(
+        ctx.db_conn.clone(),
+        payload.phone_number.clone(),
+    )
+    .await
     {
-        Some(user) => {
-            if !user.is_verified {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": "User not verified"})),
-                );
-            }
-        }
+        Some(user) => user,
         None => {
             return (
                 StatusCode::NOT_FOUND,
                 Json(json!({ "error": "User not found"})),
             );
         }
+    };
+
+    if !user.is_verified {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "User not verified"})),
+        );
     }
 
     match repository::otp::create(
@@ -371,5 +454,5 @@ pub fn get_router() -> Router<Arc<Context>> {
             post(sign_in_verify_otp),
         )
         .route("/reset-password", post(send_password_reset_email))
-        .route("/reset-password/:email", get(reset_password))
+        .route("/reset-password/:code", get(reset_password))
 }

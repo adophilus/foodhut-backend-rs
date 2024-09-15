@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM password_reset WHERE id = $1",
+  "query": "\n            UPDATE password_reset SET\n                code = $1,\n                updated_at = NOW()\n            WHERE\n                id = $2\n            RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -36,6 +36,7 @@
     ],
     "parameters": {
       "Left": [
+        "Varchar",
         "Text"
       ]
     },
@@ -48,5 +49,5 @@
       true
     ]
   },
-  "hash": "1c394117e6fb2f79aa54e14c80caa8a09d4d3ffbd4733f54a8c328a27b7ddf29"
+  "hash": "4a1a69fa8ac4ed463aa01b020f36c5371d5d224694763d2c93aa9a331abf7803"
 }

@@ -12,7 +12,6 @@ pub struct PasswordReset {
     pub id: String,
     pub code: String,
     pub user_id: String,
-    pub hash_proof: String,
     pub expires_at: NaiveDateTime,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -21,7 +20,6 @@ pub struct PasswordReset {
 pub struct CreatePasswordResetPayload {
     pub code: String,
     pub user_id: String,
-    pub hash_proof: String,
     pub expires_at: NaiveDateTime,
 }
 
@@ -39,23 +37,21 @@ pub async fn create(
         INSERT INTO password_reset (
             id, 
             code, 
-            hash_proof,
             expires_at,
             user_id
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4)
         RETURNING *
         ",
         Ulid::new().to_string(),
         payload.code,
-        payload.hash_proof,
         payload.expires_at,
         payload.user_id,
     )
     .fetch_one(&db.pool)
     .await
     {
-        Ok(meal) => Ok(meal),
+        Ok(pr) => Ok(pr),
         Err(err) => {
             tracing::error!(
                 "Error occurred while trying to create a password reset: {}",
@@ -89,14 +85,14 @@ pub async fn find_by_id(
     }
 }
 
-pub async fn find_by_hash_proof(
+pub async fn find_by_code(
     db: DatabaseConnection,
-    hash_proof: String,
+    code: String,
 ) -> Result<Option<PasswordReset>, Error> {
     match sqlx::query_as!(
         PasswordReset,
-        "SELECT * FROM password_reset WHERE hash_proof = $1",
-        hash_proof
+        "SELECT * FROM password_reset WHERE code = $1",
+        code
     )
     .fetch_optional(&db.pool)
     .await
@@ -104,7 +100,30 @@ pub async fn find_by_hash_proof(
         Ok(maybe_pr) => Ok(maybe_pr),
         Err(err) => {
             tracing::error!(
-                "Error occurred while trying to fetch a password reset by hash_proof: {}",
+                "Error occurred while trying to fetch a password reset by code: {}",
+                err
+            );
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
+pub async fn find_by_user_id(
+    db: DatabaseConnection,
+    user_id: String,
+) -> Result<Option<PasswordReset>, Error> {
+    match sqlx::query_as!(
+        PasswordReset,
+        "SELECT * FROM password_reset WHERE user_id = $1",
+        user_id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    {
+        Ok(maybe_pr) => Ok(maybe_pr),
+        Err(err) => {
+            tracing::error!(
+                "Error occurred while trying to fetch a password reset by user_id: {}",
                 err
             );
             Err(Error::UnexpectedError)
@@ -149,30 +168,30 @@ struct DatabaseCounted {
 #[derive(Serialize)]
 pub struct UpdatePasswordResetPayload {
     pub code: String,
-    pub hash_proof: String,
 }
 
 pub async fn update_by_id(
     db: DatabaseConnection,
     id: String,
     payload: UpdatePasswordResetPayload,
-) -> Result<(), Error> {
-    match sqlx::query!(
+) -> Result<PasswordReset, Error> {
+    match sqlx::query_as!(
+        PasswordReset,
         "
             UPDATE password_reset SET
                 code = $1,
-                hash_proof = $2,
                 updated_at = NOW()
             WHERE
-                id = $3
+                id = $2
+            RETURNING *
         ",
         payload.code,
-        payload.hash_proof,
         id,
     )
-    .execute(&db.pool)
+    .fetch_one(&db.pool)
     .await
     {
+        Ok(pr) => Ok(pr),
         Err(e) => {
             tracing::error!(
                 "Error occurred while trying to update a password reset by id {}: {}",
@@ -181,7 +200,6 @@ pub async fn update_by_id(
             );
             return Err(Error::UnexpectedError);
         }
-        _ => Ok(()),
     }
 }
 

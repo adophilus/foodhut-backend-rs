@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM password_reset WHERE id = $1",
+  "query": "\n        INSERT INTO password_reset (\n            id, \n            code, \n            expires_at,\n            user_id\n        )\n        VALUES ($1, $2, $3, $4)\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -36,7 +36,10 @@
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Varchar",
+        "Varchar",
+        "Timestamp",
+        "Varchar"
       ]
     },
     "nullable": [
@@ -48,5 +51,5 @@
       true
     ]
   },
-  "hash": "1c394117e6fb2f79aa54e14c80caa8a09d4d3ffbd4733f54a8c328a27b7ddf29"
+  "hash": "aa7b58befa18a16520c987d38eab08250807a80abbb3696247d75aa211dcc91b"
 }

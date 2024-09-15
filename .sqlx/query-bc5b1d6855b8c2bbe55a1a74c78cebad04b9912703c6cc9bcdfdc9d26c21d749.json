@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO password_reset (\n            id, \n            code, \n            hash_proof,\n            expires_at,\n            user_id\n        )\n        VALUES ($1, $2, $3, $4, $5)\n        RETURNING *\n        ",
+  "query": "SELECT * FROM password_reset WHERE code = $1",
   "describe": {
     "columns": [
       {
@@ -15,37 +15,28 @@
       },
       {
         "ordinal": 2,
-        "name": "hash_proof",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 3,
         "name": "user_id",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "expires_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamp"
       }
     ],
     "parameters": {
       "Left": [
-        "Varchar",
-        "Varchar",
-        "Varchar",
-        "Timestamp",
-        "Varchar"
+        "Text"
       ]
     },
     "nullable": [
@@ -54,9 +45,8 @@
       false,
       false,
       false,
-      false,
       true
     ]
   },
-  "hash": "6ad27f49966367626bc7eb87f7d63207963237294c1aa00e2752d813ba13651e"
+  "hash": "bc5b1d6855b8c2bbe55a1a74c78cebad04b9912703c6cc9bcdfdc9d26c21d749"
 }

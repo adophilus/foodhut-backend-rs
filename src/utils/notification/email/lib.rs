@@ -1,5 +1,6 @@
 use super::super::{Error, Notification, Result};
-use crate::types;
+use crate::utils::notification;
+use crate::{repository::password_reset, types};
 use lettre::{
     message::header::ContentType,
     transport::smtp::authentication::{Credentials, Mechanism},
@@ -117,123 +118,123 @@ pub mod jobs {
 }
 
 pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Result<()> {
-    match notification.type_.clone() {
-        crate::utils::notification::NotificationType::Registered => {
-            send_registered_email(ctx, notification.clone()).await
-        }
-        crate::utils::notification::NotificationType::OrderPaid { order } => {
+    match notification.clone() {
+        Notification::Registered(n) => send_registered_email(ctx, n).await,
+        Notification::OrderPaid(n) => {
             unimplemented!()
         }
-        crate::utils::notification::NotificationType::PasswordResetRequested { user } => {
-            send_password_reset_mail(ctx, notification.clone()).await
+        notification::Notification::PasswordResetRequested(n) => {
+            send_password_reset_requested_email(ctx, n).await
         }
     }
 }
 
-async fn send_registered_email(ctx: Arc<types::Context>, notification: Notification) -> Result<()> {
-    match notification.recipient {
-        crate::utils::notification::NotificationRecipient::SingleRecipient(recipient) => {
-            let email = Message::builder()
-                .from(
-                    format!(
-                        "{} <{}>",
-                        ctx.mail.sender_name.clone(),
-                        ctx.mail.sender_email.clone()
-                    )
-                    .parse()
-                    .unwrap(),
-                )
-                .to(format!(
-                    "{} {} <{}>",
-                    recipient.first_name.clone(),
-                    recipient.last_name.clone(),
-                    recipient.email.clone()
-                )
-                .parse()
-                .unwrap())
-                .subject("Welcome to FoodHut")
-                .header(ContentType::TEXT_HTML)
-                .body(String::from("Welcome to FoodHut"))
-                .unwrap();
-
-            let access_token = {
-                let token = ctx.mail.access_token.lock().unwrap().clone();
-                token
-            };
-            let transport: AsyncSmtpTransport<Tokio1Executor> =
-                AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
-                    .unwrap()
-                    .authentication(vec![Mechanism::Xoauth2])
-                    .credentials(Credentials::new(
-                        ctx.mail.sender_email.clone(),
-                        access_token,
-                    ))
-                    .build();
-
-            match transport.send(email).await {
-                Ok(res) => Ok(()),
-                Err(err) => {
-                    tracing::error!("Failed to send email: {:?}", err);
-                    Err(Error::NotSent)
-                }
-            }
-        }
-    }
-}
-
-async fn send_password_reset_mail(
+async fn send_registered_email(
     ctx: Arc<types::Context>,
-    notification: Notification,
+    _notification: notification::types::Registered,
 ) -> Result<()> {
-    match notification.recipient {
-        crate::utils::notification::NotificationRecipient::SingleRecipient(recipient) => {
-            let email = Message::builder()
-                .from(
-                    format!(
-                        "{} <{}>",
-                        ctx.mail.sender_name.clone(),
-                        ctx.mail.sender_email.clone()
-                    )
-                    .parse()
-                    .unwrap(),
-                )
-                .to(format!(
-                    "{} {} <{}>",
-                    recipient.first_name.clone(),
-                    recipient.last_name.clone(),
-                    recipient.email.clone()
-                )
-                .parse()
-                .unwrap())
-                .subject("Password Reset Request")
-                .header(ContentType::TEXT_HTML)
-                .body(format!(
-                    "Use this link to reset your password: {}",
-                    "https://api.foodhut.com/api/password-reset/some-random-code-hash",
-                ))
-                .unwrap();
+    let email = Message::builder()
+        .from(
+            format!(
+                "{} <{}>",
+                ctx.mail.sender_name.clone(),
+                ctx.mail.sender_email.clone()
+            )
+            .parse()
+            .unwrap(),
+        )
+        .to(format!(
+            "{} {} <{}>",
+            _notification.user.first_name.clone(),
+            _notification.user.last_name.clone(),
+            _notification.user.email.clone()
+        )
+        .parse()
+        .unwrap())
+        .subject("Welcome to FoodHut")
+        .header(ContentType::TEXT_HTML)
+        .body(format!(
+            "Greetings {}, welcome to FoodHut",
+            _notification.user.first_name
+        ))
+        .unwrap();
 
-            let access_token = {
-                let token = ctx.mail.access_token.lock().unwrap().clone();
-                token
-            };
-            let transport: AsyncSmtpTransport<Tokio1Executor> =
-                AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
-                    .unwrap()
-                    .authentication(vec![Mechanism::Xoauth2])
-                    .credentials(Credentials::new(
-                        ctx.mail.sender_email.clone(),
-                        access_token,
-                    ))
-                    .build();
+    let access_token = {
+        let token = ctx.mail.access_token.lock().unwrap().clone();
+        token
+    };
+    let transport: AsyncSmtpTransport<Tokio1Executor> =
+        AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
+            .unwrap()
+            .authentication(vec![Mechanism::Xoauth2])
+            .credentials(Credentials::new(
+                ctx.mail.sender_email.clone(),
+                access_token,
+            ))
+            .build();
 
-            match transport.send(email).await {
-                Ok(res) => Ok(()),
-                Err(err) => {
-                    tracing::error!("Failed to send email: {:?}", err);
-                    Err(Error::NotSent)
-                }
-            }
+    match transport.send(email).await {
+        Ok(res) => Ok(()),
+        Err(err) => {
+            tracing::error!("Failed to send email: {}", err);
+            Err(Error::NotSent)
+        }
+    }
+}
+
+async fn send_password_reset_requested_email(
+    ctx: Arc<types::Context>,
+    _notification: notification::types::PasswordResetRequested,
+) -> Result<()> {
+    let password_reset_link = format!(
+        "{}/api/password-reset/{}",
+        ctx.app.url, _notification.password_reset.code
+    );
+    let email = Message::builder()
+        .from(
+            format!(
+                "{} <{}>",
+                ctx.mail.sender_name.clone(),
+                ctx.mail.sender_email.clone()
+            )
+            .parse()
+            .unwrap(),
+        )
+        .to(format!(
+            "{} {} <{}>",
+            _notification.user.first_name.clone(),
+            _notification.user.last_name.clone(),
+            _notification.user.email.clone()
+        )
+        .parse()
+        .unwrap())
+        .subject("Password Reset Requested")
+        .header(ContentType::TEXT_HTML)
+        .body(format!(
+            "Use this link to reset your password: <a href=\"{}\">{}</a>",
+            password_reset_link, password_reset_link
+        ))
+        .unwrap();
+
+    let access_token = {
+        let token = ctx.mail.access_token.lock().unwrap().clone();
+        token
+    };
+    let transport: AsyncSmtpTransport<Tokio1Executor> =
+        AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
+            .unwrap()
+            .authentication(vec![Mechanism::Xoauth2])
+            .credentials(Credentials::new(
+                ctx.mail.sender_email.clone(),
+                access_token,
+            ))
+            .build();
+
+    match transport.send(email).await {
+        Ok(res) => Ok(()),
+        Err(err) => {
+            tracing::error!("Failed to send email: {}", err);
+            Err(Error::NotSent)
         }
     }
 }
