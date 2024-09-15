@@ -110,7 +110,7 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Mea
     {
         Ok(maybe_meal) => Ok(maybe_meal),
         Err(err) => {
-            tracing::error!("Error occurred while trying to fetch many meals: {}", err);
+            tracing::error!("Error occurred while trying to fetch a meal by id: {}", err);
             Err(Error::UnexpectedError)
         }
     }

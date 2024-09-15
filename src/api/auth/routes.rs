@@ -2,14 +2,15 @@ use crate::repository;
 use crate::types::Context;
 use crate::utils;
 use crate::utils::notification;
+use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{
     extract::{Json, State},
-    routing::post,
+    routing::{get, post},
     Router,
 };
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -132,6 +133,75 @@ async fn verification_send_otp(
             Json(json!({ "error" : "Failed to send OTP"})),
         ),
     }
+}
+
+#[derive(Serialize, Deserialize)]
+struct SendPasswordResetEmailPayload {
+    email: String,
+}
+
+async fn send_password_reset_email(
+    State(ctx): State<Arc<Context>>,
+    Json(payload): Json<SendPasswordResetEmailPayload>,
+) -> impl IntoResponse {
+    let code = String::from("code");
+    let hash_proof = String::from("");
+
+    let user = match repository::user::find_by_email(ctx.db_conn.clone(), payload.email).await {
+        Some(user) => user,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "A user with the email address does not exist" })),
+            )
+        } // Err(_) => {
+          //     return (
+          //         StatusCode::INTERNAL_SERVER_ERROR,
+          //         Json(json!({ "error": "Failed to fetch user" })),
+          //     )
+          // }
+    };
+
+    match repository::password_reset::create(
+        ctx.db_conn.clone(),
+        repository::password_reset::CreatePasswordResetPayload {
+            code,
+            hash_proof,
+            expires_at: Utc::now().naive_utc() + chrono::Duration::minutes(5),
+            user_id: user.id.clone(),
+        },
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to create password reset entry" })),
+            );
+        }
+    };
+
+    match notification::send(
+        ctx.clone(),
+        notification::Notification::password_reset_requested(user),
+        notification::Backend::Email,
+    )
+    .await
+    {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Check your email for a password reset link " })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "message": "Failed to send password reset email" })),
+        ),
+    }
+}
+
+async fn reset_password(Path(hash): Path<String>) -> impl IntoResponse {
+    "Password reset successful!"
 }
 
 #[derive(Deserialize)]
@@ -300,4 +370,6 @@ pub fn get_router() -> Router<Arc<Context>> {
             "/sign-in/strategy/phone/verify-otp",
             post(sign_in_verify_otp),
         )
+        .route("/reset-password", post(send_password_reset_email))
+        .route("/reset-password/:email", get(reset_password))
 }

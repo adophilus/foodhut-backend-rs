@@ -117,6 +117,20 @@ pub mod jobs {
 }
 
 pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Result<()> {
+    match notification.type_.clone() {
+        crate::utils::notification::NotificationType::Registered => {
+            send_registered_email(ctx, notification.clone()).await
+        }
+        crate::utils::notification::NotificationType::OrderPaid { order } => {
+            unimplemented!()
+        }
+        crate::utils::notification::NotificationType::PasswordResetRequested { user } => {
+            send_password_reset_mail(ctx, notification.clone()).await
+        }
+    }
+}
+
+async fn send_registered_email(ctx: Arc<types::Context>, notification: Notification) -> Result<()> {
     match notification.recipient {
         crate::utils::notification::NotificationRecipient::SingleRecipient(recipient) => {
             let email = Message::builder()
@@ -140,6 +154,63 @@ pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Resul
                 .subject("Welcome to FoodHut")
                 .header(ContentType::TEXT_HTML)
                 .body(String::from("Welcome to FoodHut"))
+                .unwrap();
+
+            let access_token = {
+                let token = ctx.mail.access_token.lock().unwrap().clone();
+                token
+            };
+            let transport: AsyncSmtpTransport<Tokio1Executor> =
+                AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
+                    .unwrap()
+                    .authentication(vec![Mechanism::Xoauth2])
+                    .credentials(Credentials::new(
+                        ctx.mail.sender_email.clone(),
+                        access_token,
+                    ))
+                    .build();
+
+            match transport.send(email).await {
+                Ok(res) => Ok(()),
+                Err(err) => {
+                    tracing::error!("Failed to send email: {:?}", err);
+                    Err(Error::NotSent)
+                }
+            }
+        }
+    }
+}
+
+async fn send_password_reset_mail(
+    ctx: Arc<types::Context>,
+    notification: Notification,
+) -> Result<()> {
+    match notification.recipient {
+        crate::utils::notification::NotificationRecipient::SingleRecipient(recipient) => {
+            let email = Message::builder()
+                .from(
+                    format!(
+                        "{} <{}>",
+                        ctx.mail.sender_name.clone(),
+                        ctx.mail.sender_email.clone()
+                    )
+                    .parse()
+                    .unwrap(),
+                )
+                .to(format!(
+                    "{} {} <{}>",
+                    recipient.first_name.clone(),
+                    recipient.last_name.clone(),
+                    recipient.email.clone()
+                )
+                .parse()
+                .unwrap())
+                .subject("Password Reset Request")
+                .header(ContentType::TEXT_HTML)
+                .body(format!(
+                    "Use this link to reset your password: {}",
+                    "https://api.foodhut.com/api/password-reset/some-random-code-hash",
+                ))
                 .unwrap();
 
             let access_token = {

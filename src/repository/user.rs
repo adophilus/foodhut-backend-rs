@@ -21,6 +21,8 @@ impl From<Option<serde_json::Value>> for ProfilePicture {
     }
 }
 
+// TODO: make all functions here return errors where applicable
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum Role {
     #[serde(rename = "ADMIN")]

@@ -7,15 +7,19 @@ pub enum Backend {
     Push,
 }
 
+#[derive(Clone)]
 pub enum NotificationRecipient {
     SingleRecipient(repository::user::User),
 }
 
+#[derive(Clone)]
 pub enum NotificationType {
     Registered,
     OrderPaid { order: repository::order::Order },
+    PasswordResetRequested { user: repository::user::User },
 }
 
+#[derive(Clone)]
 pub struct Notification {
     pub type_: NotificationType,
     pub recipient: NotificationRecipient,
@@ -25,6 +29,13 @@ impl Notification {
     pub fn registered(user: repository::user::User) -> Self {
         Self {
             type_: NotificationType::Registered,
+            recipient: NotificationRecipient::SingleRecipient(user),
+        }
+    }
+
+    pub fn password_reset_requested(user: repository::user::User) -> Self {
+        Self {
+            type_: NotificationType::PasswordResetRequested { user: user.clone() },
             recipient: NotificationRecipient::SingleRecipient(user),
         }
     }
