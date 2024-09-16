@@ -8,8 +8,24 @@ use std::env;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
+pub enum AppEnvironment {
+    Production,
+    Development,
+}
+
+impl AppEnvironment {
+    pub fn from(raw_environment: String) -> Self {
+        match raw_environment.as_ref() {
+            "production" => Self::Production,
+            _ => Self::Development,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct AppContext {
     pub host: String,
+    pub environment: AppEnvironment,
     pub port: u32,
     pub url: String,
 }
@@ -71,6 +87,7 @@ pub struct DatabaseConfig {
 #[derive(Clone)]
 pub struct AppConfig {
     pub host: String,
+    pub environment: AppEnvironment,
     pub port: u32,
     pub url: String,
 }
@@ -246,6 +263,7 @@ impl Default for Config {
     fn default() -> Self {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not set");
         let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+        let environment = env::var("APP_ENV").expect("ENV not set");
         let port = env::var("PORT")
             .unwrap_or_else(|_| "8000".to_string())
             .parse::<u32>()
@@ -282,7 +300,12 @@ impl Default for Config {
 
         return Self {
             database: DatabaseConfig { url: database_url },
-            app: AppConfig { host, port, url },
+            app: AppConfig {
+                host,
+                environment: AppEnvironment::from(environment),
+                port,
+                url,
+            },
             storage: StorageConfig {
                 api_key: storage_api_key,
                 api_secret: storage_api_secret,
@@ -329,6 +352,7 @@ impl ToContext for Config {
         Context {
             app: AppContext {
                 host: self.app.host,
+                environment: self.app.environment,
                 port: self.app.port,
                 url: self.app.url,
             },
