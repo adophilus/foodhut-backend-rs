@@ -28,7 +28,7 @@ pub enum VerificationError {
 
 #[derive(Deserialize)]
 struct VerificationEndpointPayload {
-    verified: bool,
+    verified: String,
     #[serde(rename = "pinId")]
     pin_id: String,
 }
@@ -37,7 +37,9 @@ fn generate_hash(purpose: &str, user: &repository::user::User) -> String {
     let mut hasher = sha2::Sha256::new();
     hasher.update(format!("{}-{}", purpose.clone(), user.id.clone()));
     let hash = hasher.finalize();
-    base16ct::lower::encode_string(&hash)
+    let hash = base16ct::lower::encode_string(&hash);
+    tracing::debug!("hash: {}", hash.clone());
+    hash
 }
 
 async fn hit_up_endpoint_and_parse(
@@ -164,7 +166,7 @@ pub async fn verify(
     .await
     .map_err(|_| VerificationError::UnexpectedError)?;
 
-    if !res.verified || res.pin_id != existing_otp.otp {
+    if res.verified == "true" || res.pin_id != existing_otp.otp {
         return Err(VerificationError::InvalidOtp);
     }
 
