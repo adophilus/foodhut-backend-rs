@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE otps SET\n                purpose = COALESCE($1, purpose),\n                meta = COALESCE($2, meta),\n                hash = COALESCE($3, hash),\n                updated_at = NOW()\n            WHERE\n                id = $4\n            RETURNING *\n        ",
+  "query": "\n            UPDATE otps SET\n                purpose = COALESCE($1, purpose),\n                meta = COALESCE($2, meta),\n                hash = COALESCE($3, hash),\n                expires_at = NOW() + INTERVAL '1 MINUTE',\n                updated_at = NOW()\n            WHERE\n                id = $4\n            RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -63,5 +63,5 @@
       false
     ]
   },
-  "hash": "95d43b1cd02324bac843d240235f3491e325a68ebf81a9f691a9bc53fd231920"
+  "hash": "7b5f85bc29c987dd0922e2d9b60730cbe8c15c0d1bc38bb0a39edfcfe7d1f4a6"
 }

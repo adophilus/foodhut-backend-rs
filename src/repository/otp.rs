@@ -32,15 +32,14 @@ pub async fn create(db: DatabaseConnection, payload: CreateOtpPayload) -> Result
     sqlx::query_as!(
         Otp,
         "
-        INSERT INTO otps (id, purpose, meta, otp, expires_at) VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO otps (id, purpose, meta, otp, hash, expires_at) VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '1 minute')
         RETURNING *
         ",
         Ulid::new().to_string(),
         payload.purpose,
         payload.meta,
         payload.otp,
-        // Utc::now().naive_utc() + chrono::Duration::minutes(5)
-        Utc::now().naive_utc() + chrono::Duration::minutes(1)
+        payload.hash
     )
     .fetch_one(&db.pool)
     .await
@@ -78,6 +77,7 @@ pub async fn update_by_id(
                 purpose = COALESCE($1, purpose),
                 meta = COALESCE($2, meta),
                 hash = COALESCE($3, hash),
+                expires_at = NOW() + INTERVAL '1 MINUTE',
                 updated_at = NOW()
             WHERE
                 id = $4
@@ -94,4 +94,15 @@ pub async fn update_by_id(
         tracing::error!("Failed to update otp by id {}: {}", id, err);
         Error::UnexpectedError
     })
+}
+
+pub async fn delete_by_id(db: DatabaseConnection, id: String) -> Result<(), Error> {
+    sqlx::query!("DELETE FROM otps WHERE id = $1", id)
+        .execute(&db.pool)
+        .await
+        .map_err(|err| {
+            tracing::error!("Failed to delete otp by id {}: {}", id, err);
+            Error::UnexpectedError
+        })
+        .map(|_| {})
 }

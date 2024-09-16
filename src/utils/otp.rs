@@ -158,5 +158,7 @@ pub async fn verify(
         return Err(VerificationError::InvalidOtp);
     }
 
+    repository::otp::delete_by_id(ctx.db_conn.clone(), existing_otp.id).await;
+
     Ok(())
 }
