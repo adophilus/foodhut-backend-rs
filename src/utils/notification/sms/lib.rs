@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct OtpSmsServerResponse {
+    #[serde(rename = "pinId")]
     pin_id: String,
     status: String,
 }
@@ -77,22 +78,24 @@ async fn send_verification_otp(
         }
     }
 
-    let res = res
-        .text()
-        .await
+    let res_text = res.text().await.map_err(|err| {
+        let formatted_err = format!("Failed to get response body: {}", err);
+        tracing::error!(formatted_err);
+        Error::NotSent
+    })?;
+
+    let res = serde_json::from_str::<OtpSmsServerResponse>(&res_text)
         .map_err(|err| {
             let formatted_err = format!("Failed to get response body: {}", err);
             tracing::error!(formatted_err);
             Error::NotSent
         })
-        .and_then(|data| {
-            serde_json::from_str::<OtpSmsServerResponse>(&data).map_err(|err| {
-                let formatted_err = format!("Failed to get response body: {}", err);
-                tracing::error!(formatted_err);
-                Error::NotSent
-            })
-        })
         .map_err(|_| Error::NotSent)?;
+
+    if res.status != "200" {
+        tracing::error!("Got an unexpected status response: {}", res_text);
+        return Err(Error::NotSent);
+    }
 
     tracing::debug!("Successfully sent OTP sms");
 

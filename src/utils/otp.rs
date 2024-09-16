@@ -26,6 +26,7 @@ pub enum VerificationError {
 #[derive(Deserialize)]
 struct VerificationEndpointPayload {
     verified: bool,
+    #[serde(rename = "pinId")]
     pin_id: String,
 }
 
