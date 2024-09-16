@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO otps (id, purpose, meta, otp, hash, expires_at) VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '1 minute')\n        RETURNING *\n        ",
+  "query": "\n        INSERT INTO otps (id, purpose, meta, otp, hash, expires_at) VALUES ($1, $2, $3, $4, $5, NOW() + MAKE_INTERVAL(mins => $6))\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -50,7 +50,8 @@
         "Varchar",
         "Varchar",
         "Varchar",
-        "Varchar"
+        "Varchar",
+        "Int4"
       ]
     },
     "nullable": [
@@ -64,5 +65,5 @@
       false
     ]
   },
-  "hash": "9d954e799ad1087429249cc8d7d02e64a083fa76808c478a57155e4a85291894"
+  "hash": "8ffeb7838d4b91b7965433f492b8a97f492b028547c89969c3ab446985af4021"
 }

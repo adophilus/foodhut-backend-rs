@@ -8,7 +8,10 @@ use sha2::Digest;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use super::notification;
-use crate::{repository, types::Context};
+use crate::{
+    repository,
+    types::{AppEnvironment, Context},
+};
 use std::sync::Arc;
 
 pub enum SendError {
@@ -94,6 +97,11 @@ pub async fn send(
     .await
     .map_err(|_| SendError::NotSent)?;
 
+    let validity = match ctx.app.environment {
+        AppEnvironment::Production => 5,
+        AppEnvironment::Development => 1,
+    };
+
     let otp = match existing_otp {
         Some(existing_otp) => {
             repository::otp::update_by_id(
@@ -103,6 +111,7 @@ pub async fn send(
                     hash: Some(hash.clone()),
                     purpose: Some(purpose.clone()),
                     meta: Some(otp.pin_id.clone()),
+                    validity,
                 },
             )
             .await
@@ -115,6 +124,7 @@ pub async fn send(
                     meta: otp.pin_id.clone(),
                     hash,
                     otp: otp.pin_id.clone(),
+                    validity,
                 },
             )
             .await

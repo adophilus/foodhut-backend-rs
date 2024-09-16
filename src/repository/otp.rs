@@ -26,20 +26,22 @@ pub struct CreateOtpPayload {
     pub meta: String,
     pub hash: String,
     pub otp: String,
+    pub validity: i32,
 }
 
 pub async fn create(db: DatabaseConnection, payload: CreateOtpPayload) -> Result<Otp, Error> {
     sqlx::query_as!(
         Otp,
         "
-        INSERT INTO otps (id, purpose, meta, otp, hash, expires_at) VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '1 minute')
+        INSERT INTO otps (id, purpose, meta, otp, hash, expires_at) VALUES ($1, $2, $3, $4, $5, NOW() + MAKE_INTERVAL(mins => $6))
         RETURNING *
         ",
         Ulid::new().to_string(),
         payload.purpose,
         payload.meta,
         payload.otp,
-        payload.hash
+        payload.hash,
+        payload.validity
     )
     .fetch_one(&db.pool)
     .await
@@ -63,6 +65,7 @@ pub struct UpdateOtpPayload {
     pub purpose: Option<String>,
     pub meta: Option<String>,
     pub hash: Option<String>,
+    pub validity: i32,
 }
 
 pub async fn update_by_id(
@@ -77,15 +80,16 @@ pub async fn update_by_id(
                 purpose = COALESCE($1, purpose),
                 meta = COALESCE($2, meta),
                 hash = COALESCE($3, hash),
-                expires_at = NOW() + INTERVAL '1 MINUTE',
+                expires_at = NOW() + MAKE_INTERVAL(mins => $4),
                 updated_at = NOW()
             WHERE
-                id = $4
+                id = $5
             RETURNING *
         ",
         payload.purpose,
         payload.meta,
         payload.hash,
+        payload.validity,
         id
     )
     .fetch_one(&db.pool)
