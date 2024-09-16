@@ -285,10 +285,25 @@ async fn verification_verify_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<VerifyOtpPayload>,
 ) -> impl IntoResponse {
-    match repository::otp::verify(
+    let user = match repository::user::find_by_phone_number(
         ctx.db_conn.clone(),
-        "auth.sign-up.verification".to_string(),
         payload.phone_number.clone(),
+    )
+    .await
+    {
+        Some(user) => user,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to fetch user account" })),
+            )
+        }
+    };
+
+    match otp::verify(
+        ctx.clone(),
+        user,
+        "auth.sign-up.verification".to_string(),
         payload.otp.clone(),
     )
     .await
@@ -368,10 +383,25 @@ async fn sign_in_verify_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SignInVerifyOtpPayload>,
 ) -> impl IntoResponse {
-    match repository::otp::verify(
+    let user = match repository::user::find_by_phone_number(
         ctx.db_conn.clone(),
-        "auth.sign-in.verification".to_string(),
         payload.phone_number.clone(),
+    )
+    .await
+    {
+        Some(user) => user,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "User not found"})),
+            );
+        }
+    };
+
+    match otp::verify(
+        ctx.clone(),
+        user,
+        "auth.sign-in.verification".to_string(),
         payload.otp.clone(),
     )
     .await

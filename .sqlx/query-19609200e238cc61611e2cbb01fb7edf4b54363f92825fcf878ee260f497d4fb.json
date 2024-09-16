@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO ads\n        (id, banner_image, link, duration)\n        VALUES ($1, $2, $3, $4)\n        RETURNING *\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "banner_image",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 2,
+        "name": "link",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "duration",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Json",
+        "Varchar",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "19609200e238cc61611e2cbb01fb7edf4b54363f92825fcf878ee260f497d4fb"
+}

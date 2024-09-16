@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE meals SET\n                name = COALESCE($1, name),\n                description = COALESCE($2, description),\n                rating = COALESCE($3, rating),\n                price = COALESCE($4, price),\n                cover_image = COALESCE(\n                    CASE WHEN $5::text = 'null' THEN NULL ELSE $5::json END, \n                    cover_image\n                ),\n                is_available = COALESCE($6, is_available),\n                kitchen_id = COALESCE($7, kitchen_id),\n                updated_at = NOW()\n            WHERE\n                id = $8\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Numeric",
+        "Numeric",
+        "Text",
+        "Bool",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9d7c349cff071ee300459e5d658a1c29fe3aced73da96523c8ac3587cf2c4a42"
+}

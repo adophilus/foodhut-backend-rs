@@ -1,6 +1,6 @@
 use super::super::{Error, Notification, Result};
+use crate::types;
 use crate::utils::notification;
-use crate::{repository::password_reset, types};
 use lettre::{
     message::header::ContentType,
     transport::smtp::authentication::{Credentials, Mechanism},
@@ -123,7 +123,6 @@ pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Resul
         Notification::OrderPaid(n) => {
             unimplemented!()
         }
-        notification::Notification::PasswordResetRequested(n) => unimplemented!(),
         notification::Notification::VerificationOtpRequested(n) => unimplemented!(),
     }
 }
@@ -155,63 +154,6 @@ async fn send_registered_email(
         .body(format!(
             "Greetings {}, welcome to FoodHut",
             _notification.user.first_name
-        ))
-        .unwrap();
-
-    let access_token = {
-        let token = ctx.mail.access_token.lock().unwrap().clone();
-        token
-    };
-    let transport: AsyncSmtpTransport<Tokio1Executor> =
-        AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
-            .unwrap()
-            .authentication(vec![Mechanism::Xoauth2])
-            .credentials(Credentials::new(
-                ctx.mail.sender_email.clone(),
-                access_token,
-            ))
-            .build();
-
-    match transport.send(email).await {
-        Ok(res) => Ok(()),
-        Err(err) => {
-            tracing::error!("Failed to send email: {}", err);
-            Err(Error::NotSent)
-        }
-    }
-}
-
-async fn send_password_reset_requested_email(
-    ctx: Arc<types::Context>,
-    _notification: notification::types::PasswordResetRequested,
-) -> Result<()> {
-    let password_reset_link = format!(
-        "{}/api/reset-password/{}",
-        ctx.app.url, _notification.password_reset.code
-    );
-    let email = Message::builder()
-        .from(
-            format!(
-                "{} <{}>",
-                ctx.mail.sender_name.clone(),
-                ctx.mail.sender_email.clone()
-            )
-            .parse()
-            .unwrap(),
-        )
-        .to(format!(
-            "{} {} <{}>",
-            _notification.user.first_name.clone(),
-            _notification.user.last_name.clone(),
-            _notification.user.email.clone()
-        )
-        .parse()
-        .unwrap())
-        .subject("Password Reset Requested")
-        .header(ContentType::TEXT_HTML)
-        .body(format!(
-            "Use this link to reset your password: <a href=\"{}\">{}</a>",
-            password_reset_link, password_reset_link
         ))
         .unwrap();
 

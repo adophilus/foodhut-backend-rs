@@ -8,10 +8,7 @@ use sha2::Digest;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use super::notification;
-use crate::{
-    repository,
-    types::{self, Context},
-};
+use crate::{repository, types::Context};
 use std::sync::Arc;
 
 pub enum SendError {
@@ -39,10 +36,10 @@ fn generate_hash(purpose: &str, user: &repository::user::User) -> String {
     base16ct::lower::encode_string(&hash)
 }
 
-async fn hit_up_endpoint_and_parse<'de, T: Deserialize<'de>>(
+async fn hit_up_endpoint_and_parse(
     endpoint: String,
     body: String,
-) -> Result<T, SendError> {
+) -> Result<VerificationEndpointPayload, SendError> {
     let mut headers = HeaderMap::new();
     headers.insert(
         "Content-Type",
@@ -62,19 +59,19 @@ async fn hit_up_endpoint_and_parse<'de, T: Deserialize<'de>>(
             SendError::NotSent
         })?;
 
-    let text: &str = res.text().await.map_err(|err| {
+    let text = res.text().await.map_err(|err| {
         tracing::error!("Failed to get response text {}", err);
         SendError::NotSent
     })?;
 
-    serde_json::from_str::<T>(text).map_err(|err| {
+    serde_json::from_str::<_>(&text).map_err(|err| {
         tracing::error!("Failed to deserialize text: {}", err);
         SendError::NotSent
     })
 }
 
 pub async fn send(
-    ctx: Arc<types::Context>,
+    ctx: Arc<Context>,
     user: repository::user::User,
     purpose: String,
 ) -> Result<repository::otp::Otp, SendError> {
@@ -127,8 +124,8 @@ pub async fn send(
     Ok(otp)
 }
 
-async fn verify(
-    ctx: Context,
+pub async fn verify(
+    ctx: Arc<Context>,
     user: repository::user::User,
     purpose: String,
     code: String,
@@ -144,7 +141,7 @@ async fn verify(
         return Err(VerificationError::Expired);
     }
 
-    let res = hit_up_endpoint_and_parse::<VerificationEndpointPayload>(
+    let res = hit_up_endpoint_and_parse(
         ctx.otp.verify_endpoint.clone(),
         json!({
             "api_key":ctx.otp.api_key.clone(),

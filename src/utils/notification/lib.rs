@@ -22,12 +22,6 @@ pub mod types {
     }
 
     #[derive(Clone)]
-    pub struct PasswordResetRequested {
-        pub user: repository::user::User,
-        pub password_reset: repository::password_reset::PasswordReset,
-    }
-
-    #[derive(Clone)]
     pub struct VerificationOtpRequested {
         pub user: repository::user::User,
     }
@@ -37,23 +31,12 @@ pub mod types {
 pub enum Notification {
     Registered(types::Registered),
     OrderPaid(types::OrderPaid),
-    PasswordResetRequested(types::PasswordResetRequested),
     VerificationOtpRequested(types::VerificationOtpRequested),
 }
 
 impl Notification {
     pub fn registered(user: repository::user::User) -> Self {
         Notification::Registered(types::Registered { user })
-    }
-
-    pub fn password_reset_requested(
-        user: repository::user::User,
-        password_reset: repository::password_reset::PasswordReset,
-    ) -> Self {
-        Notification::PasswordResetRequested(types::PasswordResetRequested {
-            user,
-            password_reset,
-        })
     }
 
     pub fn verification_otp_requested(user: repository::user::User) -> Self {

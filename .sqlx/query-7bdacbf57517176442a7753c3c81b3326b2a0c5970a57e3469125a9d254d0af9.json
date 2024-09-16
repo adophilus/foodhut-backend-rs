@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE kitchens SET\n                name = COALESCE($1, name),\n                address = COALESCE($2, address),\n                type = COALESCE($3, type),\n                phone_number = COALESCE($4, phone_number),\n                opening_time = COALESCE($5, opening_time),\n                closing_time = COALESCE($6, closing_time),\n                preparation_time = COALESCE($7, preparation_time),\n                delivery_time = COALESCE($8, delivery_time),\n                cover_image = COALESCE(\n                    CASE WHEN $9::text = 'null' THEN NULL ELSE $9::json END, \n                    cover_image\n                ),\n                rating = COALESCE($10, rating),\n                likes = COALESCE($11, likes),\n                updated_at = NOW()\n            WHERE\n                id = $12\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Numeric",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7bdacbf57517176442a7753c3c81b3326b2a0c5970a57e3469125a9d254d0af9"
+}

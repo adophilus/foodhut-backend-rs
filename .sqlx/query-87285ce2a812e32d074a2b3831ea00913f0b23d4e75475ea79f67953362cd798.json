@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    INSERT INTO meal_user_reactions (id, reaction, user_id, meal_id)\n                    VALUES ($1, $2, $3, $4);\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "87285ce2a812e32d074a2b3831ea00913f0b23d4e75475ea79f67953362cd798"
+}

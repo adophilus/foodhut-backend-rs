@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE push_tokens SET\n                token = COALESCE($1, token),\n                user_id = COALESCE($2, user_id),\n                updated_at = NOW()\n            WHERE\n                id = $3\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6a8d2a8822de1fb5524a43f6f4a02cf3a68e52ec70d666e7c78a7e882074c9ac"
+}

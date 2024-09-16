@@ -21,7 +21,6 @@ pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Resul
     match notification.clone() {
         Notification::Registered(n) => unimplemented!(),
         Notification::OrderPaid(n) => unimplemented!(),
-        notification::Notification::PasswordResetRequested(n) => unimplemented!(),
         notification::Notification::VerificationOtpRequested(n) => {
             send_verification_otp(ctx, n).await
         }
