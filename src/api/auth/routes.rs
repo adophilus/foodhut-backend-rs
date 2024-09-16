@@ -1,7 +1,7 @@
 use crate::repository;
 use crate::types::Context;
-use crate::utils;
 use crate::utils::notification;
+use crate::utils::{self, otp};
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -91,7 +91,7 @@ struct SendVerificationOtpPayload {
     phone_number: String,
 }
 
-async fn verification_send_otp(
+async fn send_verification_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SendVerificationOtpPayload>,
 ) -> impl IntoResponse {
@@ -117,18 +117,9 @@ async fn verification_send_otp(
         );
     }
 
-    match repository::otp::create(
-        ctx.db_conn.clone(),
-        "auth.sign-up.verification".to_string(),
-        payload.phone_number,
-    )
-    .await
-    {
-        Ok(otp) => {
-            // TODO: actually send the OTP using twilio or something
-            (StatusCode::OK, Json(json!({ "message" :"OTP sent!"})))
-        }
-        Err(repository::otp::Error::OtpNotExpired) => (
+    match otp::send(ctx.clone(), user, "auth.sign-up.verification".to_string()).await {
+        Ok(_) => (StatusCode::OK, Json(json!({ "message" :"OTP sent!"}))),
+        Err(otp::SendError::NotExpired) => (
             StatusCode::BAD_REQUEST,
             Json(json!({ "error" : "OTP not expired"})),
         ),
@@ -139,150 +130,150 @@ async fn verification_send_otp(
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct SendPasswordResetEmailPayload {
-    email: String,
-}
+// #[derive(Serialize, Deserialize)]
+// struct SendPasswordResetEmailPayload {
+//     email: String,
+// }
 
-async fn send_password_reset_email(
-    State(ctx): State<Arc<Context>>,
-    Json(payload): Json<SendPasswordResetEmailPayload>,
-) -> impl IntoResponse {
-    let user = match repository::user::find_by_email(ctx.db_conn.clone(), payload.email).await {
-        Some(user) => user,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "A user with the email address does not exist" })),
-            )
-        } // Err(_) => {
-          //     return (
-          //         StatusCode::INTERNAL_SERVER_ERROR,
-          //         Json(json!({ "error": "Failed to fetch user" })),
-          //     )
-          // }
-    };
+// async fn send_password_reset_email(
+//     State(ctx): State<Arc<Context>>,
+//     Json(payload): Json<SendPasswordResetEmailPayload>,
+// ) -> impl IntoResponse {
+//     let user = match repository::user::find_by_email(ctx.db_conn.clone(), payload.email).await {
+//         Some(user) => user,
+//         None => {
+//             return (
+//                 StatusCode::NOT_FOUND,
+//                 Json(json!({ "error": "A user with the email address does not exist" })),
+//             )
+//         } // Err(_) => {
+//           //     return (
+//           //         StatusCode::INTERNAL_SERVER_ERROR,
+//           //         Json(json!({ "error": "Failed to fetch user" })),
+//           //     )
+//           // }
+//     };
+//
+//     if user.is_verified == false {
+//         return (
+//             StatusCode::BAD_REQUEST,
+//             Json(json!({
+//                 "error": "User not verified"
+//             })),
+//         );
+//     }
+//
+//     let expires_at = Utc::now().naive_utc() + chrono::Duration::minutes(5);
+//     let code = {
+//         let data = format!("{}-{}", user.id, expires_at);
+//         let mut hasher = Sha256::new();
+//         hasher.update(data);
+//         let hash = hasher.finalize();
+//         base16ct::lower::encode_string(&hash)
+//     };
+//
+//     let password_reset =
+//         match repository::password_reset::find_by_user_id(ctx.db_conn.clone(), user.id.clone())
+//             .await
+//         {
+//             Ok(Some(pr)) => {
+//                 match repository::password_reset::update_by_id(
+//                     ctx.db_conn.clone(),
+//                     pr.id,
+//                     repository::password_reset::UpdatePasswordResetPayload { code },
+//                 )
+//                 .await
+//                 {
+//                     Ok(pr) => pr,
+//                     Err(_) => {
+//                         return (
+//                             StatusCode::INTERNAL_SERVER_ERROR,
+//                             Json(json!({ "error": "Failed to create password reset entry" })),
+//                         );
+//                     }
+//                 }
+//             }
+//             Ok(None) => {
+//                 match repository::password_reset::create(
+//                     ctx.db_conn.clone(),
+//                     repository::password_reset::CreatePasswordResetPayload {
+//                         code,
+//                         expires_at,
+//                         user_id: user.id.clone(),
+//                     },
+//                 )
+//                 .await
+//                 {
+//                     Ok(pr) => pr,
+//                     Err(_) => {
+//                         return (
+//                             StatusCode::INTERNAL_SERVER_ERROR,
+//                             Json(json!({ "error": "Failed to create password reset entry" })),
+//                         );
+//                     }
+//                 }
+//             }
+//             Err(_) => {
+//                 return (
+//                     StatusCode::INTERNAL_SERVER_ERROR,
+//                     Json(json!({ "error": "Failed to create password reset entry" })),
+//                 );
+//             }
+//         };
+//
+//     match notification::send(
+//         ctx.clone(),
+//         notification::Notification::password_reset_requested(user, password_reset),
+//         notification::Backend::Email,
+//     )
+//     .await
+//     {
+//         Ok(_) => (
+//             StatusCode::OK,
+//             Json(json!({ "message": "Check your email for a password reset link " })),
+//         ),
+//         Err(_) => (
+//             StatusCode::INTERNAL_SERVER_ERROR,
+//             Json(json!({ "message": "Failed to send password reset email" })),
+//         ),
+//     }
+// }
 
-    if user.is_verified == false {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": "User not verified"
-            })),
-        );
-    }
-
-    let expires_at = Utc::now().naive_utc() + chrono::Duration::minutes(5);
-    let code = {
-        let data = format!("{}-{}", user.id, expires_at);
-        let mut hasher = Sha256::new();
-        hasher.update(data);
-        let hash = hasher.finalize();
-        base16ct::lower::encode_string(&hash)
-    };
-
-    let password_reset =
-        match repository::password_reset::find_by_user_id(ctx.db_conn.clone(), user.id.clone())
-            .await
-        {
-            Ok(Some(pr)) => {
-                match repository::password_reset::update_by_id(
-                    ctx.db_conn.clone(),
-                    pr.id,
-                    repository::password_reset::UpdatePasswordResetPayload { code },
-                )
-                .await
-                {
-                    Ok(pr) => pr,
-                    Err(_) => {
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(json!({ "error": "Failed to create password reset entry" })),
-                        );
-                    }
-                }
-            }
-            Ok(None) => {
-                match repository::password_reset::create(
-                    ctx.db_conn.clone(),
-                    repository::password_reset::CreatePasswordResetPayload {
-                        code,
-                        expires_at,
-                        user_id: user.id.clone(),
-                    },
-                )
-                .await
-                {
-                    Ok(pr) => pr,
-                    Err(_) => {
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(json!({ "error": "Failed to create password reset entry" })),
-                        );
-                    }
-                }
-            }
-            Err(_) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Failed to create password reset entry" })),
-                );
-            }
-        };
-
-    match notification::send(
-        ctx.clone(),
-        notification::Notification::password_reset_requested(user, password_reset),
-        notification::Backend::Email,
-    )
-    .await
-    {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(json!({ "message": "Check your email for a password reset link " })),
-        ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "message": "Failed to send password reset email" })),
-        ),
-    }
-}
-
-async fn reset_password(
-    State(ctx): State<Arc<Context>>,
-    Path(code): Path<String>,
-) -> impl IntoResponse {
-    let password_reset =
-        match repository::password_reset::find_by_code(ctx.db_conn.clone(), code).await {
-            Ok(Some(pr)) => pr,
-            Ok(None) => {
-                (return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": "Invalid request" })),
-                ))
-            }
-            Err(_) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Server error occurred" })),
-                )
-            }
-        };
-
-    if Utc::now().naive_utc() > password_reset.expires_at {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Invalid request" })),
-        );
-    }
-
-    unimplemented!();
-
-    (
-        StatusCode::OK,
-        Json(json!({ "message": "Password reset successful!" })),
-    )
-}
+// async fn reset_password(
+//     State(ctx): State<Arc<Context>>,
+//     Path(code): Path<String>,
+// ) -> impl IntoResponse {
+//     let password_reset =
+//         match repository::password_reset::find_by_code(ctx.db_conn.clone(), code).await {
+//             Ok(Some(pr)) => pr,
+//             Ok(None) => {
+//                 (return (
+//                     StatusCode::BAD_REQUEST,
+//                     Json(json!({ "error": "Invalid request" })),
+//                 ))
+//             }
+//             Err(_) => {
+//                 return (
+//                     StatusCode::INTERNAL_SERVER_ERROR,
+//                     Json(json!({ "error": "Server error occurred" })),
+//                 )
+//             }
+//         };
+//
+//     if Utc::now().naive_utc() > password_reset.expires_at {
+//         return (
+//             StatusCode::BAD_REQUEST,
+//             Json(json!({ "error": "Invalid request" })),
+//         );
+//     }
+//
+//     unimplemented!();
+//
+//     (
+//         StatusCode::OK,
+//         Json(json!({ "message": "Password reset successful!" })),
+//     )
+// }
 
 #[derive(Deserialize)]
 struct VerifyOtpPayload {
@@ -354,18 +345,9 @@ async fn sign_in_send_otp(
         );
     }
 
-    match repository::otp::create(
-        ctx.db_conn.clone(),
-        "auth.sign-in.verification".to_string(),
-        payload.phone_number,
-    )
-    .await
-    {
-        Ok(otp) => {
-            // TODO: actually send the OTP using twilio or something
-            (StatusCode::OK, Json(json!({"message": "OTP sent!"})))
-        }
-        Err(repository::otp::Error::OtpNotExpired) => (
+    match otp::send(ctx.clone(), user, "auth.sign-in.verification".to_string()).await {
+        Ok(otp) => (StatusCode::OK, Json(json!({"message": "OTP sent!"}))),
+        Err(otp::SendError::NotExpired) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": "OTP not expired"})),
         ),
@@ -446,13 +428,13 @@ async fn sign_in_verify_otp(
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/sign-up/strategy/credentials", post(sign_up))
-        .route("/verification/send-otp", post(verification_send_otp))
+        .route("/verification/send-otp", post(send_verification_otp))
         .route("/verification/verify-otp", post(verification_verify_otp))
         .route("/sign-in/strategy/phone/send-otp", post(sign_in_send_otp))
         .route(
             "/sign-in/strategy/phone/verify-otp",
             post(sign_in_verify_otp),
         )
-        .route("/reset-password", post(send_password_reset_email))
-        .route("/reset-password/:code", get(reset_password))
+    // .route("/reset-password", post(send_password_reset_email))
+    // .route("/reset-password/:code", get(reset_password))
 }

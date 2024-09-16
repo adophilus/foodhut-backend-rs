@@ -1,9 +1,10 @@
 pub mod config;
 pub mod database;
+pub mod notification;
 pub mod online;
+pub mod otp;
 pub mod pagination;
 pub mod payment;
 pub mod storage;
 pub mod validation;
 pub mod wallet;
-pub mod notification;

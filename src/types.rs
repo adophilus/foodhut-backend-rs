@@ -39,6 +39,14 @@ pub struct MailContext {
 }
 
 #[derive(Clone)]
+pub struct OtpContext {
+    pub api_key: String,
+    pub app_id: String,
+    pub send_endpoint: String,
+    pub verify_endpoint: String,
+}
+
+#[derive(Clone)]
 pub struct GoogleContext {
     pub client_id: String,
     pub client_secret: String,
@@ -51,6 +59,7 @@ pub struct Context {
     pub storage: StorageContext,
     pub payment: PaymentContext,
     pub mail: MailContext,
+    pub otp: OtpContext,
     pub google: GoogleContext,
 }
 
@@ -91,6 +100,14 @@ pub struct MailConfig {
 }
 
 #[derive(Clone)]
+pub struct OtpConfig {
+    pub api_key: String,
+    pub app_id: String,
+    pub send_endpoint: String,
+    pub verify_endpoint: String,
+}
+
+#[derive(Clone)]
 pub struct GoogleConfig {
     pub client_id: String,
     pub client_secret: String,
@@ -103,6 +120,7 @@ pub struct Config {
     pub storage: StorageConfig,
     pub payment: PaymentConfig,
     pub mail: MailConfig,
+    pub otp: OtpConfig,
     pub google: GoogleConfig,
 }
 
@@ -253,6 +271,11 @@ impl Default for Config {
             env::var("MAIL_REFRESH_ENDPOINT").expect("MAIL_REFRESH_ENDPOINT not set");
         let mail_sender_name = env::var("MAIL_SENDER_NAME").expect("MAIL_SENDER_NAME not set");
         let mail_sender_email = env::var("MAIL_SENDER_EMAIL").expect("MAIL_SENDER_EMAIL not set");
+        let otp_api_key = env::var("OTP_API_KEY").expect("OTP_API_KEY not set");
+        let otp_app_id = env::var("OTP_APP_ID").expect("OTP_APP_ID not set");
+        let otp_send_endpoint = env::var("OTP_SEND_ENDPOINT").expect("OTP_SEND_ENDPOINT not set");
+        let otp_verify_endpoint =
+            env::var("OTP_VERIFY_ENDPOINT").expect("OTP_VERIFY_ENDPOINT not set");
         let google_client_id = env::var("GOOGLE_CLIENT_ID").expect("GOOGLE_CLIENT_ID not set");
         let google_client_secret =
             env::var("GOOGLE_CLIENT_SECRET").expect("GOOGLE_CLIENT_SECRET not set");
@@ -277,6 +300,12 @@ impl Default for Config {
                 refresh_endpoint: mail_refresh_endpoint,
                 sender_name: mail_sender_name,
                 sender_email: mail_sender_email,
+            },
+            otp: OtpConfig {
+                api_key: otp_api_key,
+                app_id: otp_app_id,
+                send_endpoint: otp_send_endpoint,
+                verify_endpoint: otp_verify_endpoint,
             },
             google: GoogleConfig {
                 client_id: google_client_id,
@@ -321,6 +350,12 @@ impl ToContext for Config {
                 refresh_endpoint: self.mail.refresh_endpoint,
                 sender_name: self.mail.sender_name,
                 sender_email: self.mail.sender_email,
+            },
+            otp: OtpContext {
+                api_key: self.otp.api_key,
+                app_id: self.otp.app_id,
+                send_endpoint: self.otp.send_endpoint,
+                verify_endpoint: self.otp.verify_endpoint,
             },
             google: GoogleContext {
                 client_id: self.google.client_id,

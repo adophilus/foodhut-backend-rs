@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO password_reset (\n            id, \n            code, \n            expires_at,\n            user_id\n        )\n        VALUES ($1, $2, $3, $4)\n        RETURNING *\n        ",
+  "query": "\n            UPDATE otps SET\n                purpose = COALESCE($1, purpose),\n                meta = COALESCE($2, meta),\n                hash = COALESCE($3, hash),\n                updated_at = NOW()\n            WHERE\n                id = $4\n            RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -10,36 +10,46 @@
       },
       {
         "ordinal": 1,
-        "name": "code",
+        "name": "otp",
         "type_info": "Varchar"
       },
       {
         "ordinal": 2,
-        "name": "user_id",
+        "name": "purpose",
         "type_info": "Varchar"
       },
       {
         "ordinal": 3,
+        "name": "meta",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
         "name": "expires_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 7,
+        "name": "hash",
+        "type_info": "Varchar"
       }
     ],
     "parameters": {
       "Left": [
         "Varchar",
         "Varchar",
-        "Timestamp",
-        "Varchar"
+        "Varchar",
+        "Text"
       ]
     },
     "nullable": [
@@ -48,8 +58,10 @@
       false,
       false,
       false,
-      true
+      false,
+      true,
+      false
     ]
   },
-  "hash": "aa7b58befa18a16520c987d38eab08250807a80abbb3696247d75aa211dcc91b"
+  "hash": "95d43b1cd02324bac843d240235f3491e325a68ebf81a9f691a9bc53fd231920"
 }

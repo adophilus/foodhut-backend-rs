@@ -1,5 +1,5 @@
-use axum::http::{HeaderMap, HeaderValue};
 use bigdecimal::{BigDecimal, FromPrimitive};
+use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;

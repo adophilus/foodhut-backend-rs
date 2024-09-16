@@ -123,9 +123,8 @@ pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Resul
         Notification::OrderPaid(n) => {
             unimplemented!()
         }
-        notification::Notification::PasswordResetRequested(n) => {
-            send_password_reset_requested_email(ctx, n).await
-        }
+        notification::Notification::PasswordResetRequested(n) => unimplemented!(),
+        notification::Notification::VerificationOtpRequested(n) => unimplemented!(),
     }
 }
 
@@ -187,7 +186,7 @@ async fn send_password_reset_requested_email(
     _notification: notification::types::PasswordResetRequested,
 ) -> Result<()> {
     let password_reset_link = format!(
-        "{}/api/password-reset/{}",
+        "{}/api/reset-password/{}",
         ctx.app.url, _notification.password_reset.code
     );
     let email = Message::builder()

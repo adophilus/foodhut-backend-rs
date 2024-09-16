@@ -1,25 +1,11 @@
-use super::{email, push};
-use crate::{
-    repository::{self, password_reset},
-    types::Context,
-};
+use super::{email, push, sms};
+use crate::{repository, types::Context};
 use std::sync::Arc;
 
 pub enum Backend {
     Email,
     Push,
-}
-
-#[derive(Clone)]
-pub enum NotificationRecipient {
-    SingleRecipient(repository::user::User),
-}
-
-#[derive(Clone)]
-pub enum NotificationType {
-    Registered { user: repository::user::User },
-    OrderPaid { order: repository::order::Order },
-    PasswordResetRequested { user: repository::user::User },
+    Sms,
 }
 
 pub mod types {
@@ -40,6 +26,11 @@ pub mod types {
         pub user: repository::user::User,
         pub password_reset: repository::password_reset::PasswordReset,
     }
+
+    #[derive(Clone)]
+    pub struct VerificationOtpRequested {
+        pub user: repository::user::User,
+    }
 }
 
 #[derive(Clone)]
@@ -47,6 +38,7 @@ pub enum Notification {
     Registered(types::Registered),
     OrderPaid(types::OrderPaid),
     PasswordResetRequested(types::PasswordResetRequested),
+    VerificationOtpRequested(types::VerificationOtpRequested),
 }
 
 impl Notification {
@@ -63,6 +55,10 @@ impl Notification {
             password_reset,
         })
     }
+
+    pub fn verification_otp_requested(user: repository::user::User) -> Self {
+        Notification::VerificationOtpRequested(types::VerificationOtpRequested { user })
+    }
 }
 
 pub enum Error {
@@ -71,9 +67,15 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+// TODO: create a general `NotificationResponse` type and make all notification backends return that
+
 pub async fn send(ctx: Arc<Context>, notification: Notification, backend: Backend) -> Result<()> {
     match backend {
         Backend::Email => email::send(ctx, notification).await,
         Backend::Push => push::send(ctx, notification).await,
+        Backend::Sms => {
+            sms::send(ctx, notification).await;
+            Ok(())
+        }
     }
 }

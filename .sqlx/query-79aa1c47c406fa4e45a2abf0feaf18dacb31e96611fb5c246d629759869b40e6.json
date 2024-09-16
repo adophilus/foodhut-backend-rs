@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM password_reset WHERE user_id = $1",
+  "query": "SELECT * FROM otps WHERE hash = $1",
   "describe": {
     "columns": [
       {
@@ -10,28 +10,38 @@
       },
       {
         "ordinal": 1,
-        "name": "code",
+        "name": "otp",
         "type_info": "Varchar"
       },
       {
         "ordinal": 2,
-        "name": "user_id",
+        "name": "purpose",
         "type_info": "Varchar"
       },
       {
         "ordinal": 3,
+        "name": "meta",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
         "name": "expires_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 7,
+        "name": "hash",
+        "type_info": "Varchar"
       }
     ],
     "parameters": {
@@ -45,8 +55,10 @@
       false,
       false,
       false,
-      true
+      false,
+      true,
+      false
     ]
   },
-  "hash": "954954e33913e822b30f3d5e865aab8392bcef28e2caa4502b569be289f93e13"
+  "hash": "79aa1c47c406fa4e45a2abf0feaf18dacb31e96611fb5c246d629759869b40e6"
 }

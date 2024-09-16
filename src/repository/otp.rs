@@ -4,11 +4,13 @@ use ulid::Ulid;
 
 use crate::utils::database::DatabaseConnection;
 
+#[derive(Clone)]
 pub struct Otp {
     pub id: String,
     pub otp: String,
     pub purpose: String,
     pub meta: String,
+    pub hash: String,
     pub expires_at: NaiveDateTime,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -16,126 +18,80 @@ pub struct Otp {
 
 #[derive(Debug)]
 pub enum Error {
-    OtpExpired,
-    OtpNotFound,
     UnexpectedError,
-    OtpCreationFailed,
-    OtpNotExpired,
-    InvalidOtp,
 }
 
-pub async fn create(
-    db: DatabaseConnection,
-    purpose: String,
-    meta: String,
-) -> Result<String, Error> {
-    match find_one(db.clone(), purpose.clone(), meta.clone()).await {
-        Err(Error::OtpExpired) => {
-            match sqlx::query!(
-                "DELETE FROM otps WHERE purpose = $1 AND meta = $2",
-                purpose,
-                meta
-            )
-            .execute(&db.pool)
-            .await
-            {
-                Err(e) => {
-                    log::error!("Error occurred while cleaning up expired OTP: {}", e);
-                }
-                _ => (),
-            }
-
-            create_otp(db, purpose, meta).await
-        }
-        Err(Error::OtpNotFound) => create_otp(db, purpose, meta).await,
-        _ => Err(Error::OtpNotExpired),
-    }
+pub struct CreateOtpPayload {
+    pub purpose: String,
+    pub meta: String,
+    pub hash: String,
+    pub otp: String,
 }
 
-async fn create_otp(
-    db: DatabaseConnection,
-    purpose: String,
-    meta: String,
-) -> Result<String, Error> {
-    let otp = "1234";
-
-    match sqlx::query!(
-        "INSERT INTO otps (id, purpose, meta, otp, expires_at) VALUES ($1, $2, $3, $4, $5)",
+pub async fn create(db: DatabaseConnection, payload: CreateOtpPayload) -> Result<Otp, Error> {
+    sqlx::query_as!(
+        Otp,
+        "
+        INSERT INTO otps (id, purpose, meta, otp, expires_at) VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+        ",
         Ulid::new().to_string(),
-        purpose,
-        meta,
-        otp,
+        payload.purpose,
+        payload.meta,
+        payload.otp,
         // Utc::now().naive_utc() + chrono::Duration::minutes(5)
         Utc::now().naive_utc() + chrono::Duration::minutes(1)
     )
-    .execute(&db.pool)
+    .fetch_one(&db.pool)
     .await
-    {
-        Ok(_) => Ok(otp.to_string()),
-        Err(e) => {
-            log::error!("{}", e);
-            Err(Error::OtpCreationFailed)
-        }
-    }
+    .map_err(|e| {
+        log::error!("Error occurred while creating otp {}", e);
+        Error::UnexpectedError
+    })
 }
 
-pub async fn find_one(db: DatabaseConnection, purpose: String, meta: String) -> Result<Otp, Error> {
-    let res = sqlx::query_as!(
-        Otp,
-        "SELECT * FROM otps WHERE purpose = $1 AND meta = $2",
-        purpose,
-        meta
-    )
-    .fetch_optional(&db.pool)
-    .await;
-
-    match res {
-        Ok(Some(otp)) => {
-            if Utc::now().naive_utc() > otp.expires_at {
-                Err(Error::OtpExpired)
-            } else {
-                Ok(otp)
-            }
-        }
-        Ok(None) => Err(Error::OtpNotFound),
-        Err(e) => {
-            log::error!("{}", e);
-            Err(Error::UnexpectedError)
-        }
-    }
+pub async fn find_by_hash(db: DatabaseConnection, hash: String) -> Result<Option<Otp>, Error> {
+    sqlx::query_as!(Otp, "SELECT * FROM otps WHERE hash = $1", hash)
+        .fetch_optional(&db.pool)
+        .await
+        .map_err(|err| {
+            tracing::error!("Error occurred while trying to fetch otp by hash: {}", err);
+            Error::UnexpectedError
+        })
 }
 
-pub async fn verify(
+pub struct UpdateOtpPayload {
+    pub purpose: Option<String>,
+    pub meta: Option<String>,
+    pub hash: Option<String>,
+}
+
+pub async fn update_by_id(
     db: DatabaseConnection,
-    purpose: String,
-    meta: String,
-    otp: String,
+    id: String,
+    payload: UpdateOtpPayload,
 ) -> Result<Otp, Error> {
-    match find_one(db.clone(), purpose.clone(), meta.clone()).await {
-        Ok(db_otp) => {
-            if db_otp.otp != otp {
-                return Err(Error::InvalidOtp);
-            }
-
-            match sqlx::query!("DELETE FROM otps WHERE id = $1", db_otp.id)
-                .execute(&db.pool)
-                .await
-            {
-                Err(e) => {
-                    log::error!(
-                        "Error occurred while trying to clean up verified OTP: {}",
-                        e
-                    );
-                    return Err(Error::UnexpectedError);
-                }
-                _ => (),
-            }
-
-            Ok(db_otp)
-        }
-        Err(e) => {
-            log::error!("{:?}", e);
-            Err(Error::UnexpectedError)
-        }
-    }
+    sqlx::query_as!(
+        Otp,
+        "
+            UPDATE otps SET
+                purpose = COALESCE($1, purpose),
+                meta = COALESCE($2, meta),
+                hash = COALESCE($3, hash),
+                updated_at = NOW()
+            WHERE
+                id = $4
+            RETURNING *
+        ",
+        payload.purpose,
+        payload.meta,
+        payload.hash,
+        id
+    )
+    .fetch_one(&db.pool)
+    .await
+    .map_err(|err| {
+        tracing::error!("Failed to update otp by id {}: {}", id, err);
+        Error::UnexpectedError
+    })
 }
