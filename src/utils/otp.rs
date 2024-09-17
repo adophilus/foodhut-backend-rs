@@ -2,8 +2,8 @@ use chrono::Utc;
 
 use hyper::HeaderMap;
 use reqwest::Client;
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Deserializer};
+use serde_json::{json, Value};
 use sha2::Digest;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -27,10 +27,25 @@ pub enum VerificationError {
 }
 
 // Putting this here because for some reason, the OTP service returns a boolean if everything works out well but then it returns a string if it doesn't
-#[derive(Deserialize)]
 enum VerifiedEndpointStatus {
-    Successful(bool),
+    Successful,
     Error(String),
+}
+
+impl<'de> Deserialize<'de> for VerifiedEndpointStatus {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+
+        match value {
+            Value::Bool(true) => Ok(VerifiedEndpointStatus::Successful),
+            Value::Bool(false) => Ok(VerifiedEndpointStatus::Error("Invalid OTP".to_string())),
+            Value::String(s) => Ok(VerifiedEndpointStatus::Error(s)),
+            _ => Err(serde::de::Error::custom("Invalid verified endpoint status")),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -157,9 +172,13 @@ pub async fn verify(
         .map_err(|_| VerificationError::UnexpectedError)?
         .ok_or(VerificationError::UnexpectedError)?;
 
+    tracing::info!("found otp by hash!");
+
     if Utc::now().naive_utc() > existing_otp.expires_at {
         return Err(VerificationError::Expired);
     }
+
+    tracing::info!("otp has not expired");
 
     let res = hit_up_endpoint_and_parse(
         ctx.otp.verify_endpoint.clone(),
@@ -173,16 +192,9 @@ pub async fn verify(
     .await
     .map_err(|_| VerificationError::UnexpectedError)?;
 
-    match res.verified {
-        VerifiedEndpointStatus::Successful(verified) => {
-            if verified != true {
-                return Err(VerificationError::InvalidOtp);
-            }
-        }
-        VerifiedEndpointStatus::Error(err) => {
-            tracing::debug!("Got an error response when verifying OTP: {}", err);
-            return Err(VerificationError::InvalidOtp);
-        }
+    if let VerifiedEndpointStatus::Error(err) = res.verified {
+        tracing::debug!("Got an error response when verifying OTP: {}", err);
+        return Err(VerificationError::InvalidOtp);
     }
 
     if res.pin_id != existing_otp.otp {

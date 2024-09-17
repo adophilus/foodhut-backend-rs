@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE otps SET\n                purpose = COALESCE($1, purpose),\n                meta = COALESCE($2, meta),\n                hash = COALESCE($3, hash),\n                expires_at = NOW() + MAKE_INTERVAL(mins => $4),\n                updated_at = NOW()\n            WHERE\n                id = $5\n            RETURNING *\n        ",
+  "query": "\n        INSERT INTO otps (id, purpose, meta, otp, hash, expires_at) VALUES ($1, $2, $3, $4, $5, $6)\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -49,8 +49,9 @@
         "Varchar",
         "Varchar",
         "Varchar",
-        "Int4",
-        "Text"
+        "Varchar",
+        "Varchar",
+        "Timestamp"
       ]
     },
     "nullable": [
@@ -64,5 +65,5 @@
       false
     ]
   },
-  "hash": "85f34697df4fa7e276fee1512020cc0e52fa3d1860cd76a8f96d7b6ef9bc3fd2"
+  "hash": "d5898f17d8c34db5d95e76c2b87a8ecb7cc0f0c5ad782c83a600390b4ffd1eed"
 }

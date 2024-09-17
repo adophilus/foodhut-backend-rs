@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use log::debug;
 use ulid::Ulid;
 
@@ -30,10 +30,11 @@ pub struct CreateOtpPayload {
 }
 
 pub async fn create(db: DatabaseConnection, payload: CreateOtpPayload) -> Result<Otp, Error> {
+    let expires_at = Utc::now().naive_utc() + Duration::minutes(payload.validity.into());
     sqlx::query_as!(
         Otp,
         "
-        INSERT INTO otps (id, purpose, meta, otp, hash, expires_at) VALUES ($1, $2, $3, $4, $5, NOW() + MAKE_INTERVAL(mins => $6))
+        INSERT INTO otps (id, purpose, meta, otp, hash, expires_at) VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
         ",
         Ulid::new().to_string(),
@@ -41,7 +42,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOtpPayload) -> Result
         payload.meta,
         payload.otp,
         payload.hash,
-        payload.validity
+        expires_at
     )
     .fetch_one(&db.pool)
     .await
@@ -73,6 +74,7 @@ pub async fn update_by_id(
     id: String,
     payload: UpdateOtpPayload,
 ) -> Result<Otp, Error> {
+    let expires_at = Utc::now().naive_utc() + Duration::minutes(payload.validity.into());
     sqlx::query_as!(
         Otp,
         "
@@ -80,7 +82,7 @@ pub async fn update_by_id(
                 purpose = COALESCE($1, purpose),
                 meta = COALESCE($2, meta),
                 hash = COALESCE($3, hash),
-                expires_at = NOW() + MAKE_INTERVAL(mins => $4),
+                expires_at = $4,
                 updated_at = NOW()
             WHERE
                 id = $5
@@ -89,7 +91,7 @@ pub async fn update_by_id(
         payload.purpose,
         payload.meta,
         payload.hash,
-        payload.validity,
+        expires_at,
         id
     )
     .fetch_one(&db.pool)

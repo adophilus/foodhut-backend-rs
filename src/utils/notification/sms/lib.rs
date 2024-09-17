@@ -1,5 +1,5 @@
 use super::super::{Error, Notification, Result};
-use crate::types;
+use crate::types::{self, AppEnvironment};
 use crate::utils::notification;
 use axum::http::{HeaderMap, HeaderValue};
 use hyper::StatusCode;
@@ -40,6 +40,11 @@ async fn send_verification_otp(
             .expect("Invalid content type header value"),
     );
 
+    let validity = match ctx.app.environment {
+        AppEnvironment::Production => 5,
+        AppEnvironment::Development => 1,
+    };
+
     let res = reqwest::Client::new()
                 .post(ctx.otp.send_endpoint.clone())
         .headers(headers)
@@ -50,7 +55,7 @@ async fn send_verification_otp(
                     "from":ctx.otp.app_id.clone(),
                     "channel":"generic",
                     "pin_attempts": 3,
-                    "pin_time_to_live": 5,
+                    "pin_time_to_live": validity,
                     "pin_length": 4,
                     "pin_placeholder":"$PIN",
                     "message_text": "Your FoodHut app verification pin is $PIN\nPin will expire in 5 minutes, do not share it with anyone" ,
