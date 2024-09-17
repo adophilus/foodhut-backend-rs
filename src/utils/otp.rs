@@ -27,8 +27,14 @@ pub enum VerificationError {
 }
 
 #[derive(Deserialize)]
+enum VerifiedEndpointStatus {
+    Successful(bool),
+    Error(String),
+}
+
+#[derive(Deserialize)]
 struct VerificationEndpointPayload {
-    verified: String,
+    verified: VerifiedEndpointStatus,
     #[serde(rename = "pinId")]
     pin_id: String,
 }
@@ -166,7 +172,19 @@ pub async fn verify(
     .await
     .map_err(|_| VerificationError::UnexpectedError)?;
 
-    if res.verified == "true" || res.pin_id != existing_otp.otp {
+    match res.verified {
+        VerifiedEndpointStatus::Successful(verified) => {
+            if verified != true {
+                return Err(VerificationError::InvalidOtp);
+            }
+        }
+        VerifiedEndpointStatus::Error(err) => {
+            tracing::debug!("Got an error response when verifying OTP: {}", err);
+            return Err(VerificationError::InvalidOtp);
+        }
+    }
+
+    if res.pin_id != existing_otp.otp {
         return Err(VerificationError::InvalidOtp);
     }
 
