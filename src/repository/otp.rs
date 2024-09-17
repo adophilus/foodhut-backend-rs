@@ -63,9 +63,10 @@ pub async fn find_by_hash(db: DatabaseConnection, hash: String) -> Result<Option
 }
 
 pub struct UpdateOtpPayload {
-    pub purpose: Option<String>,
+    pub purpose: String,
     pub meta: Option<String>,
-    pub hash: Option<String>,
+    pub hash: String,
+    pub otp: String,
     pub validity: i32,
 }
 
@@ -79,9 +80,9 @@ pub async fn update_by_id(
         Otp,
         "
             UPDATE otps SET
-                purpose = COALESCE($1, purpose),
-                meta = COALESCE($2, meta),
-                hash = COALESCE($3, hash),
+                purpose = $1,
+                meta = $2,
+                hash = $3,
                 expires_at = $4,
                 updated_at = NOW()
             WHERE
