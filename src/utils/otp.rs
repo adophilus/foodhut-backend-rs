@@ -132,7 +132,8 @@ pub async fn send(
                 ctx.db_conn.clone(),
                 existing_otp.id.clone(),
                 repository::otp::UpdateOtpPayload {
-                    hash: Some(hash.clone()),
+                    htash: Some(hash.clone()),
+                    otp: Some(otp.pin_id.clone()),
                     purpose: Some(purpose.clone()),
                     meta: Some(otp.pin_id.clone()),
                     validity,
