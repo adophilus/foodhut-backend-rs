@@ -26,6 +26,7 @@ pub enum VerificationError {
     UnexpectedError,
 }
 
+// Putting this here because for some reason, the OTP service returns a boolean if everything works out well but then it returns a string if it doesn't
 #[derive(Deserialize)]
 enum VerifiedEndpointStatus {
     Successful(bool),
