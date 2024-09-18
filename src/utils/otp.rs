@@ -92,6 +92,8 @@ async fn hit_up_endpoint_and_parse(
         SendError::NotSent
     })?;
 
+    tracing::info!("text: {}", text);
+
     serde_json::from_str::<_>(&text).map_err(|err| {
         tracing::error!("Failed to deserialize text: {}", err);
         SendError::NotSent
