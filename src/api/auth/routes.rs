@@ -383,6 +383,8 @@ async fn sign_in_verify_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<SignInVerifyOtpPayload>,
 ) -> impl IntoResponse {
+    tracing::info!("sign_in_verify_otp: {}", payload.otp.clone());
+
     let user = match repository::user::find_by_phone_number(
         ctx.db_conn.clone(),
         payload.phone_number.clone(),

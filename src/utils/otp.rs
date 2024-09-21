@@ -113,7 +113,7 @@ pub async fn send(
 
     if existing_otp.is_some() && Utc::now().naive_utc() <= existing_otp.clone().unwrap().expires_at
     {
-        return Err(SendError::NotSent);
+        return Err(SendError::NotExpired);
     }
 
     let otp = notification::sms::send(
@@ -125,7 +125,7 @@ pub async fn send(
 
     let validity = match ctx.app.environment {
         AppEnvironment::Production => 5,
-        AppEnvironment::Development => 1,
+        AppEnvironment::Development => 3,
     };
 
     let otp = match existing_otp {
@@ -175,9 +175,12 @@ pub async fn verify(
         .map_err(|_| VerificationError::UnexpectedError)?
         .ok_or(VerificationError::UnexpectedError)?;
 
-    tracing::info!("found otp by hash!");
+    tracing::info!("found otp by hash! {:?}", existing_otp.clone());
 
     if Utc::now().naive_utc() > existing_otp.expires_at {
+        tracing::info!("otp has expired");
+        tracing::info!("otp expires at: {}", existing_otp.expires_at);
+        tracing::info!("current time: {}", Utc::now().naive_utc());
         return Err(VerificationError::Expired);
     }
 

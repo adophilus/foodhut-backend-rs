@@ -42,8 +42,10 @@ async fn send_verification_otp(
 
     let validity = match ctx.app.environment {
         AppEnvironment::Production => 5,
-        AppEnvironment::Development => 1,
+        AppEnvironment::Development => 3,
     };
+
+    tracing::debug!("validity: {}", validity);
 
     let res = reqwest::Client::new()
                 .post(ctx.otp.send_endpoint.clone())
@@ -89,6 +91,8 @@ async fn send_verification_otp(
         Error::NotSent
     })?;
 
+    tracing::info!("res_text: {}", res_text);
+
     let res = serde_json::from_str::<OtpSmsServerResponse>(&res_text)
         .map_err(|err| {
             let formatted_err = format!("Failed to get response body: {}", err);
@@ -103,6 +107,7 @@ async fn send_verification_otp(
     }
 
     tracing::debug!("Successfully sent OTP sms");
+    tracing::debug!("PIN ID: {}", res.pin_id.clone());
 
     return Ok(Otp { pin_id: res.pin_id });
 }

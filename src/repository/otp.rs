@@ -4,7 +4,7 @@ use ulid::Ulid;
 
 use crate::utils::database::DatabaseConnection;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Otp {
     pub id: String,
     pub otp: String,
@@ -64,9 +64,9 @@ pub async fn find_by_hash(db: DatabaseConnection, hash: String) -> Result<Option
 
 pub struct UpdateOtpPayload {
     pub purpose: String,
-    pub meta: Option<String>,
-    pub hash: String,
     pub otp: String,
+    pub hash: String,
+    pub meta: Option<String>,
     pub validity: i32,
 }
 
@@ -81,17 +81,19 @@ pub async fn update_by_id(
         "
             UPDATE otps SET
                 purpose = $1,
-                meta = $2,
+                otp = $2,
                 hash = $3,
-                expires_at = $4,
+                meta = $4,
+                expires_at = $5,
                 updated_at = NOW()
             WHERE
-                id = $5
+                id = $6
             RETURNING *
         ",
         payload.purpose,
-        payload.meta,
+        payload.otp,
         payload.hash,
+        payload.meta,
         expires_at,
         id
     )

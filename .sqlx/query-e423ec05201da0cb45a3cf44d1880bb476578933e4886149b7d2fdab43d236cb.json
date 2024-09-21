@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE otps SET\n                purpose = $1,\n                meta = $2,\n                hash = $3,\n                expires_at = $4,\n                updated_at = NOW()\n            WHERE\n                id = $5\n            RETURNING *\n        ",
+  "query": "\n            UPDATE otps SET\n                purpose = $1,\n                otp = $2,\n                hash = $3,\n                meta = $4,\n                expires_at = $5,\n                updated_at = NOW()\n            WHERE\n                id = $6\n            RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,7 @@
         "Varchar",
         "Varchar",
         "Varchar",
+        "Varchar",
         "Timestamp",
         "Text"
       ]
@@ -64,5 +65,5 @@
       false
     ]
   },
-  "hash": "faf6c351b4db6214eb5451d3d361f9dd57fb95d18c1ecf9114ff1885b8b7236f"
+  "hash": "e423ec05201da0cb45a3cf44d1880bb476578933e4886149b7d2fdab43d236cb"
 }
