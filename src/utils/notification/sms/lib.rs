@@ -55,7 +55,7 @@ async fn send_verification_otp(
                     "message_type": "NUMERIC",
                     "to": _notification.user.phone_number.clone(),
                     "from":ctx.otp.app_id.clone(),
-                    "channel":"generic",
+                    "channel": "dnd",
                     "pin_attempts": 3,
                     "pin_time_to_live": validity,
                     "pin_length": 4,
