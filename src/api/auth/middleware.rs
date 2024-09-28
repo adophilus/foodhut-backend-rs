@@ -12,10 +12,10 @@ use axum::{
 use serde::Serialize;
 use serde_json::json;
 
-use crate::repository;
 use crate::repository::user::User;
 use crate::types::Context;
-use crate::utils::database::DatabaseConnection;
+use crate::utils::{self, database::DatabaseConnection};
+use crate::{repository, types};
 use std::sync::Arc;
 
 enum Error {
@@ -32,18 +32,16 @@ fn get_session_id_from_header(header: String) -> Result<String, Error> {
 }
 
 async fn get_user_from_header(
-    db_conn: DatabaseConnection,
+    ctx: Arc<types::Context>,
     header: String,
 ) -> Result<repository::user::User, Error> {
     let session_id = get_session_id_from_header(header)?;
-    match repository::session::find_by_id(db_conn.clone(), session_id).await {
-        Some(session) => match repository::user::find_by_id(db_conn.clone(), session.user_id).await
-        {
-            Some(user) => Ok(user),
-            None => Err(Error::InvalidSession),
-        },
-        None => Err(Error::InvalidSession),
-    }
+    let session = utils::auth::verify_access_token(ctx.clone(), session_id)
+        .await
+        .map_err(|_| Error::InvalidSession)?;
+    repository::user::find_by_id(ctx.db_conn.clone(), session.user_id)
+        .await
+        .ok_or(Error::InvalidSession)
 }
 
 // pub async fn auth(
@@ -89,7 +87,7 @@ async fn get_user_from_request<State: Send + Sync>(
         .and_then(|header| header.to_str().ok())
         .ok_or(err.clone().into_response())?;
 
-    get_user_from_header(ctx.db_conn.clone(), auth_header.to_string())
+    get_user_from_header(ctx.clone(), auth_header.to_string())
         .await
         .map_err(|_| err.clone().into_response())
 }

@@ -1,0 +1,4 @@
+DELETE FROM sessions;
+
+ALTER TABLE sessions
+ADD COLUMN refresh_token VARCHAR NOT NULL UNIQUE;

@@ -13,12 +13,18 @@ use crate::utils::{
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-enum WalletBackend {
-    Paystack,
+pub struct PaystackWalletDetails {
+    pub account_number: String,
+    pub bank_identifier: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct WalletMetadata {
+pub enum WalletBackend {
+    Paystack(PaystackWalletDetails),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct WalletMetadata {
     pub backend: WalletBackend,
 }
 

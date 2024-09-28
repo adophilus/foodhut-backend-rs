@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM sessions WHERE id = $1",
+  "query": "SELECT * FROM sessions WHERE refresh_token = $1",
   "describe": {
     "columns": [
       {
@@ -48,5 +48,5 @@
       false
     ]
   },
-  "hash": "b61377101cd65dbd8c97702fe3a76f791c43849b84d5e16e4e3d98cbde9f7a17"
+  "hash": "bdcc52883922eedd38e885424e9e7ec7ed190c53c17a836f6d501ee536ea7acf"
 }

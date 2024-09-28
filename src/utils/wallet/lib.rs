@@ -1,3 +1,9 @@
+use axum::http::HeaderMap;
+use hyper::StatusCode;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::sync::Arc;
+
 use crate::{
     repository::{
         meal::Meal,
@@ -6,6 +12,7 @@ use crate::{
         user::User,
         wallet,
     },
+    types,
     utils::database::DatabaseConnection,
 };
 
@@ -13,6 +20,86 @@ pub enum Error {
     UnexpectedError,
     WalletNotFound,
     InsufficientFunds,
+}
+
+pub enum CreationError {
+    CreationFailed(String),
+    UnexpectedError,
+}
+
+pub struct CreateAccountPayload {
+    pub bvn: String,
+    pub bank_code: String,
+    pub account_number: String,
+    pub user: User,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateAccountServiceResponse {
+    status: bool,
+    message: String,
+}
+
+type Result<T> = std::result::Result<T, Error>;
+
+pub async fn create_account(
+    ctx: Arc<types::Context>,
+    payload: CreateAccountPayload,
+) -> std::result::Result<String, CreationError> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "Authorization",
+        format!("Bearer {}", ctx.payment.secret_key.clone())
+            .try_into()
+            .expect("Invalid authorization header value"),
+    );
+
+    let res = reqwest::Client::new()
+        .post("https://api.paystack.co/customer/{customer_code}/identification")
+        .headers(headers)
+        .body(
+            json!({
+                "country": "NG",
+                "type": "bank_account",
+                "account_number": payload.account_number,
+                "bvn": payload.bvn,
+                "bank_code": payload.bank_code,
+                "first_name": payload.user.first_name,
+                "last_name": payload.user.last_name,
+            })
+            .to_string(),
+        )
+        .send()
+        .await
+        .map_err(|err| {
+            tracing::error!("Failed to communicate with payment service: {}", err);
+            CreationError::UnexpectedError
+        })?;
+
+    let status = res.status();
+    if status != StatusCode::OK {
+        tracing::error!("Got an error response from the payment service: {}", status);
+        return Err(CreationError::UnexpectedError);
+    }
+
+    let text_response = res.text().await.map_err(|err| {
+        tracing::error!("Failed to get payment service text response: {}", err);
+        CreationError::UnexpectedError
+    })?;
+
+    let server_response = serde_json::from_str::<CreateAccountServiceResponse>(
+        text_response.as_str(),
+    )
+    .map_err(|err| {
+        tracing::error!("Failed to decode payment service server response: {}", err);
+        CreationError::UnexpectedError
+    })?;
+
+    if !server_response.status {
+        return Err(CreationError::CreationFailed(server_response.message));
+    }
+
+    Ok(server_response.message)
 }
 
 struct InitializePaymentForMeal {
@@ -23,7 +110,7 @@ struct InitializePaymentForMeal {
 async fn initialize_payment_for_meal(
     db: DatabaseConnection,
     payload: InitializePaymentForMeal,
-) -> Result<(), Error> {
+) -> Result<()> {
     let wallet = match wallet::find_by_owner_id(db.clone(), payload.payer.id.clone()).await {
         Ok(Some(wallet)) => wallet,
         Ok(None) => return Err(Error::WalletNotFound),
@@ -76,7 +163,7 @@ pub struct InitializePaymentForOrder {
 pub async fn initialize_payment_for_order(
     db: DatabaseConnection,
     payload: InitializePaymentForOrder,
-) -> Result<(), Error> {
+) -> Result<()> {
     let wallet = match wallet::find_by_owner_id(db.clone(), payload.payer.id.clone()).await {
         Ok(Some(wallet)) => wallet,
         Ok(None) => return Err(Error::WalletNotFound),
