@@ -254,10 +254,35 @@ async fn sign_in(
     }
 }
 
+#[derive(Deserialize)]
+struct RefreshTokensPayload {
+    token: String,
+}
+
+async fn refresh_tokens(
+    State(ctx): State<Arc<Context>>,
+    Json(payload): Json<RefreshTokensPayload>
+) -> impl IntoResponse {
+    match utils::auth::regenerate_tokens_for_session(ctx.clone(), payload.token).await {
+        Ok(session) => (
+            StatusCode::OK,
+            Json(json!({
+                "access_token": session.access_token,
+                "refresh_token": session.refresh_token,
+            })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to refresh tokens" })),
+        ),
+    }
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/sign-up/strategy/credentials", post(sign_up))
         .route("/sign-in/strategy/phone", post(sign_in))
         .route("/verification/send-otp", post(send_otp))
         .route("/verification/verify-otp", post(verify_otp))
+        .route("/refresh", post(refresh_tokens))
 }

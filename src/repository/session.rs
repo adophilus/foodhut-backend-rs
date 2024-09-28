@@ -15,17 +15,23 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, user_id: String) -> Result<Session, Error> {
-    let id = Ulid::new().to_string();
-    let access_token = id.clone();
-    let refresh_token = Ulid::new().to_string();
+pub struct SessionCreationPayload {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub user_id: String,
+}
+
+pub async fn create(
+    db: DatabaseConnection,
+    payload: SessionCreationPayload,
+) -> Result<Session, Error> {
     match sqlx::query_as!(
         Session,
         "INSERT INTO sessions (id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-        id,
-        user_id,
-        access_token,
-        refresh_token,
+        Ulid::new().to_string(),
+        payload.user_id,
+        payload.access_token,
+        payload.refresh_token,
         Utc::now().naive_utc() + chrono::Duration::days(15),
         Utc::now().naive_utc() + chrono::Duration::days(30)
     )
@@ -37,7 +43,7 @@ pub async fn create(db: DatabaseConnection, user_id: String) -> Result<Session, 
         Err(e) => {
             log::error!(
                 "Error occurred while creating a new session for user with id {}: {}",
-                user_id,
+                payload.user_id,
                 e
             );
             Err(Error::UnexpectedError)
@@ -95,6 +101,47 @@ pub async fn find_by_refresh_token(
         log::error!(
             "Error occurred while fetching session with refresh_token {}: {}",
             refresh_token,
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
+pub struct UpdateSessionPayload {
+    pub access_token: String,
+    pub refresh_token: String,
+}
+
+pub async fn update_by_id(
+    db: DatabaseConnection,
+    id: String,
+    payload: UpdateSessionPayload,
+) -> Result<Session, Error> {
+    sqlx::query_as!(
+        Session,
+        "
+        UPDATE sessions
+        SET
+            access_token = $1,
+            refresh_token = $2,
+            access_token_expires_at = $3,
+            refresh_token_expires_at = $4
+        WHERE
+            id = $5
+        RETURNING *
+        ",
+        payload.access_token,
+        payload.refresh_token,
+        Utc::now().naive_utc() + chrono::Duration::days(15),
+        Utc::now().naive_utc() + chrono::Duration::days(30),
+        id
+    )
+    .fetch_one(&db.pool)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to update session by id: {} {}",
+            id,
             err
         );
         Error::UnexpectedError
