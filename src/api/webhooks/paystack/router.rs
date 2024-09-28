@@ -38,6 +38,7 @@ enum PaystackEvent {
     CustomerIdentificationSuccessful(CustomerIdentificationSuccessful),
     #[serde(rename = "customeridentification.failed")]
     CustomerIdentificationFailed(CustomerIdentificationFailed),
+    // TODO: add two more events for the dedicated account creation
 }
 
 fn verify_header(ctx: Arc<Context>, header: String, body: String) -> bool {
@@ -120,7 +121,7 @@ async fn handle_customer_identification_failed(
             }
         };
 
-    utils::notification::send(
+    let _ = utils::notification::send(
         ctx.clone(),
         utils::notification::Notification::customer_identification_failed(user, payload.reason),
         utils::notification::Backend::Email,
@@ -132,9 +133,17 @@ async fn handle_customer_identification_failed(
 
 async fn handle_customer_identification_successful(
     ctx: Arc<types::Context>,
-    payload: CustomerIdentificationSuccessful
+    payload: CustomerIdentificationSuccessful,
 ) -> impl IntoResponse {
-    unimplemented!()
+    let user = match repository::user::find_by_email(ctx.db_conn.clone(), payload.email).await {
+        Ok(Some(user)) => user,
+        _ => return StatusCode::INTERNAL_SERVER_ERROR,
+    };
+
+    match utils::wallet::finalize_bank_account_creation(ctx.clone(), user.clone()).await {
+        Ok(_) => StatusCode::OK,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
 }
 
 async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Response {

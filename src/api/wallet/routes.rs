@@ -29,9 +29,9 @@ async fn create_bank_account(
     auth: Auth,
     Json(payload): Json<CreateWalletAccountPayload>,
 ) -> impl IntoResponse {
-    utils::wallet::create_bank_account(
+    utils::wallet::initialize_bank_account_creation(
         ctx.clone(),
-        utils::wallet::CreateBankAccountPayload {
+        utils::wallet::InitializeBankAccountCreationPayload {
             bvn: payload.bvn,
             bank_code: payload.bank_code,
             account_number: payload.account_number,

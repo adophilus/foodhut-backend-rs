@@ -14,6 +14,8 @@ use crate::utils::{
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PaystackWalletDetails {
+    pub customer_id: String,
+    pub customer_code: String,
     pub account_number: String,
     pub bank_identifier: String,
 }

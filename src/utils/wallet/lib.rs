@@ -10,7 +10,7 @@ use crate::{
         order::{self, Order},
         transaction,
         user::User,
-        wallet,
+        wallet::{self, WalletBackend},
     },
     types,
     utils::database::DatabaseConnection,
@@ -27,7 +27,7 @@ pub enum CreationError {
     UnexpectedError,
 }
 
-pub struct CreateBankAccountPayload {
+pub struct InitializeBankAccountCreationPayload {
     pub bvn: String,
     pub bank_code: String,
     pub account_number: String,
@@ -35,17 +35,22 @@ pub struct CreateBankAccountPayload {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct CreateAccountServiceResponse {
+pub struct InitializeBankAccountCreationServiceResponse {
     status: bool,
     message: String,
 }
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub async fn create_bank_account(
+pub async fn initialize_bank_account_creation(
     ctx: Arc<types::Context>,
-    payload: CreateBankAccountPayload,
+    payload: InitializeBankAccountCreationPayload,
 ) -> std::result::Result<String, CreationError> {
+    let _wallet = wallet::find_by_owner_id(ctx.db_conn.clone(), payload.user.id.clone())
+        .await
+        .map_err(|_| CreationError::UnexpectedError)?
+        .ok_or(CreationError::UnexpectedError)?;
+
     let mut headers = HeaderMap::new();
     headers.insert(
         "Authorization",
@@ -54,8 +59,12 @@ pub async fn create_bank_account(
             .expect("Invalid authorization header value"),
     );
 
+    let customer_code = match _wallet.metadata.backend {
+        WalletBackend::Paystack(backend) => backend.customer_code.clone()
+    };
+
     let res = reqwest::Client::new()
-        .post("https://api.paystack.co/customer/{customer_code}/identification")
+        .post(format!("https://api.paystack.co/customer/{}/identification", customer_code))
         .headers(headers)
         .body(
             json!({
@@ -87,13 +96,84 @@ pub async fn create_bank_account(
         CreationError::UnexpectedError
     })?;
 
-    let server_response = serde_json::from_str::<CreateAccountServiceResponse>(
+    let server_response = serde_json::from_str::<InitializeBankAccountCreationServiceResponse>(
         text_response.as_str(),
     )
     .map_err(|err| {
         tracing::error!("Failed to decode payment service server response: {}", err);
         CreationError::UnexpectedError
     })?;
+
+    if !server_response.status {
+        return Err(CreationError::CreationFailed(server_response.message));
+    }
+
+    Ok(server_response.message)
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FinalizeBankAccountCreationServiceResponse {
+    status: bool,
+    message: String,
+}
+
+pub async fn finalize_bank_account_creation(
+    ctx: Arc<types::Context>,
+    user: User,
+) -> std::result::Result<String, CreationError> {
+    let _wallet = wallet::find_by_owner_id(ctx.db_conn.clone(), user.id.clone())
+        .await
+        .map_err(|_| CreationError::UnexpectedError)?
+        .ok_or(CreationError::UnexpectedError)?;
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "Authorization",
+        format!("Bearer {}", ctx.payment.secret_key.clone())
+            .try_into()
+            .expect("Invalid authorization header value"),
+    );
+
+    let customer_code = match _wallet.metadata.backend {
+        WalletBackend::Paystack(backend) => backend.customer_code.clone()
+    };
+
+    let res = reqwest::Client::new()
+        .post(format!(
+            "https://api.paystack.co/customer/{}/identification",
+            customer_code.clone()
+        ))
+        .headers(headers)
+        .body(
+            json!({
+                "customer": customer_code.clone(),
+                "preferred_bank": "titan-paystack",
+            })
+            .to_string(),
+        )
+        .send()
+        .await
+        .map_err(|err| {
+            tracing::error!("Failed to communicate with payment service: {}", err);
+            CreationError::UnexpectedError
+        })?;
+
+    let status = res.status();
+    if status != StatusCode::OK {
+        tracing::error!("Got an error response from the payment service: {}", status);
+        return Err(CreationError::UnexpectedError);
+    }
+
+    let text_response = res.text().await.map_err(|err| {
+        tracing::error!("Failed to get payment service text response: {}", err);
+        CreationError::UnexpectedError
+    })?;
+
+    let server_response =
+        serde_json::from_str::<FinalizeBankAccountCreationServiceResponse>(text_response.as_str())
+            .map_err(|err| {
+                tracing::error!("Failed to decode payment service server response: {}", err);
+                CreationError::UnexpectedError
+            })?;
 
     if !server_response.status {
         return Err(CreationError::CreationFailed(server_response.message));
