@@ -24,14 +24,14 @@ struct CreateWalletAccountPayload {
     pub account_number: String,
 }
 
-async fn create_wallet_account(
+async fn create_bank_account(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
     Json(payload): Json<CreateWalletAccountPayload>,
 ) -> impl IntoResponse {
-    utils::wallet::create_account(
+    utils::wallet::create_bank_account(
         ctx.clone(),
-        utils::wallet::CreateAccountPayload {
+        utils::wallet::CreateBankAccountPayload {
             bvn: payload.bvn,
             bank_code: payload.bank_code,
             account_number: payload.account_number,
@@ -74,7 +74,7 @@ async fn get_wallet_by_id(
 
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
-        .route("/create-account", post(create_wallet_account))
+        .route("/bank-account", post(create_bank_account))
         .route("/profile", get(get_wallet_by_profile))
         .route("/:id", get(get_wallet_by_id))
 }

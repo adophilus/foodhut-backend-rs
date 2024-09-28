@@ -1,7 +1,4 @@
-use std::ops::Deref;
-
 use chrono::{NaiveDate, NaiveDateTime};
-use log;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -21,7 +18,7 @@ impl From<Option<serde_json::Value>> for ProfilePicture {
     }
 }
 
-// TODO: make all functions here return errors where applicable
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum Role {
@@ -79,7 +76,7 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateUserPayload) -> Result<User, Error> {
+pub async fn create(db: DatabaseConnection, payload: CreateUserPayload) -> Result<User> {
     match sqlx::query_as!(
         User,
         "
@@ -97,74 +94,86 @@ pub async fn create(db: DatabaseConnection, payload: CreateUserPayload) -> Resul
     .await {
         Ok(user) => Ok(user),
         Err(err) => {
-            log::error!("Error occured while creating a user account: {}", err);
+            tracing::error!("Error occured while creating a user account: {}", err);
             Err(Error::UnexpectedError)
         }
     }
 }
 
-pub async fn find_by_id(db: DatabaseConnection, id: String) -> Option<User> {
+pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<User>> {
     sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", id)
         .fetch_optional(&db.pool)
         .await
         .map_err(|err| {
-            log::error!("Error occurred while fetching user with id {}: {}", id, err);
+            tracing::error!("Error occurred while fetching user with id {}: {}", id, err);
+            Error::UnexpectedError
         })
-        .unwrap_or(None)
 }
 
-pub async fn find_by_email(db: DatabaseConnection, email: String) -> Option<User> {
-    let user = sqlx::query_as!(User, "SELECT * FROM users WHERE email = $1", email)
+pub async fn find_by_email(db: DatabaseConnection, email: String) -> Result<Option<User>> {
+    sqlx::query_as!(User, "SELECT * FROM users WHERE email = $1", email)
         .fetch_optional(&db.pool)
-        .await;
-
-    match user {
-        Ok(maybe_user) => maybe_user,
-        Err(e) => {
-            log::error!("Error occurred in find_by_email: {}", e);
-            None
-        }
-    }
+        .await
+    .map_err(|err| {
+            tracing::error!("Error occurred in find_by_email: {}", err);
+        Error::UnexpectedError
+        })
 }
 
-pub async fn find_by_phone_number(db: DatabaseConnection, phone_number: String) -> Option<User> {
-    let user = sqlx::query_as!(
+pub async fn find_by_phone_number(db: DatabaseConnection, phone_number: String) -> Result<Option<User>> {
+     sqlx::query_as!(
         User,
         "SELECT * FROM users WHERE phone_number = $1",
         phone_number
     )
     .fetch_optional(&db.pool)
-    .await;
+    .await
+    .map_err(|err| {
+            tracing::error!("Error occurred in find_by_phone_number: {}", err);
+            Error::UnexpectedError
+    })
+}
 
-    match user {
-        Ok(maybe_user) => maybe_user,
-        Err(e) => {
-            log::error!("Error occurred in find_by_phone_number: {}", e);
-            None
-        }
-    }
+pub struct FindByEmailOrPhoneNumber {
+    pub email: String,
+    pub phone_number: String
+}
+
+pub async fn find_by_email_or_phone_number(
+    db: DatabaseConnection, 
+    payload: FindByEmailOrPhoneNumber
+) -> Result<Option<User>> {
+     sqlx::query_as!(
+        User,
+        "SELECT * FROM users WHERE email = $1 OR phone_number = $2",
+         payload.email,
+        payload.phone_number
+    )
+    .fetch_optional(&db.pool)
+    .await
+    .map_err(|err| {
+            tracing::error!("Error occurred in find_by_phone_number: {}", err);
+            Error::UnexpectedError
+    })
 }
 
 pub async fn verify_by_phone_number(
     db: DatabaseConnection,
     phone_number: String,
-) -> Result<(), Error> {
-    match sqlx::query!(
+) -> Result<()> {
+    sqlx::query!(
         "UPDATE users SET is_verified = true WHERE phone_number = $1",
         phone_number
     )
     .execute(&db.pool)
     .await
-    {
-        Err(e) => {
-            log::error!(
-                "Error occurred while trying to clean up verified OTP: {}",
-                e
+    .map_err(|err|{
+            tracing::error!(
+                "Error occurred while trying to verify user by phone number: {}",
+                err
             );
-            return Err(Error::UnexpectedError);
-        }
-        _ => Ok(()),
-    }
+            Error::UnexpectedError
+    }).map(|_|{})
 }
 
 pub struct UpdateUserPayload {
@@ -181,8 +190,8 @@ pub async fn update_by_id(
     db: DatabaseConnection,
     id: String,
     payload: UpdateUserPayload,
-) -> Result<(), Error> {
-    match sqlx::query!(
+) -> Result<()> {
+    sqlx::query!(
         "
             UPDATE users SET
                 email = COALESCE($1, email),
@@ -210,21 +219,19 @@ pub async fn update_by_id(
     )
     .execute(&db.pool)
     .await
-    {
-        Err(e) => {
-            log::error!(
+    .map_err(|err|{
+            tracing::error!(
                 "Error occurred while trying to update a user by id {}: {}",
                 id,
-                e
+                err
             );
-            return Err(Error::UnexpectedError);
-        }
-        _ => Ok(()),
-    }
+            Error::UnexpectedError
+        })
+            .map(|_|{})
 }
 
-pub async fn set_role_by_id(db: DatabaseConnection, id: String, role: Role) -> Result<(), Error> {
-    match sqlx::query!(
+pub async fn set_role_by_id(db: DatabaseConnection, id: String, role: Role) -> Result<()> {
+    sqlx::query!(
         "
             UPDATE users SET
                 role = COALESCE($1, role),
@@ -237,17 +244,15 @@ pub async fn set_role_by_id(db: DatabaseConnection, id: String, role: Role) -> R
     )
     .execute(&db.pool)
     .await
-    {
-        Err(e) => {
-            log::error!(
+    .map_err(|err|{
+            tracing::error!(
                 "Error occurred while trying to set a user's role by id {}: {}",
                 id,
-                e
+                err
             );
-            return Err(Error::UnexpectedError);
-        }
-        _ => Ok(()),
-    }
+            Error::UnexpectedError
+        })
+            .map(|_|{})
 }
 
 pub fn is_admin(user: &User) -> bool {

@@ -10,15 +10,30 @@ use axum::{
     Router,
 };
 use chrono::NaiveDate;
+use regex::Regex;
 use serde::Deserialize;
 use serde_json::json;
+use std::borrow::Cow;
 use std::sync::Arc;
-use validator::Validate;
+use validator::{Validate, ValidationError};
+
+fn validate_phone_number(phone_number: &str) -> Result<(), ValidationError> {
+    let regex = Regex::new(r"^\+234\d{10}$").expect("Invalid phone number regex");
+    match regex.is_match(phone_number) {
+        true => Ok(()),
+        false => Err(
+            ValidationError::new("INVALID_CLOSING_TIME").with_message(Cow::from(
+                r"Phone number must be a nigerian phone number in international format (e.g: +234...)",
+            )),
+        ),
+    }
+}
 
 #[derive(Deserialize, Validate)]
 struct SignUpPayload {
     #[validate(email(code = "INVALID_USER_EMAIL", message = "Invalid email address"))]
     email: String,
+    #[validate(custom(code = "INVALID_PHONE_NUMBER", function = "validate_phone_number"))]
     phone_number: String,
     first_name: String,
     last_name: String,
@@ -33,17 +48,32 @@ async fn sign_up(
         return utils::validation::into_response(errors);
     }
 
-    match (
-        repository::user::find_by_email(ctx.db_conn.clone(), payload.email.clone()).await,
-        repository::user::find_by_phone_number(ctx.db_conn.clone(), payload.phone_number.clone())
-            .await,
-    ) {
-        (None, None) => (),
-        (Some(_), _) => return (StatusCode::CONFLICT, Json(json!({"error": "Email taken"}))),
-        (_, Some(_)) => {
+    match repository::user::find_by_email_or_phone_number(
+        ctx.db_conn.clone(),
+        repository::user::FindByEmailOrPhoneNumber {
+            email: payload.email.clone(),
+            phone_number: payload.phone_number.clone(),
+        },
+    )
+    .await
+    {
+        Ok(None) => (),
+        Ok(Some(user)) => {
+            if user.email == payload.email {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(json!({ "error": "Email already in use" })),
+                );
+            }
             return (
                 StatusCode::CONFLICT,
-                Json(json!({ "error": "Phone number taken"})),
+                Json(json!({ "error": "Phone number already in use" })),
+            );
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to fetch user" })),
             )
         }
     };
@@ -104,12 +134,18 @@ async fn send_otp(
     )
     .await
     {
-        Some(user) => user,
-        None => {
+        Ok(Some(user)) => user,
+        Ok(None) => {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({ "error" : "User not found"})),
             );
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to fetch user" })),
+            )
         }
     };
 
@@ -152,8 +188,14 @@ async fn verify_otp(
     )
     .await
     {
-        Some(user) => user,
-        None => {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "User not found" })),
+            )
+        }
+        Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": "Failed to fetch user account" })),
@@ -222,12 +264,18 @@ async fn sign_in(
     )
     .await
     {
-        Some(user) => user,
-        None => {
+        Ok(Some(user)) => user,
+        Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
                 Json(json!({ "error": "User not found"})),
             );
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to fetch user" })),
+            )
         }
     };
 
@@ -261,7 +309,7 @@ struct RefreshTokensPayload {
 
 async fn refresh_tokens(
     State(ctx): State<Arc<Context>>,
-    Json(payload): Json<RefreshTokensPayload>
+    Json(payload): Json<RefreshTokensPayload>,
 ) -> impl IntoResponse {
     match utils::auth::regenerate_tokens_for_session(ctx.clone(), payload.token).await {
         Ok(session) => (

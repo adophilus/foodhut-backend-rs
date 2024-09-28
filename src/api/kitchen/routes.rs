@@ -32,9 +32,9 @@ struct CreateKitchenPayload {
     #[validate(custom(function = "validate_kitchen_type"))]
     #[serde(rename = "type")]
     pub type_: String,
-    #[validate(custom(function = "validate_opening_time"))]
+    #[validate(custom(code = "INVALID_OPENING_TIME", function = "validate_opening_time"))]
     pub opening_time: String,
-    #[validate(custom(function = "validate_closing_time"))]
+    #[validate(custom(code = "INVALID_CLOSING_TIME", function = "validate_closing_time"))]
     pub closing_time: String,
     pub preparation_time: String,
     pub delivery_time: String,

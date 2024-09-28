@@ -25,6 +25,12 @@ pub mod types {
     pub struct VerificationOtpRequested {
         pub user: repository::user::User,
     }
+
+    #[derive(Clone)]
+    pub struct CustomerIdentificationFailed {
+        pub user: repository::user::User,
+        pub reason: String,
+    }
 }
 
 #[derive(Clone)]
@@ -32,6 +38,7 @@ pub enum Notification {
     Registered(types::Registered),
     OrderPaid(types::OrderPaid),
     VerificationOtpRequested(types::VerificationOtpRequested),
+    CustomerIdentificationFailed(types::CustomerIdentificationFailed),
 }
 
 impl Notification {
@@ -41,6 +48,13 @@ impl Notification {
 
     pub fn verification_otp_requested(user: repository::user::User) -> Self {
         Notification::VerificationOtpRequested(types::VerificationOtpRequested { user })
+    }
+
+    pub fn customer_identification_failed(user: repository::user::User, reason: String) -> Self {
+        Notification::CustomerIdentificationFailed(types::CustomerIdentificationFailed {
+            user,
+            reason,
+        })
     }
 }
 

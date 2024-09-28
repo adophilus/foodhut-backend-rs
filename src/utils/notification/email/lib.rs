@@ -1,4 +1,5 @@
 use super::super::{Error, Notification, Result};
+use crate::repository::user::User;
 use crate::types;
 use crate::utils::notification;
 use lettre::{
@@ -120,17 +121,21 @@ pub mod jobs {
 pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Result<()> {
     match notification.clone() {
         Notification::Registered(n) => send_registered_email(ctx, n).await,
-        Notification::OrderPaid(n) => {
-            unimplemented!()
+        Notification::OrderPaid(n) => unimplemented!(),
+        Notification::VerificationOtpRequested(n) => unimplemented!(),
+        Notification::CustomerIdentificationFailed(n) => {
+            send_customer_identification_failed_email(ctx, n).await
         }
-        notification::Notification::VerificationOtpRequested(n) => unimplemented!(),
     }
 }
 
-async fn send_registered_email(
-    ctx: Arc<types::Context>,
-    _notification: notification::types::Registered,
-) -> Result<()> {
+struct SendEmailPayload {
+    user: User,
+    body: String,
+    subject: String,
+}
+
+async fn send_email(ctx: Arc<types::Context>, payload: SendEmailPayload) -> Result<()> {
     let email = Message::builder()
         .from(
             format!(
@@ -143,18 +148,15 @@ async fn send_registered_email(
         )
         .to(format!(
             "{} {} <{}>",
-            _notification.user.first_name.clone(),
-            _notification.user.last_name.clone(),
-            _notification.user.email.clone()
+            payload.user.first_name.clone(),
+            payload.user.last_name.clone(),
+            payload.user.email.clone()
         )
         .parse()
         .unwrap())
-        .subject("Welcome to FoodHut")
+        .subject(payload.subject)
         .header(ContentType::TEXT_HTML)
-        .body(format!(
-            "Greetings {}, welcome to FoodHut",
-            _notification.user.first_name
-        ))
+        .body(payload.body)
         .unwrap();
 
     let access_token = {
@@ -178,4 +180,40 @@ async fn send_registered_email(
             Err(Error::NotSent)
         }
     }
+}
+
+async fn send_registered_email(
+    ctx: Arc<types::Context>,
+    _notification: notification::types::Registered,
+) -> Result<()> {
+    send_email(
+        ctx,
+        SendEmailPayload {
+            user: _notification.user.clone(),
+            subject: String::from("Welcome to FoodHut"),
+            body: format!(
+                "Greetings {}, welcome to FoodHut",
+                _notification.user.first_name
+            ),
+        },
+    )
+    .await
+}
+
+async fn send_customer_identification_failed_email(
+    ctx: Arc<types::Context>,
+    _notification: notification::types::CustomerIdentificationFailed,
+) -> Result<()> {
+    send_email(
+        ctx,
+        SendEmailPayload {
+            user: _notification.user.clone(),
+            subject: String::from("Virtual Account Creation Request Failed"),
+            body: format!(
+                "Dear customer, you request to create a virtual account failed because: {}",
+                _notification.reason,
+            ),
+        },
+    )
+    .await
 }

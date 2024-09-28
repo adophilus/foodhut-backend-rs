@@ -41,6 +41,7 @@ async fn get_user_from_header(
         .map_err(|_| Error::InvalidSession)?;
     repository::user::find_by_id(ctx.db_conn.clone(), session.user_id)
         .await
+        .map_err(|_| Error::InvalidSession)?
         .ok_or(Error::InvalidSession)
 }
 

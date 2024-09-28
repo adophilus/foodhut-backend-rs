@@ -20,8 +20,9 @@ pub struct Otp {
 
 pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Result<Otp> {
     match notification.clone() {
-        Notification::Registered(n) => unimplemented!(),
-        Notification::OrderPaid(n) => unimplemented!(),
+        Notification::Registered(_) => unimplemented!(),
+        Notification::OrderPaid(_) => unimplemented!(),
+        Notification::CustomerIdentificationFailed(_) => unimplemented!(),
         notification::Notification::VerificationOtpRequested(n) => {
             send_verification_otp(ctx, n).await
         }

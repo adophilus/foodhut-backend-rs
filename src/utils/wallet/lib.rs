@@ -27,7 +27,7 @@ pub enum CreationError {
     UnexpectedError,
 }
 
-pub struct CreateAccountPayload {
+pub struct CreateBankAccountPayload {
     pub bvn: String,
     pub bank_code: String,
     pub account_number: String,
@@ -42,9 +42,9 @@ pub struct CreateAccountServiceResponse {
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub async fn create_account(
+pub async fn create_bank_account(
     ctx: Arc<types::Context>,
-    payload: CreateAccountPayload,
+    payload: CreateBankAccountPayload,
 ) -> std::result::Result<String, CreationError> {
     let mut headers = HeaderMap::new();
     headers.insert(

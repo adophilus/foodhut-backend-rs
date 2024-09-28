@@ -38,10 +38,14 @@ async fn get_user_by_id(
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     match repository::user::find_by_id(ctx.db_conn.clone(), id).await {
-        Some(user) => (StatusCode::OK, Json(json!(user))),
-        None => (
+        Ok(Some(user)) => (StatusCode::OK, Json(json!(user))),
+        Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "User not found"})),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to fetch user" })),
         ),
     }
 }
