@@ -122,9 +122,15 @@ pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Resul
     match notification.clone() {
         Notification::Registered(n) => send_registered_email(ctx, n).await,
         Notification::OrderPaid(n) => unimplemented!(),
-        Notification::VerificationOtpRequested(n) => unimplemented!(),
+        Notification::VerificationOtpRequested(n) => Err(Error::InvalidNotification),
         Notification::CustomerIdentificationFailed(n) => {
             send_customer_identification_failed_email(ctx, n).await
+        }
+        Notification::BankAccountCreationFailed(n) => {
+            send_bank_account_creation_failed_email(ctx, n).await
+        }
+        Notification::BankAccountCreationSuccessful(n) => {
+            send_bank_account_creation_successful_email(ctx, n).await
         }
     }
 }
@@ -213,6 +219,36 @@ async fn send_customer_identification_failed_email(
                 "Dear customer, you request to create a virtual account failed because: {}",
                 _notification.reason,
             ),
+        },
+    )
+    .await
+}
+
+async fn send_bank_account_creation_failed_email(
+    ctx: Arc<types::Context>,
+    _notification: notification::types::BankAccountCreationFailed,
+) -> Result<()> {
+    send_email(
+        ctx,
+        SendEmailPayload {
+            user: _notification.user.clone(),
+            subject: String::from("Virtual Account Creation Failed"),
+            body: String::from("Dear customer, your virtual account couldn't be created"),
+        },
+    )
+    .await
+}
+
+async fn send_bank_account_creation_successful_email(
+    ctx: Arc<types::Context>,
+    _notification: notification::types::BankAccountCreationSuccessful,
+) -> Result<()> {
+    send_email(
+        ctx,
+        SendEmailPayload {
+            user: _notification.user.clone(),
+            subject: String::from("Virtual Account Created"),
+            body: String::from("Dear customer, your virtual account has been created!"),
         },
     )
     .await

@@ -13,11 +13,31 @@ use crate::utils::{
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PaystackWalletDetails {
-    pub customer_id: String,
-    pub customer_code: String,
+pub struct PaystackWalletDetailsDedicatedAccountBank {
+    pub id: i32,
+    pub name: String,
+    pub slug: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PaystackWalletDetailsDedicatedAccount {
+    pub id: i32,
+    pub bank: PaystackWalletDetailsDedicatedAccountBank,
+    pub account_name: String,
     pub account_number: String,
-    pub bank_identifier: String,
+    pub active: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PaystackWalletDetailsCustomer {
+    pub id: String,
+    pub code: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PaystackWalletDetails {
+    pub customer: PaystackWalletDetailsCustomer,
+    pub dedicated_account: Option<PaystackWalletDetailsDedicatedAccount>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -247,4 +267,35 @@ pub async fn update_by_id(
         }
         _ => Ok(()),
     }
+}
+
+pub type SetDedicatedBankAccountDetailsByOwnerIdPayload = PaystackWalletDetailsDedicatedAccount;
+
+pub async fn set_dedicated_bank_account_details_by_owner_id(
+    db: DatabaseConnection,
+    id: String,
+    payload: SetDedicatedBankAccountDetailsByOwnerIdPayload,
+) -> Result<Wallet, Error> {
+    sqlx::query_as!(
+        Wallet,
+        "
+        UPDATE wallets
+        SET
+            metadata = $1
+        WHERE
+            owner_id = $2
+        RETURNING *
+        ",
+        serde_json::to_value(payload).unwrap(),
+        id
+    )
+    .fetch_one(&db.pool)
+    .await
+    .map_err(|e| {
+        log::error!(
+            "Error occurred while trying to set dedicated bank account details by owner id: {}",
+            e
+        );
+        Error::UnexpectedError
+    })
 }

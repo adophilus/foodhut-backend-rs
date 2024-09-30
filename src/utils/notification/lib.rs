@@ -31,6 +31,16 @@ pub mod types {
         pub user: repository::user::User,
         pub reason: String,
     }
+
+    #[derive(Clone)]
+    pub struct BankAccountCreationSuccessful {
+        pub user: repository::user::User,
+    }
+
+    #[derive(Clone)]
+    pub struct BankAccountCreationFailed {
+        pub user: repository::user::User,
+    }
 }
 
 #[derive(Clone)]
@@ -39,6 +49,8 @@ pub enum Notification {
     OrderPaid(types::OrderPaid),
     VerificationOtpRequested(types::VerificationOtpRequested),
     CustomerIdentificationFailed(types::CustomerIdentificationFailed),
+    BankAccountCreationSuccessful(types::BankAccountCreationSuccessful),
+    BankAccountCreationFailed(types::BankAccountCreationFailed),
 }
 
 impl Notification {
@@ -56,10 +68,19 @@ impl Notification {
             reason,
         })
     }
+
+    pub fn bank_account_creation_successful(user: repository::user::User) -> Self {
+        Notification::BankAccountCreationSuccessful(types::BankAccountCreationSuccessful { user })
+    }
+
+    pub fn bank_account_creation_failed(user: repository::user::User) -> Self {
+        Notification::BankAccountCreationFailed(types::BankAccountCreationFailed { user })
+    }
 }
 
 pub enum Error {
     NotSent,
+    InvalidNotification,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
