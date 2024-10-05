@@ -5,7 +5,7 @@ use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::types::BigDecimal;
+use sqlx::{types::BigDecimal, Database};
 use std::{convert::Into, str::FromStr};
 use ulid::Ulid;
 
@@ -127,6 +127,7 @@ pub struct OrderItem {
     pub price: BigDecimal,
     pub meal_id: String,
     pub order_id: String,
+    pub kitchen_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -267,6 +268,27 @@ pub async fn find_by_id_and_owner_id(
         Ok(maybe_order) => Ok(maybe_order),
         Err(err) => {
             tracing::error!("Error occurred while trying to fetch order by id: {}", err);
+            Err(Error::UnexpectedError)
+        }
+    }
+}
+
+pub async fn find_by_kitchen_id(db: DatabaseConnection, id: String) -> Result<Vec<Order>, Error> {
+    match sqlx::query_as!(
+        Order,
+        "SELECT FROM order_items WHERE kitchen_id = $1 LEFT JOIN orders ON order_id = orders.id",
+        id
+    )
+    .fetch_all(&db.pool)
+    .await
+    {
+        Ok(orders) => Ok(orders),
+        Err(err) => {
+            tracing::error!(
+                "Error occurred while trying to fetch many orders by kitchen id {}: {}",
+                id,
+                err
+            );
             Err(Error::UnexpectedError)
         }
     }

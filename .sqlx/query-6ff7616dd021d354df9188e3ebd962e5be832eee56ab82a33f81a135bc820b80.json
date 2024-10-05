@@ -37,6 +37,11 @@
         "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 7,
+        "name": "kitchen_id",
+        "type_info": "Varchar"
       }
     ],
     "parameters": {
@@ -51,7 +56,8 @@
       false,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
   "hash": "6ff7616dd021d354df9188e3ebd962e5be832eee56ab82a33f81a135bc820b80"

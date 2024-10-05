@@ -1,0 +1,1 @@
+ALTER TABLE order_items DROP COLUMN kitchen_id;
