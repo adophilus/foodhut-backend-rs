@@ -115,10 +115,14 @@ pub struct Order {
     pub total: BigDecimal,
     pub delivery_address: String,
     pub dispatch_rider_note: String,
+    pub items: OrderItems,
     pub cart_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct OrderItems(pub Vec<OrderItem>);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrderItem {
@@ -130,6 +134,16 @@ pub struct OrderItem {
     pub kitchen_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+}
+
+impl From<Option<serde_json::Value>> for OrderItems {
+    fn from(v: Option<serde_json::Value>) -> Self {
+        match v {
+            Some(json) => serde_json::de::from_str::<_>(json.to_string().as_ref())
+                .expect("Invalid order items list"),
+            None => unreachable!(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -154,84 +168,97 @@ pub enum Error {
 }
 
 pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Result<Order, Error> {
-    // TODO: are these fields for fancy?
-    let delivery_fee = BigDecimal::from_i32(0).unwrap();
-    let service_fee = BigDecimal::from_i32(0).unwrap();
-    let meals = match cart::get_meals_from_cart_by_id(db.clone(), payload.cart.id.clone()).await {
-        Ok(meals) => meals,
-        Err(_) => return Err(Error::UnexpectedError),
-    };
-    let meal_ids = meals
-        .clone()
-        .into_iter()
-        .map(|meal| meal.id)
-        .collect::<Vec<_>>();
-    let sub_total = meals
-        .clone()
-        .into_iter()
-        .map(|meal| meal.price)
-        .reduce(|acc, price| acc + price)
-        .unwrap();
-    let total = sub_total.clone();
-
-    // FIX: should make use of a transaction
-
-    let order = match sqlx::query_as!(
+    // TODO: service fee and delivery fee calculation required (in query)
+    sqlx::query_as!(
         Order,
         "
-        INSERT INTO orders (
-            id,
-            status,
-            payment_method,
-            delivery_fee,
-            service_fee,
-            sub_total,
-            total,
-            delivery_address,
-            dispatch_rider_note,
-            cart_id
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        RETURNING *
+            WITH active_cart AS (
+                SELECT * FROM carts WHERE id = $2
+            ), cart_items AS (
+                SELECT * FROM JSON_TO_RECORDSET((SELECT active_cart.items FROM active_cart)) AS (meal_id VARCHAR, quantity NUMERIC)
+            ),
+            meals_in_cart AS (
+                SELECT meals.*, cart_items.quantity AS quantity FROM cart_items INNER JOIN meals ON cart_items.meal_id = meals.id
+            ),
+            sub_total_calculation AS (
+                SELECT SUM(meals_in_cart.price * meals_in_cart.quantity) AS sub_total 
+                FROM meals_in_cart
+            ),
+            inserted_order AS (
+                INSERT INTO orders (
+                    id,
+                    status,
+                    payment_method,
+                    delivery_fee,
+                    service_fee,
+                    sub_total,
+                    total,
+                    delivery_address,
+                    dispatch_rider_note,
+                    cart_id
+                )
+                SELECT 
+                    $1,
+                    $3,
+                    $4,
+                    0,
+                    0,
+                    sub_total_calculation.sub_total,
+                    sub_total_calculation.sub_total + 0,
+                    $5,
+                    $6,
+                    $2
+                FROM sub_total_calculation
+                RETURNING *
+            ),
+            inserted_items AS (
+                INSERT INTO order_items (status, price, meal_id, order_id, kitchen_id)
+                SELECT 
+                    $3,
+                    meals_in_cart.price,
+                    meals_in_cart.id,
+                    inserted_order.id,
+                    meals_in_cart.kitchen_id
+                FROM meals_in_cart
+                CROSS JOIN inserted_order
+                RETURNING *
+            )
+            SELECT 
+                inserted_order.*,
+                COALESCE(JSON_AGG(inserted_items.*), '[]')::json AS items
+            FROM inserted_order
+            LEFT JOIN inserted_items ON inserted_order.id = inserted_items.order_id
+            GROUP BY 
+                inserted_order.id, 
+                inserted_order.status,
+                inserted_order.payment_method,
+                inserted_order.delivery_fee,
+                inserted_order.service_fee,
+                inserted_order.sub_total,
+                inserted_order.total,
+                inserted_order.delivery_address,
+                inserted_order.dispatch_rider_note,
+                inserted_order.cart_id,
+                inserted_order.created_at,
+                inserted_order.updated_at;
         ",
         Ulid::new().to_string(),
+        payload.cart.id,
         OrderStatus::AwaitingPayment.to_string(),
         payload.payment_method.to_string(),
-        delivery_fee,
-        service_fee,
-        sub_total,
-        total,
+        // delivery_fee,
+        // service_fee,
+        // sub_total,
+        // total,
         payload.delivery_address,
         payload.dispatch_rider_note,
-        payload.cart.id
     )
     .fetch_one(&db.pool)
     .await
-    {
-        Ok(order) => order,
-        Err(err) => {
+    .map_err(|e| {
             tracing::error!("Error occurred while trying to create a order: {}", err);
-            return Err(Error::UnexpectedError);
-        }
-    };
-
-    match sqlx::query!("
-        WITH cte_meals AS (SELECT * FROM JSONB_ARRAY_ELEMENTS($1) AS meal_id LEFT JOIN meals ON meal_id#>>'{}' = meals.id)
-        INSERT INTO order_items (status, price, meal_id, order_id)
-        SELECT $2, cte_meals.price, cte_meals.id, $3 FROM cte_meals;
-    ",
-        json!(meal_ids), OrderStatus::AwaitingPayment.to_string(), order.id
-    )
-    .execute(&db.pool)
-    .await {
-        Ok(_) => (),
-        Err(err) => {
-            tracing::error!("Failed to create order items from meal ids {:?}: {}", meal_ids, err);
-            return Err(Error::UnexpectedError);
-        }
-    };
-
-    Ok(order)
+            Error::UnexpectedError
+    })
 }
 
 pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Order>, Error> {
@@ -273,26 +300,26 @@ pub async fn find_by_id_and_owner_id(
     }
 }
 
-pub async fn find_by_kitchen_id(db: DatabaseConnection, id: String) -> Result<Vec<Order>, Error> {
-    match sqlx::query_as!(
-        Order,
-        "SELECT FROM order_items WHERE kitchen_id = $1 LEFT JOIN orders ON order_id = orders.id",
-        id
-    )
-    .fetch_all(&db.pool)
-    .await
-    {
-        Ok(orders) => Ok(orders),
-        Err(err) => {
-            tracing::error!(
-                "Error occurred while trying to fetch many orders by kitchen id {}: {}",
-                id,
-                err
-            );
-            Err(Error::UnexpectedError)
-        }
-    }
-}
+// pub async fn find_by_kitchen_id(db: DatabaseConnection, id: String) -> Result<Vec<Order>, Error> {
+//     match sqlx::query_as!(
+//         Order,
+//         "SELECT FROM order_items WHERE kitchen_id = $1 LEFT JOIN orders ON order_id = orders.id",
+//         id
+//     )
+//     .fetch_all(&db.pool)
+//     .await
+//     {
+//         Ok(orders) => Ok(orders),
+//         Err(err) => {
+//             tracing::error!(
+//                 "Error occurred while trying to fetch many orders by kitchen id {}: {}",
+//                 id,
+//                 err
+//             );
+//             Err(Error::UnexpectedError)
+//         }
+//     }
+// }
 
 pub async fn find_order_items_by_id(
     db: DatabaseConnection,
