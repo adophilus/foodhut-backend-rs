@@ -7,9 +7,12 @@ use std::{
 };
 use ulid::Ulid;
 
-use crate::utils::{
-    database::DatabaseConnection,
-    pagination::{Paginated, Pagination},
+use crate::{
+    define_paginated,
+    utils::{
+        database::DatabaseConnection,
+        pagination::{Paginated, Pagination},
+    },
 };
 
 use super::meal::Meal;
@@ -82,6 +85,8 @@ pub struct Cart {
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
+
+define_paginated!(DatabasePaginatedCart, Cart);
 
 pub struct CreateCartPayload {
     pub owner_id: String,
@@ -191,91 +196,57 @@ struct DatabaseCounted {
     result: DatabaseCountedResult,
 }
 
+#[derive(Deserialize)]
+pub struct Filters {
+    pub owner_id: Option<String>,
+    pub status: Option<CartStatus>,
+}
+
 pub async fn find_many(
     db: DatabaseConnection,
     pagination: Pagination,
+    filters: Filters,
 ) -> Result<Paginated<Cart>, Error> {
-    match sqlx::query_as!(
-        DatabaseCounted,
-        "
+    sqlx::query_as!(
+        DatabasePaginatedCart,
+        r#"
             WITH filtered_data AS (
                 SELECT *
-                FROM carts 
+                FROM carts
+                WHERE
+                    ($3::TEXT IS NULL OR owner_id = $3)
+                    AND ($4::TEXT IS NULL OR status = $4)
                 LIMIT $1
                 OFFSET $2
-            ), 
+            ),
             total_count AS (
                 SELECT COUNT(id) AS total_rows
                 FROM carts
+                WHERE
+                    ($3::TEXT IS NULL OR owner_id = $3)
+                    AND ($4::TEXT IS NULL OR status = $4)
             )
-            SELECT JSONB_BUILD_OBJECT(
-                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
-                'total', (SELECT total_rows FROM total_count)
-            ) AS result
+            SELECT 
+                COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
+                JSONB_BUILD_OBJECT(
+                    'total', (SELECT total_rows FROM total_count),
+                    'per_page', $1,
+                    'page', $2 / $1 + 1
+                ) AS meta
             FROM filtered_data;
-        ",
+        "#,
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
+        filters.owner_id,
+        filters.status.map(|p| p.to_string())
     )
     .fetch_one(&db.pool)
     .await
-    {
-        Ok(counted) => Ok(Paginated::new(
-            counted.result.data,
-            counted.result.total,
-            pagination.page,
-            pagination.per_page,
-        )),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to fetch many carts: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
-}
-
-pub async fn find_many_by_owner_id(
-    db: DatabaseConnection,
-    pagination: Pagination,
-    owner_id: String,
-) -> Result<Paginated<Cart>, Error> {
-    match sqlx::query_as!(
-        DatabaseCounted,
-        "
-            WITH filtered_data AS (
-                SELECT *
-                FROM carts 
-                WHERE owner_id = $3
-                LIMIT $1
-                OFFSET $2
-            ), 
-            total_count AS (
-                SELECT COUNT(id) AS total_rows
-                FROM carts
-            )
-            SELECT JSONB_BUILD_OBJECT(
-                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
-                'total', (SELECT total_rows FROM total_count)
-            ) AS result
-            FROM filtered_data;
-        ",
-        pagination.per_page as i64,
-        ((pagination.page - 1) * pagination.per_page) as i64,
-        owner_id,
-    )
-    .fetch_one(&db.pool)
-    .await
-    {
-        Ok(counted) => Ok(Paginated::new(
-            counted.result.data,
-            counted.result.total,
-            pagination.page,
-            pagination.per_page,
-        )),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to fetch many carts: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
+    .map(DatabasePaginatedCart::into)
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch many carts: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 #[derive(Serialize)]

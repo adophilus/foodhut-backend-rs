@@ -1,7 +1,7 @@
 use std::{borrow::Cow, ops::Deref, sync::Arc};
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -10,6 +10,7 @@ use axum::{
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::json;
+use tower::util::error::optional::None;
 use validator::{Validate, ValidationError};
 
 use crate::{
@@ -19,18 +20,39 @@ use crate::{
     utils::{self, pagination::Pagination},
 };
 
+#[derive(Deserialize)]
+struct Filters {
+    status: Option<repository::order::OrderSimpleStatus>,
+}
+
 async fn get_orders(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
     pagination: Pagination,
+    Query(filters): Query<Filters>,
 ) -> impl IntoResponse {
     let orders = match repository::user::is_admin(&auth.user) {
-        true => repository::order::find_many(ctx.db_conn.clone(), pagination.clone()).await,
-        false => {
-            repository::order::find_many_by_owner_id(
+        true => {
+            repository::order::find_many(
                 ctx.db_conn.clone(),
-                auth.user.id.clone(),
                 pagination.clone(),
+                repository::order::Filters {
+                    owner_id: None,
+                    payment_method: None,
+                    status: filters.status,
+                },
+            )
+            .await
+        }
+        false => {
+            repository::order::find_many(
+                ctx.db_conn.clone(),
+                pagination.clone(),
+                repository::order::Filters {
+                    owner_id: Some(auth.user.id.clone()),
+                    payment_method: None,
+                    status: None,
+                },
             )
             .await
         }

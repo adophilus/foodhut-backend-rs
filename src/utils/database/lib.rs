@@ -33,63 +33,67 @@ pub mod pagination {
     use serde::Deserialize;
     use serde_json::Value;
 
-    #[derive(Deserialize)]
+    #[derive(Debug, Deserialize)]
     pub struct Meta {
         pub total: u32,
         pub per_page: u32,
         pub page: u32,
     }
 
-    #[derive(Deserialize)]
-    pub struct List<T> {
-        pub items: Vec<T>,
-    }
-
-    impl<T: serde::de::DeserializeOwned> From<Option<Value>> for List<T> {
-        fn from(option: Option<Value>) -> Self {
-            match option {
-                Some(value) => {
-                    let items: Vec<T> = serde_json::from_value(value).unwrap_or_else(|_| vec![]);
-                    List { items }
-                }
-                None => List { items: vec![] },
+    impl From<Meta> for crate::utils::pagination::PaginatedMeta {
+        fn from(m: Meta) -> Self {
+            Self {
+                total: m.total,
+                page: m.page,
+                per_page: m.per_page,
             }
         }
     }
 
-    #[derive(Deserialize)]
+    impl From<Option<Value>> for Meta {
+        fn from(option: Option<Value>) -> Self {
+            match option {
+                Some(value) => serde_json::from_value(value).expect("Invalid meta found"),
+                None => unreachable!(),
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct List<T>(pub Vec<T>);
+
+    impl<T: serde::de::DeserializeOwned> From<Option<Value>> for List<T> {
+        fn from(option: Option<Value>) -> Self {
+            match option {
+                Some(value) => serde_json::from_value(value).expect("Invalid items found"),
+                None => unreachable!(),
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
     pub struct Paginated<T> {
-        pub items: List<T>,
+        pub items: Vec<T>,
         pub meta: Meta,
     }
 }
 
 #[macro_export]
 macro_rules! define_paginated {
-    ($name:ident) => {
+    ($name:ident, $type:ty) => {
         #[derive(Debug, Deserialize)]
-        pub struct concat_idents!(DatabasePaginated, $name) {
-            pub items: List<$name>,
-            pub meta: Meta,
+        pub struct $name {
+            pub items: crate::utils::database::pagination::List<$type>,
+            pub meta: crate::utils::database::pagination::Meta,
+        }
+
+        impl From<$name> for crate::utils::pagination::Paginated<$type> {
+            fn from(db_paginated: $name) -> Self {
+                Self {
+                    items: db_paginated.items.0,
+                    meta: db_paginated.meta.into(),
+                }
+            }
         }
     };
 }
-
-// impl<T> Into<DatabasePaginated<T>> for Option<serde_json::Value>
-// where
-//     T: DeserializeOwned,
-// {
-//     fn into(self) -> DatabasePaginated<T> {
-//         match self {
-//             Some(json) => {
-//                 tracing::info!("About to deserialize: {}", json);
-//                 // Use the DeserializeOwned bound for the type T
-//                 serde_json::from_value::<DatabasePaginated<T>>(json).unwrap()
-//             }
-//             None => DatabasePaginated {
-//                 data: vec![],
-//                 total: 0,
-//             },
-//         }
-//     }
-// }

@@ -1,7 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -42,15 +42,25 @@ async fn create_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl IntoRe
     }
 }
 
+#[derive(Deserialize)]
+struct Filters {
+    status: Option<repository::cart::CartStatus>,
+}
+
 async fn get_carts(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
     pagination: Pagination,
+    Query(filters): Query<Filters>,
 ) -> impl IntoResponse {
-    match repository::cart::find_many_by_owner_id(
+    // TODO: probably a check to see if the user requesting for carts is the admin
+    match repository::cart::find_many(
         ctx.db_conn.clone(),
         pagination.clone(),
-        auth.user.id,
+        repository::cart::Filters {
+            owner_id: Some(auth.user.id),
+            status: filters.status,
+        },
     )
     .await
     {

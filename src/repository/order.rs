@@ -72,6 +72,21 @@ impl From<String> for OrderStatus {
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub enum OrderSimpleStatus {
+    Ongoing,
+    Completed,
+}
+
+impl ToString for OrderSimpleStatus {
+    fn to_string(&self) -> String {
+        match self {
+            OrderSimpleStatus::Ongoing => String::from("ONGOING"),
+            OrderSimpleStatus::Completed => String::from("COMPLETED"),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum PaymentMethod {
     #[serde(rename = "ONLINE")]
@@ -160,7 +175,7 @@ pub struct OrderUpdate {
     pub updated_at: Option<NaiveDateTime>,
 }
 
-define_paginated!(Order);
+define_paginated!(DatabasePaginatedOrder, Order);
 
 pub struct CreateOrderPayload {
     pub cart: Cart,
@@ -324,27 +339,6 @@ pub async fn find_by_id_and_owner_id(
     })
 }
 
-// pub async fn find_by_kitchen_id(db: DatabaseConnection, id: String) -> Result<Vec<Order>, Error> {
-//     match sqlx::query_as!(
-//         Order,
-//         "SELECT FROM order_items WHERE kitchen_id = $1 LEFT JOIN orders ON order_id = orders.id",
-//         id
-//     )
-//     .fetch_all(&db.pool)
-//     .await
-//     {
-//         Ok(orders) => Ok(orders),
-//         Err(err) => {
-//             tracing::error!(
-//                 "Error occurred while trying to fetch many orders by kitchen id {}: {}",
-//                 id,
-//                 err
-//             );
-//             Err(Error::UnexpectedError)
-//         }
-//     }
-// }
-
 pub async fn find_order_items_by_id(
     db: DatabaseConnection,
     id: String,
@@ -399,8 +393,8 @@ struct DatabaseCounted {
 #[derive(Debug, Deserialize)]
 pub struct Filters {
     pub owner_id: Option<String>,
-    pub status: Option<String>,
-    pub payment_method: Option<String>,
+    pub status: Option<OrderSimpleStatus>,
+    pub payment_method: Option<PaymentMethod>,
 }
 
 pub async fn find_many(
@@ -409,14 +403,18 @@ pub async fn find_many(
     filters: Filters,
 ) -> Result<Paginated<Order>, Error> {
     sqlx::query_as!(
-        DatabasePaginatedOrder, // Assuming DatabasePaginatedOrder is generated using the macro
+        DatabasePaginatedOrder,
         r#"
             WITH filtered_data AS (
                 SELECT *
                 FROM orders 
                 WHERE
                     ($3::TEXT IS NULL OR owner_id = $3)
-                    AND ($4::TEXT IS NULL OR status = $4)
+                    AND (
+                        $4::TEXT IS NULL OR 
+                        ($4 = 'ONGOING' AND status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')) OR
+                        ($4 = 'COMPLETED' AND status IN ('DELIVERED', 'CANCELLED'))
+                    )
                     AND ($5::TEXT IS NULL OR payment_method = $5)
                 LIMIT $1
                 OFFSET $2
@@ -426,7 +424,11 @@ pub async fn find_many(
                 FROM orders
                 WHERE
                     ($3::TEXT IS NULL OR owner_id = $3)
-                    AND ($4::TEXT IS NULL OR status = $4)
+                    AND (
+                        $4::TEXT IS NULL OR 
+                        ($4 = 'Ongoing' AND status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')) OR
+                        ($4 = 'Completed' AND status IN ('DELIVERED', 'CANCELLED'))
+                    )
                     AND ($5::TEXT IS NULL OR payment_method = $5)
             )
             SELECT 
@@ -440,70 +442,17 @@ pub async fn find_many(
         "#,
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
-        filters.owner_id.as_deref(), // Converts Option<String> to Option<&str>
-        filters.status.as_deref(),
-        filters.payment_method.as_deref(),
+        filters.owner_id,
+        filters.status.map(|s| s.to_string()),
+        filters.payment_method.map(|p| p.to_string())
     )
     .fetch_one(&db.pool)
     .await
-    .map(|paginated| {
-        Paginated::new(
-            paginated.items,
-            paginated.meta.total,
-            pagination.page,
-            pagination.per_page,
-        )
-    })
+    .map(DatabasePaginatedOrder::into)
     .map_err(|err| {
         tracing::error!("Error occurred while trying to fetch many orders: {}", err);
         Error::UnexpectedError
     })
-}
-
-pub async fn find_many_by_owner_id(
-    db: DatabaseConnection,
-    owner_id: String,
-    pagination: Pagination,
-) -> Result<Paginated<Order>, Error> {
-    match sqlx::query_as!(
-        DatabaseCounted,
-        "
-            WITH filtered_data AS (
-                SELECT orders.*
-                FROM orders 
-                LEFT JOIN carts ON cart_id = carts.id
-                WHERE orders.owner_id = $3
-                LIMIT $1
-                OFFSET $2
-            ), 
-            total_count AS (
-                SELECT COUNT(id) AS total_rows
-                FROM orders
-            )
-            SELECT JSONB_BUILD_OBJECT(
-                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
-                'total', (SELECT total_rows FROM total_count)
-            ) AS result
-            FROM filtered_data;
-        ",
-        pagination.per_page as i64,
-        ((pagination.page - 1) * pagination.per_page) as i64,
-        owner_id,
-    )
-    .fetch_one(&db.pool)
-    .await
-    {
-        Ok(counted) => Ok(Paginated::new(
-            counted.result.data,
-            counted.result.total,
-            pagination.page,
-            pagination.per_page,
-        )),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to fetch many orders: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
 }
 
 #[derive(Serialize)]
