@@ -45,15 +45,7 @@ async fn create_payment_link(
     ctx: Arc<Context>,
     payload: InitializePaymentForOrder,
 ) -> Result<String, Error> {
-    let meals = match order::get_meals_from_order_by_id(
-        ctx.db_conn.clone(),
-        payload.order.id.clone(),
-    )
-    .await
-    {
-        Ok(meals) => meals,
-        Err(_) => return Err(Error::UnexpectedError),
-    };
+    // TODO: probably get the meals so they can appear in the line items of the payment request
 
     let metadata = Metadata {
         order_id: payload.order.id.clone(),

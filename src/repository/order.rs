@@ -5,13 +5,17 @@ use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sqlx::types::Json;
 use sqlx::{types::BigDecimal, Database};
 use std::{convert::Into, str::FromStr};
 use ulid::Ulid;
 
-use crate::utils::{
-    database::DatabaseConnection,
-    pagination::{Paginated, Pagination},
+use crate::{
+    define_paginated,
+    utils::{
+        database::DatabaseConnection,
+        pagination::{Paginated, Pagination},
+    },
 };
 
 use super::cart::{self, Cart};
@@ -116,6 +120,7 @@ pub struct Order {
     pub delivery_address: String,
     pub dispatch_rider_note: String,
     pub items: OrderItems,
+    pub owner_id: String,
     pub cart_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -154,6 +159,8 @@ pub struct OrderUpdate {
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
+
+define_paginated!(Order);
 
 pub struct CreateOrderPayload {
     pub cart: Cart,
@@ -195,7 +202,8 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
                     total,
                     delivery_address,
                     dispatch_rider_note,
-                    cart_id
+                    cart_id,
+                    owner_id
                 )
                 SELECT 
                     $1,
@@ -207,8 +215,9 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
                     sub_total_calculation.sub_total + 0,
                     $5,
                     $6,
-                    $2
-                FROM sub_total_calculation
+                    $2,
+                    active_cart.owner_id
+                FROM sub_total_calculation, active_cart
                 RETURNING *
             ),
             inserted_items AS (
@@ -225,7 +234,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
             )
             SELECT 
                 inserted_order.*,
-                COALESCE(JSON_AGG(inserted_items.*), '[]')::json AS items
+                COALESCE(JSON_AGG(inserted_items.*), '[]'::json) AS items
             FROM inserted_order
             LEFT JOIN inserted_items ON inserted_order.id = inserted_items.order_id
             GROUP BY 
@@ -239,6 +248,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
                 inserted_order.delivery_address,
                 inserted_order.dispatch_rider_note,
                 inserted_order.cart_id,
+                inserted_order.owner_id,
                 inserted_order.created_at,
                 inserted_order.updated_at;
         ",
@@ -255,23 +265,32 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
     )
     .fetch_one(&db.pool)
     .await
-    .map_err(|e| {
+    .map_err(|err| {
             tracing::error!("Error occurred while trying to create a order: {}", err);
             Error::UnexpectedError
     })
 }
 
 pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Order>, Error> {
-    match sqlx::query_as!(Order, "SELECT * FROM orders WHERE id = $1", id)
-        .fetch_optional(&db.pool)
-        .await
-    {
-        Ok(maybe_order) => Ok(maybe_order),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to fetch order by id: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
+    sqlx::query_as!(
+        Order,
+        "
+            WITH order_items AS (
+                SELECT * FROM order_items WHERE order_id = $1
+            )
+            SELECT orders.*, JSON_AGG(order_items.*) as items
+                FROM orders JOIN order_items ON order_items.order_id = orders.id
+            GROUP BY
+                orders.id;
+        ",
+        id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch order by id: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 pub async fn find_by_id_and_owner_id(
@@ -279,25 +298,30 @@ pub async fn find_by_id_and_owner_id(
     id: String,
     owner_id: String,
 ) -> Result<Option<Order>, Error> {
-    match sqlx::query_as!(
+    sqlx::query_as!(
         Order,
         "
-        SELECT orders.* FROM orders
-        LEFT JOIN carts ON orders.cart_id = carts.id
-        WHERE orders.id = $1 AND owner_id = $2
+            WITH order_items AS (
+                SELECT * FROM order_items
+                WHERE
+                    order_id = $1
+            )
+            SELECT orders.*, JSON_AGG(order_items.*) as items
+                FROM orders JOIN order_items ON order_items.order_id = orders.id
+            WHERE
+                orders.owner_id = $2
+            GROUP BY
+                orders.id;
         ",
         id,
         owner_id
     )
     .fetch_optional(&db.pool)
     .await
-    {
-        Ok(maybe_order) => Ok(maybe_order),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to fetch order by id: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch order by id: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 // pub async fn find_by_kitchen_id(db: DatabaseConnection, id: String) -> Result<Vec<Order>, Error> {
@@ -372,46 +396,68 @@ struct DatabaseCounted {
     result: DatabaseCountedResult,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct Filters {
+    pub owner_id: Option<String>,
+    pub status: Option<String>,
+    pub payment_method: Option<String>,
+}
+
 pub async fn find_many(
     db: DatabaseConnection,
     pagination: Pagination,
+    filters: Filters,
 ) -> Result<Paginated<Order>, Error> {
-    match sqlx::query_as!(
-        DatabaseCounted,
-        "
+    sqlx::query_as!(
+        DatabasePaginatedOrder, // Assuming DatabasePaginatedOrder is generated using the macro
+        r#"
             WITH filtered_data AS (
                 SELECT *
                 FROM orders 
+                WHERE
+                    ($3::TEXT IS NULL OR owner_id = $3)
+                    AND ($4::TEXT IS NULL OR status = $4)
+                    AND ($5::TEXT IS NULL OR payment_method = $5)
                 LIMIT $1
                 OFFSET $2
             ), 
             total_count AS (
                 SELECT COUNT(id) AS total_rows
                 FROM orders
+                WHERE
+                    ($3::TEXT IS NULL OR owner_id = $3)
+                    AND ($4::TEXT IS NULL OR status = $4)
+                    AND ($5::TEXT IS NULL OR payment_method = $5)
             )
-            SELECT JSONB_BUILD_OBJECT(
-                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
-                'total', (SELECT total_rows FROM total_count)
-            ) AS result
+            SELECT 
+                COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
+                JSONB_BUILD_OBJECT(
+                    'total', (SELECT total_rows FROM total_count),
+                    'per_page', $1,
+                    'page', $2 / $1 + 1
+                ) AS meta
             FROM filtered_data;
-        ",
+        "#,
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
+        filters.owner_id.as_deref(), // Converts Option<String> to Option<&str>
+        filters.status.as_deref(),
+        filters.payment_method.as_deref(),
     )
     .fetch_one(&db.pool)
     .await
-    {
-        Ok(counted) => Ok(Paginated::new(
-            counted.result.data,
-            counted.result.total,
+    .map(|paginated| {
+        Paginated::new(
+            paginated.items,
+            paginated.meta.total,
             pagination.page,
             pagination.per_page,
-        )),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to fetch many orders: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
+        )
+    })
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch many orders: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 pub async fn find_many_by_owner_id(
@@ -426,7 +472,7 @@ pub async fn find_many_by_owner_id(
                 SELECT orders.*
                 FROM orders 
                 LEFT JOIN carts ON cart_id = carts.id
-                WHERE owner_id = $3
+                WHERE orders.owner_id = $3
                 LIMIT $1
                 OFFSET $2
             ), 
@@ -506,46 +552,5 @@ pub async fn update_by_id(
             return Err(Error::UnexpectedError);
         }
         _ => Ok(()),
-    }
-}
-
-pub async fn get_meals_from_order_by_id(
-    db: DatabaseConnection,
-    id: String,
-) -> Result<Vec<Meal>, Error> {
-    match find_order_items_by_id(db.clone(), id.clone()).await {
-        Ok(items) => {
-            let meal_ids = items
-                .iter()
-                .map(|item| item.meal_id.clone())
-                .collect::<Vec<_>>();
-
-            match sqlx::query_as!(
-                Meal,
-                "SELECT * FROM meals WHERE $1 @> TO_JSONB(meals.id)",
-                json!(meal_ids),
-            )
-            .fetch_all(&db.pool)
-            .await
-            {
-                Ok(meals) => Ok(meals),
-                Err(e) => {
-                    log::error!(
-                        "Error occurred while trying to get meals from order by id {}: {}",
-                        id,
-                        e
-                    );
-                    Err(Error::UnexpectedError)
-                }
-            }
-        }
-        Err(e) => {
-            log::error!(
-                "Error occurred while trying to get meals from order by id {}: {:?}",
-                id,
-                e
-            );
-            Err(Error::UnexpectedError)
-        }
     }
 }

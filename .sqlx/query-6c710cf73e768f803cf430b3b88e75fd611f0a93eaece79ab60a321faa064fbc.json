@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT orders.* FROM orders\n        LEFT JOIN carts ON orders.cart_id = carts.id\n        WHERE orders.id = $1 AND owner_id = $2\n        ",
+  "query": "\n            WITH order_items AS (\n                SELECT * FROM order_items WHERE order_id = $1\n            )\n            SELECT orders.*, JSON_AGG(order_items.*) as items\n                FROM orders JOIN order_items ON order_items.order_id = orders.id\n            GROUP BY\n                orders.id;\n        ",
   "describe": {
     "columns": [
       {
@@ -62,11 +62,20 @@
         "ordinal": 11,
         "name": "updated_at",
         "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 12,
+        "name": "owner_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 13,
+        "name": "items",
+        "type_info": "Json"
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
         "Text"
       ]
     },
@@ -82,8 +91,10 @@
       false,
       false,
       false,
-      true
+      true,
+      false,
+      null
     ]
   },
-  "hash": "a1f5569a74bc5322b054dee79da17a8fd3a13aac2a9f4f6fe5a708e96d3665a9"
+  "hash": "6c710cf73e768f803cf430b3b88e75fd611f0a93eaece79ab60a321faa064fbc"
 }
