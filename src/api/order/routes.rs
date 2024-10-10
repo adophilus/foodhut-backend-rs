@@ -23,6 +23,7 @@ use crate::{
 #[derive(Deserialize)]
 struct Filters {
     status: Option<repository::order::OrderSimpleStatus>,
+    kitchen_id: Option<String>,
 }
 
 async fn get_orders(
@@ -40,6 +41,7 @@ async fn get_orders(
                     owner_id: None,
                     payment_method: None,
                     status: filters.status,
+                    kitchen_id: filters.kitchen_id,
                 },
             )
             .await
@@ -51,7 +53,8 @@ async fn get_orders(
                 repository::order::Filters {
                     owner_id: Some(auth.user.id.clone()),
                     payment_method: None,
-                    status: None,
+                    status: filters.status,
+                    kitchen_id: filters.kitchen_id,
                 },
             )
             .await

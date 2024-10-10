@@ -72,9 +72,11 @@ impl From<String> for OrderStatus {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub enum OrderSimpleStatus {
+    #[serde(rename = "ONGOING")]
     Ongoing,
+    #[serde(rename = "COMPLETED")]
     Completed,
 }
 
@@ -84,6 +86,25 @@ impl ToString for OrderSimpleStatus {
             OrderSimpleStatus::Ongoing => String::from("ONGOING"),
             OrderSimpleStatus::Completed => String::from("COMPLETED"),
         }
+    }
+}
+
+impl FromStr for OrderSimpleStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ONGOING" => Ok(OrderSimpleStatus::Ongoing),
+            "COMPLETED" => Ok(OrderSimpleStatus::Completed),
+            _ => Err(format!("'{}' is not a valid OrderSimpleStatus", s)),
+        }
+    }
+}
+
+impl From<String> for OrderSimpleStatus {
+    fn from(s: String) -> Self {
+        s.parse()
+            .unwrap_or_else(|_| panic!("Failed to parse '{}' into an OrderSimpleStatus", s))
     }
 }
 
@@ -363,38 +384,12 @@ pub async fn find_order_items_by_id(
     }
 }
 
-#[derive(Deserialize)]
-struct DatabaseCountedResult {
-    data: Vec<Order>,
-    total: u32,
-}
-
-impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
-    fn into(self) -> DatabaseCountedResult {
-        match self {
-            Some(json) => {
-                tracing::info!("About to deserialize: {}", json);
-                serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref())
-                    .unwrap()
-            }
-            None => DatabaseCountedResult {
-                data: vec![],
-                total: 0,
-            },
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct DatabaseCounted {
-    result: DatabaseCountedResult,
-}
-
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Filters {
     pub owner_id: Option<String>,
     pub status: Option<OrderSimpleStatus>,
     pub payment_method: Option<PaymentMethod>,
+    pub kitchen_id: Option<String>,
 }
 
 pub async fn find_many(
@@ -406,30 +401,45 @@ pub async fn find_many(
         DatabasePaginatedOrder,
         r#"
             WITH filtered_data AS (
-                SELECT *
-                FROM orders 
+                SELECT orders.*,
+                       COALESCE(
+                           JSONB_AGG(ROW_TO_JSON(order_items)) FILTER (WHERE order_items.id IS NOT NULL),
+                           '[]'::jsonb
+                       ) AS items
+                FROM orders
+                LEFT JOIN order_items ON orders.id = order_items.order_id
                 WHERE
-                    ($3::TEXT IS NULL OR owner_id = $3)
+                    ($3::TEXT IS NULL OR orders.owner_id = $3)
                     AND (
                         $4::TEXT IS NULL OR 
-                        ($4 = 'ONGOING' AND status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')) OR
-                        ($4 = 'COMPLETED' AND status IN ('DELIVERED', 'CANCELLED'))
+                        CASE
+                            WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+                            WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+                            ELSE TRUE
+                        END
                     )
-                    AND ($5::TEXT IS NULL OR payment_method = $5)
+                    AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+                    AND ($6::TEXT IS NULL OR order_items.kitchen_id = $6)
+                GROUP BY orders.id
                 LIMIT $1
                 OFFSET $2
             ), 
             total_count AS (
-                SELECT COUNT(id) AS total_rows
+                SELECT COUNT(DISTINCT orders.id) AS total_rows
                 FROM orders
+                LEFT JOIN order_items ON orders.id = order_items.order_id
                 WHERE
-                    ($3::TEXT IS NULL OR owner_id = $3)
+                    ($3::TEXT IS NULL OR orders.owner_id = $3)
                     AND (
                         $4::TEXT IS NULL OR 
-                        ($4 = 'Ongoing' AND status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')) OR
-                        ($4 = 'Completed' AND status IN ('DELIVERED', 'CANCELLED'))
+                        CASE
+                            WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+                            WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+                            ELSE TRUE
+                        END
                     )
-                    AND ($5::TEXT IS NULL OR payment_method = $5)
+                    AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+                    AND ($6::TEXT IS NULL OR order_items.kitchen_id = $6)
             )
             SELECT 
                 COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
@@ -444,7 +454,8 @@ pub async fn find_many(
         ((pagination.page - 1) * pagination.per_page) as i64,
         filters.owner_id,
         filters.status.map(|s| s.to_string()),
-        filters.payment_method.map(|p| p.to_string())
+        filters.payment_method.map(|p| p.to_string()),
+        filters.kitchen_id
     )
     .fetch_one(&db.pool)
     .await

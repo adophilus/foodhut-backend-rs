@@ -60,21 +60,15 @@ pub mod pagination {
     }
 
     #[derive(Debug, Deserialize)]
-    pub struct List<T>(pub Vec<T>);
+    pub struct Item<T>(pub Vec<T>);
 
-    impl<T: serde::de::DeserializeOwned> From<Option<Value>> for List<T> {
+    impl<T: serde::de::DeserializeOwned> From<Option<Value>> for Item<T> {
         fn from(option: Option<Value>) -> Self {
             match option {
-                Some(value) => serde_json::from_value(value).expect("Invalid items found"),
+                Some(value) => serde_json::from_value(value).expect("Invalid list found"),
                 None => unreachable!(),
             }
         }
-    }
-
-    #[derive(Debug, Deserialize)]
-    pub struct Paginated<T> {
-        pub items: Vec<T>,
-        pub meta: Meta,
     }
 }
 
@@ -83,7 +77,7 @@ macro_rules! define_paginated {
     ($name:ident, $type:ty) => {
         #[derive(Debug, Deserialize)]
         pub struct $name {
-            pub items: crate::utils::database::pagination::List<$type>,
+            pub items: crate::utils::database::pagination::Item<$type>,
             pub meta: crate::utils::database::pagination::Meta,
         }
 
