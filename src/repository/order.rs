@@ -360,30 +360,6 @@ pub async fn find_by_id_and_owner_id(
     })
 }
 
-pub async fn find_order_items_by_id(
-    db: DatabaseConnection,
-    id: String,
-) -> Result<Vec<OrderItem>, Error> {
-    match sqlx::query_as!(
-        OrderItem,
-        "SELECT * FROM order_items WHERE order_id = $1",
-        id
-    )
-    .fetch_all(&db.pool)
-    .await
-    {
-        Ok(items) => Ok(items),
-        Err(err) => {
-            tracing::error!(
-                "Error occurred while trying to fetch many order items by id {}: {}",
-                id,
-                err
-            );
-            Err(Error::UnexpectedError)
-        }
-    }
-}
-
 #[derive(Clone, Debug, Deserialize)]
 pub struct Filters {
     pub owner_id: Option<String>,
@@ -466,6 +442,77 @@ pub async fn find_many(
     })
 }
 
+pub async fn confirm_payment(db: DatabaseConnection, order_id: String) -> Result<bool, Error> {
+    sqlx::query!(
+        r#"
+        WITH updated_order AS (
+            UPDATE orders
+            SET status = 'AWAITING_ACKNOWLEDGEMENT'
+            WHERE id = $1
+              AND status = 'AWAITING_PAYMENT'
+            RETURNING id
+        ),
+        updated_order_items AS (
+            UPDATE order_items
+            SET status = 'AWAITING_ACKNOWLEDGEMENT'
+            WHERE order_id = (SELECT id FROM updated_order)
+            RETURNING id
+        )
+        SELECT EXISTS(SELECT 1 FROM updated_order);
+        "#,
+        order_id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    .map(|opt| opt.is_some())
+    .map_err(|err| {
+        tracing::error!("Error confirming payment for order {}: {}", order_id, err);
+        Error::UnexpectedError
+    })
+}
+
+pub async fn update_order_item_status(
+    db: DatabaseConnection,
+    order_item_id: String,
+    new_status: OrderStatus,
+) -> Result<bool, Error> {
+    sqlx::query!(
+        r#"
+        WITH valid_transition AS (
+            SELECT CASE
+                WHEN order_items.status = 'AWAITING_ACKNOWLEDGEMENT' AND $2 = 'PREPARING' THEN TRUE
+                WHEN order_items.status = 'PREPARING' AND $2 = 'IN_TRANSIT' THEN TRUE
+                WHEN order_items.status = 'IN_TRANSIT' AND $2 = 'DELIVERED' THEN TRUE
+                ELSE FALSE
+            END AS is_valid
+            FROM order_items
+            WHERE id = $1
+        ),
+        updated_item AS (
+            UPDATE order_items
+            SET status = $2
+            WHERE id = $1
+              AND (SELECT is_valid FROM valid_transition)
+            RETURNING id
+        )
+        SELECT EXISTS(SELECT 1 FROM updated_item);
+        "#,
+        order_item_id,
+        new_status.to_string()
+    )
+    .fetch_optional(&db.pool)
+    .await
+    .map(|opt| opt.is_some())
+    .map_err(|err| {
+        tracing::error!(
+            "Error updating status for order item {}: {}",
+            order_item_id,
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
 #[derive(Serialize)]
 pub struct UpdateOrderPayload {
     pub status: OrderStatus,
@@ -476,23 +523,6 @@ pub async fn update_by_id(
     id: String,
     payload: UpdateOrderPayload,
 ) -> Result<(), Error> {
-    // FIX: this should make use of a transaction
-
-    if let Err(err) = sqlx::query!(
-        "INSERT INTO order_updates (status, order_id) VALUES ($1, $2)",
-        payload.status.to_string(),
-        id
-    )
-    .execute(&db.pool)
-    .await
-    {
-        tracing::error!(
-            "Error occurred while trying to insert bookkeeping records for order updates: {}",
-            err
-        );
-        return Err(Error::UnexpectedError);
-    }
-
     match sqlx::query!(
         "
             UPDATE orders SET

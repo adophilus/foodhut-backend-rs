@@ -99,29 +99,68 @@ pub struct UpdateOrderPayload {
     pub status: repository::order::OrderStatus,
 }
 
-async fn update_order_by_id(
-    Path(id): Path<String>,
+#[derive(Deserialize)]
+pub struct UpdateOrderItemPayload {
+    pub status: repository::order::OrderStatus,
+}
+
+async fn update_order_item_status(
+    Path((order_id, order_item_id)): Path<(String, String)>,
     State(ctx): State<Arc<Context>>,
-    Json(payload): Json<UpdateOrderPayload>,
+    Query(kitchen_id): Query<Option<String>>,
+    auth: Auth,
+    Json(payload): Json<UpdateOrderItemPayload>,
 ) -> impl IntoResponse {
-    match repository::order::update_by_id(
-        ctx.db_conn.clone(),
-        id,
-        repository::order::UpdateOrderPayload {
-            status: payload.status,
-        },
-    )
-    .await
-    {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(json!({ "message": "Order updated successfully" })),
-        ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "message": "Failed to update order" })),
-        ),
+    if let Some(kitchen_id) = kitchen_id {
+        match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
+            Ok(Some(kitchen)) if kitchen.id == kitchen_id => {
+                if repository::order::update_order_item_status(
+                    ctx.db_conn.clone(),
+                    order_item_id,
+                    payload.status,
+                )
+                .await
+                .unwrap_or(false)
+                {
+                    return (
+                        StatusCode::OK,
+                        Json(json!({ "message": "Order item status updated successfully" })),
+                    );
+                }
+            }
+            Ok(_) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "message": "User does not own this kitchen" })),
+                );
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "message": "Failed to verify kitchen ownership" })),
+                );
+            }
+        }
+    } else {
+        if repository::order::update_order_item_status(
+            ctx.db_conn.clone(),
+            order_item_id,
+            payload.status,
+        )
+        .await
+        .unwrap_or(false)
+        {
+            return (
+                StatusCode::OK,
+                Json(json!({ "message": "Order item status updated successfully" })),
+            );
+        }
     }
+
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({ "message": "Failed to update order item status" })),
+    )
 }
 
 #[derive(Deserialize)]
@@ -182,6 +221,9 @@ pub fn get_router() -> Router<Arc<Context>> {
     // TODO: add endpoint for manually verifying online payment
     Router::new()
         .route("/", get(get_orders))
-        .route("/:id", get(get_order_by_id).patch(update_order_by_id))
+        .route(
+            "/:order_id/items/:order_item_id/status",
+            get(get_order_by_id).patch(update_order_item_status),
+        )
         .route("/:id/pay", post(pay_for_order))
 }

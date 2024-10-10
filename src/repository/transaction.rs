@@ -44,7 +44,7 @@ impl From<String> for TransactionType {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct OnlineTransaction {
+pub struct OnlineTransaction {
     pub id: String,
     pub amount: BigDecimal,
     pub note: Option<String>,
@@ -55,7 +55,7 @@ struct OnlineTransaction {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct WalletTransaction {
+pub struct WalletTransaction {
     pub id: String,
     pub amount: BigDecimal,
     pub note: Option<String>,
@@ -77,15 +77,16 @@ struct DbTransaction {
     pub updated_at: Option<NaiveDateTime>,
 }
 
-impl Into<Transaction> for DbTransaction {
-    fn into(self) -> Transaction {
-        serde_json::de::from_str(&serde_json::json!(self).to_string())
-            .map_err(|e| format!("Invalid transaction type found for {:?}: {}", self, e))
+impl From<DbTransaction> for Transaction {
+    fn from(db_tx: DbTransaction) -> Self {
+        serde_json::de::from_str(&serde_json::json!(db_tx).to_string())
+            .map_err(|e| format!("Invalid transaction type found for {:?}: {}", db_tx, e))
             .unwrap()
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
 pub enum Transaction {
     Online(OnlineTransaction),
     Wallet(WalletTransaction),
@@ -128,7 +129,7 @@ async fn create_online_transaction(
     db: DatabaseConnection,
     payload: CreateOnlineTransactionPayload,
 ) -> Result<Transaction, Error> {
-    match sqlx::query_as!(
+    sqlx::query_as!(
     DbTransaction,
         "INSERT INTO transactions (id, amount, type, note, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         Ulid::new().to_string(),
@@ -139,19 +140,15 @@ async fn create_online_transaction(
     )
     .fetch_one(&db.pool)
     .await
-    {
-        Ok(tx) => {
-            Ok(tx.into())
-        },
-        Err(err) => {
+            .map(Transaction::from)
+    .map_err(|err| {
             tracing::error!(
                 "Error occurred while trying to create transaction {:?}: {}",
                 payload,
                 err
             );
-            Err(Error::UnexpectedError)
-        }
-    }
+            Error::UnexpectedError
+    })
 }
 
 async fn create_wallet_transaction(
