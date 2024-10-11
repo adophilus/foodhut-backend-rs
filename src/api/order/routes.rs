@@ -131,68 +131,67 @@ async fn update_order_item_status(
             }
         };
 
-    if let Some(as_kitchen) = payload.as_kitchen {
-        if as_kitchen {
-            // Check if the user owns the kitchen
-            match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id.clone())
-                .await
-            {
-                Ok(Some(kitchen)) => {
-                    // Ensure that the kitchen ID matches the order item's kitchen_id
-                    if kitchen.id != current_order_item.kitchen_id {
-                        return (
-                            StatusCode::FORBIDDEN,
-                            Json(json!({ "message": "Kitchen does not own this order item" })),
-                        );
-                    }
+    let as_kitchen = payload.as_kitchen.unwrap_or(false);
 
-                    // Ensure the kitchen is allowed to update the status (kitchen status transitions)
-                    match (current_order_item.status, payload.status.clone()) {
-                        (
-                            repository::order::OrderStatus::AwaitingAcknowledgement,
-                            repository::order::OrderStatus::Preparing,
+    if as_kitchen {
+        // Check if the user owns the kitchen
+        match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id.clone()).await
+        {
+            Ok(Some(kitchen)) => {
+                // Ensure that the kitchen ID matches the order item's kitchen_id
+                if kitchen.id != current_order_item.kitchen_id {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({ "message": "Kitchen does not own this order item" })),
+                    );
+                }
+
+                // Ensure the kitchen is allowed to update the status (kitchen status transitions)
+                match (current_order_item.status, payload.status.clone()) {
+                    (
+                        repository::order::OrderStatus::AwaitingAcknowledgement,
+                        repository::order::OrderStatus::Preparing,
+                    )
+                    | (
+                        repository::order::OrderStatus::Preparing,
+                        repository::order::OrderStatus::InTransit,
+                    ) => {
+                        // Update order item status as kitchen
+                        if repository::order::update_order_item_status(
+                            ctx.db_conn.clone(),
+                            order_item_id.clone(),
+                            payload.status.clone(),
                         )
-                        | (
-                            repository::order::OrderStatus::Preparing,
-                            repository::order::OrderStatus::InTransit,
-                        ) => {
-                            // Update order item status as kitchen
-                            if repository::order::update_order_item_status(
-                                ctx.db_conn.clone(),
-                                order_item_id.clone(),
-                                payload.status.clone(),
-                            )
-                            .await
-                            .unwrap_or(false)
-                            {
-                                return (
-                                    StatusCode::OK,
-                                    Json(
-                                        json!({ "message": "Order item status updated successfully" }),
-                                    ),
-                                );
-                            }
-                        }
-                        _ => {
+                        .await
+                        .unwrap_or(false)
+                        {
                             return (
-                                StatusCode::BAD_REQUEST,
-                                Json(json!({ "message": "Invalid status transition for kitchen" })),
+                                StatusCode::OK,
+                                Json(
+                                    json!({ "message": "Order item status updated successfully" }),
+                                ),
                             );
                         }
                     }
+                    _ => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({ "message": "Invalid status transition for kitchen" })),
+                        );
+                    }
                 }
-                Ok(None) => {
-                    return (
-                        StatusCode::FORBIDDEN,
-                        Json(json!({ "message": "User does not own a kitchen" })),
-                    );
-                }
-                Err(_) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({ "message": "Failed to retrieve kitchen" })),
-                    );
-                }
+            }
+            Ok(None) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "message": "User does not own a kitchen" })),
+                );
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "message": "Failed to retrieve kitchen" })),
+                );
             }
         }
     } else {
