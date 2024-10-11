@@ -1,0 +1,105 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH active_cart AS (\n                SELECT * FROM carts WHERE id = $2\n            ), cart_items AS (\n                SELECT * FROM JSON_TO_RECORDSET((SELECT active_cart.items FROM active_cart)) AS (meal_id VARCHAR, quantity NUMERIC)\n            ),\n            meals_in_cart AS (\n                SELECT meals.*, cart_items.quantity AS quantity FROM cart_items INNER JOIN meals ON cart_items.meal_id = meals.id\n            ),\n            sub_total_calculation AS (\n                SELECT SUM(meals_in_cart.price * meals_in_cart.quantity) AS sub_total \n                FROM meals_in_cart\n            ),\n            inserted_order AS (\n                INSERT INTO orders (\n                    id,\n                    status,\n                    payment_method,\n                    delivery_fee,\n                    service_fee,\n                    sub_total,\n                    total,\n                    delivery_address,\n                    dispatch_rider_note,\n                    cart_id,\n                    owner_id\n                )\n                SELECT \n                    $1,\n                    $3,\n                    $4,\n                    0,\n                    0,\n                    sub_total_calculation.sub_total,\n                    sub_total_calculation.sub_total + 0,\n                    $5,\n                    $6,\n                    $2,\n                    active_cart.owner_id\n                FROM sub_total_calculation, active_cart\n                RETURNING *\n            ),\n            inserted_items AS (\n                INSERT INTO order_items (id, status, price, meal_id, order_id, kitchen_id, owner_id)\n                SELECT \n                    GEN_RANDOM_UUID(),\n                    $3,\n                    meals_in_cart.price,\n                    meals_in_cart.id,\n                    inserted_order.id,\n                    meals_in_cart.kitchen_id,\n                    active_cart.owner_id\n                FROM meals_in_cart, active_cart\n                CROSS JOIN inserted_order\n                RETURNING *\n            )\n            SELECT \n                inserted_order.*,\n                COALESCE(JSON_AGG(inserted_items.*), '[]'::json) AS items\n            FROM inserted_order\n            LEFT JOIN inserted_items ON inserted_order.id = inserted_items.order_id\n            GROUP BY \n                inserted_order.id, \n                inserted_order.status,\n                inserted_order.payment_method,\n                inserted_order.delivery_fee,\n                inserted_order.service_fee,\n                inserted_order.sub_total,\n                inserted_order.total,\n                inserted_order.delivery_address,\n                inserted_order.dispatch_rider_note,\n                inserted_order.cart_id,\n                inserted_order.owner_id,\n                inserted_order.created_at,\n                inserted_order.updated_at;\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "payment_method",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "delivery_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "service_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "sub_total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "delivery_address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "dispatch_rider_note",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "cart_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 12,
+        "name": "owner_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 13,
+        "name": "items",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "2277ba29615059c05aa62017cb52eb9fc1fd8b818c3ae408c25f74e27c178985"
+}

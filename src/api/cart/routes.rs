@@ -351,6 +351,8 @@ pub async fn checkout_active_cart(
         );
     }
 
+    // TODO: this should be in a transaction
+
     let order = match repository::order::create(
         ctx.db_conn.clone(),
         repository::order::CreateOrderPayload {

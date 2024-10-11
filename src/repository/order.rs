@@ -167,12 +167,13 @@ struct OrderItems(pub Vec<OrderItem>);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrderItem {
-    pub id: i32,
+    pub id: String,
     pub status: OrderStatus,
     pub price: BigDecimal,
     pub meal_id: String,
     pub order_id: String,
     pub kitchen_id: String,
+    pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -257,14 +258,16 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
                 RETURNING *
             ),
             inserted_items AS (
-                INSERT INTO order_items (status, price, meal_id, order_id, kitchen_id)
+                INSERT INTO order_items (id, status, price, meal_id, order_id, kitchen_id, owner_id)
                 SELECT 
+                    GEN_RANDOM_UUID(),
                     $3,
                     meals_in_cart.price,
                     meals_in_cart.id,
                     inserted_order.id,
-                    meals_in_cart.kitchen_id
-                FROM meals_in_cart
+                    meals_in_cart.kitchen_id,
+                    active_cart.owner_id
+                FROM meals_in_cart, active_cart
                 CROSS JOIN inserted_order
                 RETURNING *
             )
@@ -356,6 +359,28 @@ pub async fn find_by_id_and_owner_id(
     .await
     .map_err(|err| {
         tracing::error!("Error occurred while trying to fetch order by id: {}", err);
+        Error::UnexpectedError
+    })
+}
+
+pub async fn find_order_item_by_id(
+    db: DatabaseConnection,
+    id: String,
+) -> Result<Option<OrderItem>, Error> {
+    sqlx::query_as!(
+        OrderItem,
+        "
+            SELECT * FROM order_items WHERE id = $1;
+        ",
+        id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch order item by id: {}",
+            err
+        );
         Error::UnexpectedError
     })
 }
