@@ -5,42 +5,42 @@
     "columns": [
       {
         "ordinal": 0,
-        "name": "status",
+        "name": "id",
         "type_info": "Varchar"
       },
       {
         "ordinal": 1,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
         "name": "price",
         "type_info": "Numeric"
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "meal_id",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "order_id",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 6,
-        "name": "kitchen_id",
-        "type_info": "Varchar"
-      },
-      {
         "ordinal": 7,
-        "name": "id",
+        "name": "kitchen_id",
         "type_info": "Varchar"
       },
       {
@@ -60,8 +60,8 @@
       false,
       false,
       false,
-      true,
       false,
+      true,
       false,
       false
     ]

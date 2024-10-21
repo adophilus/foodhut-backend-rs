@@ -1,2 +1,2 @@
-ALTER TABLE transactions
-ALTER COLUMN wallet_id SET NOT NULL;
+-- ALTER TABLE transactions
+-- ALTER COLUMN wallet_id SET NOT NULL;

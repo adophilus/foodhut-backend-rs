@@ -29,7 +29,7 @@ async fn create_bank_account(
     auth: Auth,
     Json(payload): Json<CreateWalletAccountPayload>,
 ) -> impl IntoResponse {
-    utils::wallet::request_bank_account_verification(
+    match utils::wallet::request_bank_account_verification(
         ctx.clone(),
         utils::wallet::RequestBankAccountVerificationPayload {
             bvn: payload.bvn,
@@ -38,7 +38,17 @@ async fn create_bank_account(
             user: auth.user,
         },
     )
-    .await;
+    .await
+    {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Verification request sent" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to request verification" })),
+        ),
+    }
 }
 
 async fn get_wallet_by_profile(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {

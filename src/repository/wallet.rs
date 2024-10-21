@@ -13,36 +13,36 @@ use crate::utils::{
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PaystackWalletDetailsDedicatedAccountBank {
+pub struct PaystackBank {
     pub id: i32,
     pub name: String,
     pub slug: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PaystackWalletDetailsDedicatedAccount {
+pub struct PaystackDedicatedAccount {
     pub id: i32,
-    pub bank: PaystackWalletDetailsDedicatedAccountBank,
+    pub bank: PaystackBank,
     pub account_name: String,
     pub account_number: String,
     pub active: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PaystackWalletDetailsCustomer {
+pub struct PaystackCustomer {
     pub id: String,
     pub code: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PaystackWalletDetails {
-    pub customer: PaystackWalletDetailsCustomer,
-    pub dedicated_account: Option<PaystackWalletDetailsDedicatedAccount>,
+pub struct PaystackWalletMetadata {
+    pub customer: PaystackCustomer,
+    pub dedicated_account: Option<PaystackDedicatedAccount>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum WalletBackend {
-    Paystack(PaystackWalletDetails),
+    Paystack(PaystackWalletMetadata),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -80,8 +80,9 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateWalletPayload) -> Result<(), Error> {
-    match sqlx::query!(
+pub async fn create(db: DatabaseConnection, payload: CreateWalletPayload) -> Result<Wallet, Error> {
+    sqlx::query_as!(
+        Wallet,
         "
         INSERT INTO wallets (
             id,
@@ -90,21 +91,19 @@ pub async fn create(db: DatabaseConnection, payload: CreateWalletPayload) -> Res
             owner_id
         )
         VALUES ($1, $2, $3, $4)
+        RETURNING *
     ",
         Ulid::new().to_string(),
         BigDecimal::from_u8(0).unwrap(),
         json!(payload.metadata),
         payload.owner_id,
     )
-    .execute(&db.pool)
+    .fetch_one(&db.pool)
     .await
-    {
-        Ok(_) => Ok(()),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to create a wallet: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to create a wallet: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Wallet>, Error> {
@@ -269,7 +268,7 @@ pub async fn update_by_id(
     }
 }
 
-pub type SetDedicatedBankAccountDetailsByOwnerIdPayload = PaystackWalletDetailsDedicatedAccount;
+pub type SetDedicatedBankAccountDetailsByOwnerIdPayload = PaystackDedicatedAccount;
 
 pub async fn set_dedicated_bank_account_details_by_owner_id(
     db: DatabaseConnection,

@@ -1,7 +1,7 @@
 use crate::repository;
 use crate::types::Context;
-use crate::utils::notification;
 use crate::utils::{self, otp};
+use crate::utils::{notification, wallet};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{
@@ -51,7 +51,7 @@ async fn sign_up(
     match repository::user::find_by_email_or_phone_number(
         ctx.db_conn.clone(),
         repository::user::FindByEmailOrPhoneNumber {
-            email: payload.email.clone(),
+            email: payload.email.clone().to_lowercase(),
             phone_number: payload.phone_number.clone(),
         },
     )
@@ -97,6 +97,8 @@ async fn sign_up(
                 notification::Backend::Email,
             )
             .await;
+
+            wallet::create(ctx.clone(), user.clone()).await;
 
             match otp::send(ctx.clone(), user, "auth.verification".to_string()).await {
                 Ok(_) => (

@@ -116,9 +116,9 @@ pub mod handler {
         let wallet = match wallet::set_dedicated_bank_account_details_by_owner_id(
             ctx.db_conn.clone(),
             user.id.clone(),
-            wallet::PaystackWalletDetailsDedicatedAccount {
+            wallet::PaystackDedicatedAccount {
                 id: payload.dedicated_account.id,
-                bank: wallet::PaystackWalletDetailsDedicatedAccountBank {
+                bank: wallet::PaystackBank {
                     id: payload.dedicated_account.bank.id,
                     name: payload.dedicated_account.bank.name,
                     slug: payload.dedicated_account.bank.slug,
