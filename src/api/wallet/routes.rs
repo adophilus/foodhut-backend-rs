@@ -10,15 +10,10 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::{
-    api::auth::middleware::Auth,
-    repository,
-    types::Context,
-    utils::{self},
-};
+use crate::{api::auth::middleware::Auth, repository, types::Context, utils};
 
 #[derive(Deserialize)]
-struct CreateWalletAccountPayload {
+struct CreateVirtualAccountPayload {
     pub bvn: String,
     pub bank_code: String,
     pub account_number: String,
@@ -27,11 +22,11 @@ struct CreateWalletAccountPayload {
 async fn create_bank_account(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
-    Json(payload): Json<CreateWalletAccountPayload>,
+    Json(payload): Json<CreateVirtualAccountPayload>,
 ) -> impl IntoResponse {
-    match utils::wallet::request_bank_account_verification(
+    match utils::wallet::request_virtual_account(
         ctx.clone(),
-        utils::wallet::RequestBankAccountVerificationPayload {
+        utils::wallet::RequestVirtualAccountPayload {
             bvn: payload.bvn,
             bank_code: payload.bank_code,
             account_number: payload.account_number,
@@ -44,7 +39,11 @@ async fn create_bank_account(
             StatusCode::OK,
             Json(json!({ "message": "Verification request sent" })),
         ),
-        Err(_) => (
+        Err(utils::wallet::CreationError::CreationFailed(err)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": err })),
+        ),
+        _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to request verification" })),
         ),

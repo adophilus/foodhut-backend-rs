@@ -1,5 +1,6 @@
 use bigdecimal::BigDecimal;
 use serde::Deserialize;
+use serde_aux::field_attributes::deserialize_string_from_number;
 
 use crate::utils;
 
@@ -16,6 +17,10 @@ pub struct CustomerIdentificationSuccessful {
 
 #[derive(Deserialize)]
 pub struct DedicatedAccountAssignmentCustomer {
+    #[serde(deserialize_with = "deserialize_string_from_number")]
+    pub id: String,
+    #[serde(rename = "customer_code")]
+    pub code: String,
     pub email: String,
 }
 
@@ -54,10 +59,10 @@ pub enum Event {
         amount: BigDecimal,
         metadata: utils::online::Metadata,
     },
-    #[serde(rename = "customeridentification.success")]
-    CustomerIdentificationSuccessful(CustomerIdentificationSuccessful),
-    #[serde(rename = "customeridentification.failed")]
-    CustomerIdentificationFailed(CustomerIdentificationFailed),
+    // #[serde(rename = "customeridentification.success")]
+    // CustomerIdentificationSuccessful(CustomerIdentificationSuccessful),
+    // #[serde(rename = "customeridentification.failed")]
+    // CustomerIdentificationFailed(CustomerIdentificationFailed),
     #[serde(rename = "dedicatedaccount.assign.success")]
     DedicatedAccountAssignmentSuccessful(DedicatedAccountAssignmentSuccessful),
     #[serde(rename = "dedicatedaccount.assign.failed")]

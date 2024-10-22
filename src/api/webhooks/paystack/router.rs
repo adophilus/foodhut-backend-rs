@@ -67,16 +67,16 @@ async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Respon
                 .await
                 .into_response()
         }
-        model::Event::CustomerIdentificationFailed(payload) => {
-            handler::customer_identification_failed(ctx.clone(), payload)
-                .await
-                .into_response()
-        }
-        model::Event::CustomerIdentificationSuccessful(payload) => {
-            handler::customer_identification_successful(ctx.clone(), payload)
-                .await
-                .into_response()
-        }
+        // model::Event::CustomerIdentificationFailed(payload) => {
+        //     handler::customer_identification_failed(ctx.clone(), payload)
+        //         .await
+        //         .into_response()
+        // }
+        // model::Event::CustomerIdentificationSuccessful(payload) => {
+        //     handler::customer_identification_successful(ctx.clone(), payload)
+        //         .await
+        //         .into_response()
+        // }
         model::Event::DedicatedAccountAssignmentSuccessful(payload) => {
             handler::dedicated_account_assignment_successful(ctx.clone(), payload)
                 .await

@@ -41,6 +41,7 @@ pub struct StorageContext {
 
 #[derive(Clone)]
 pub struct PaymentContext {
+    pub api_endpoint: String,
     pub public_key: String,
     pub secret_key: String,
 }
@@ -103,6 +104,7 @@ pub struct StorageConfig {
 
 #[derive(Clone)]
 pub struct PaymentConfig {
+    pub api_endpoint: String,
     pub public_key: String,
     pub secret_key: String,
 }
@@ -278,6 +280,8 @@ impl Default for Config {
             env::var("CLOUDINARY_DELETE_ENDPOINT").expect("CLOUDINARY_DELETE_ENDPOINT not set");
         let storage_upload_preset =
             env::var("CLOUDINARY_UPLOAD_PRESET").expect("CLOUDINARY_UPLOAD_PRESET not set");
+        let payment_api_endpoint =
+            env::var("PAYSTACK_API_ENDPOINT").expect("PAYSTACK_API_ENDPOINT not set");
         let payment_public_key =
             env::var("PAYSTACK_PUBLIC_KEY").expect("PAYSTACK_PUBLIC_KEY not set");
         let payment_secret_key =
@@ -314,6 +318,7 @@ impl Default for Config {
                 upload_preset: storage_upload_preset,
             },
             payment: PaymentConfig {
+                api_endpoint: payment_api_endpoint,
                 public_key: payment_public_key,
                 secret_key: payment_secret_key,
             },
@@ -365,6 +370,7 @@ impl ToContext for Config {
                 upload_preset: self.storage.upload_preset,
             },
             payment: PaymentContext {
+                api_endpoint: self.payment.api_endpoint,
                 public_key: self.payment.public_key,
                 secret_key: self.payment.secret_key,
             },

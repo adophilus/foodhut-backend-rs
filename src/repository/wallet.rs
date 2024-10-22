@@ -37,18 +37,18 @@ pub struct PaystackCustomer {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PaystackWalletMetadata {
     pub customer: PaystackCustomer,
-    pub dedicated_account: Option<PaystackDedicatedAccount>,
+    pub dedicated_account: PaystackDedicatedAccount,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(untagged)]
 pub enum WalletBackend {
+    #[serde(rename = "paystack")]
     Paystack(PaystackWalletMetadata),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct WalletMetadata {
-    pub backend: WalletBackend,
+    pub backend: Option<WalletBackend>,
 }
 
 impl From<serde_json::Value> for WalletMetadata {
@@ -67,16 +67,11 @@ pub struct Wallet {
     pub updated_at: Option<NaiveDateTime>,
 }
 
-pub struct CreateWalletPayload {
-    pub owner_id: String,
-    pub metadata: WalletMetadata,
-}
-
 pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create<'e, E>(e: E, payload: CreateWalletPayload) -> Result<Wallet, Error>
+pub async fn create<'e, E>(e: E, owner_id: String) -> Result<Wallet, Error>
 where
     E: PgExecutor<'e>,
 {
@@ -89,8 +84,8 @@ where
         ",
         Ulid::new().to_string(),
         BigDecimal::from_u8(0).unwrap(),
-        json!(payload.metadata),
-        payload.owner_id,
+        json!(WalletMetadata { backend: None }),
+        owner_id,
     )
     .fetch_one(e)
     .await
@@ -262,31 +257,29 @@ pub async fn update_by_id(
     }
 }
 
-pub type SetDedicatedBankAccountDetailsByOwnerIdPayload = PaystackDedicatedAccount;
-
-pub async fn set_dedicated_bank_account_details_by_owner_id(
+pub async fn update_metatata_by_owner_id(
     db: DatabaseConnection,
-    id: String,
-    payload: SetDedicatedBankAccountDetailsByOwnerIdPayload,
+    owner_id: String,
+    payload: WalletMetadata,
 ) -> Result<Wallet, Error> {
     sqlx::query_as!(
         Wallet,
-        "
+        r#"
         UPDATE wallets
         SET
             metadata = $1
         WHERE
             owner_id = $2
         RETURNING *
-        ",
+        "#,
         serde_json::to_value(payload).unwrap(),
-        id
+        owner_id
     )
     .fetch_one(&db.pool)
     .await
     .map_err(|e| {
         log::error!(
-            "Error occurred while trying to set dedicated bank account details by owner id: {}",
+            "Error occurred while trying to update wallet metadata: {}",
             e
         );
         Error::UnexpectedError

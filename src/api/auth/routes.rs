@@ -120,7 +120,7 @@ async fn sign_up(
         notification::Backend::Email,
     ));
 
-    if let Err(_) = wallet::create(ctx.clone(), &mut *tx, user.clone()).await {
+    if let Err(_) = repository::wallet::create(&mut *tx, user.id.clone()).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to create wallet" })),

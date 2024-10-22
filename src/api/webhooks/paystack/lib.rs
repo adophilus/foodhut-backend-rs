@@ -58,46 +58,46 @@ pub mod handler {
         StatusCode::OK.into_response()
     }
 
-    pub async fn customer_identification_successful(
-        ctx: Arc<types::Context>,
-        payload: model::CustomerIdentificationSuccessful,
-    ) -> impl IntoResponse {
-        let user = match repository::user::find_by_email(ctx.db_conn.clone(), payload.email).await {
-            Ok(Some(user)) => user,
-            _ => return StatusCode::INTERNAL_SERVER_ERROR,
-        };
-
-        match utils::wallet::request_bank_account_creation(ctx.clone(), user.clone()).await {
-            Ok(_) => StatusCode::OK,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-
-    pub async fn customer_identification_failed(
-        ctx: Arc<types::Context>,
-        payload: model::CustomerIdentificationFailed,
-    ) -> impl IntoResponse {
-        let user = match repository::user::find_by_email(ctx.db_conn.clone(), payload.email.clone())
-            .await
-        {
-            Ok(Some(user)) => user,
-            Ok(None) => {
-                return StatusCode::NOT_FOUND;
-            }
-            Err(_) => {
-                return StatusCode::INTERNAL_SERVER_ERROR;
-            }
-        };
-
-        let _ = utils::notification::send(
-            ctx.clone(),
-            utils::notification::Notification::customer_identification_failed(user, payload.reason),
-            utils::notification::Backend::Email,
-        )
-        .await;
-
-        StatusCode::OK
-    }
+    // pub async fn customer_identification_successful(
+    //     ctx: Arc<types::Context>,
+    //     payload: model::CustomerIdentificationSuccessful,
+    // ) -> impl IntoResponse {
+    //     let user = match repository::user::find_by_email(ctx.db_conn.clone(), payload.email).await {
+    //         Ok(Some(user)) => user,
+    //         _ => return StatusCode::INTERNAL_SERVER_ERROR,
+    //     };
+    //
+    //     match utils::wallet::request_bank_account_creation(ctx.clone(), user.clone()).await {
+    //         Ok(_) => StatusCode::OK,
+    //         _ => StatusCode::INTERNAL_SERVER_ERROR,
+    //     }
+    // }
+    //
+    // pub async fn customer_identification_failed(
+    //     ctx: Arc<types::Context>,
+    //     payload: model::CustomerIdentificationFailed,
+    // ) -> impl IntoResponse {
+    //     let user = match repository::user::find_by_email(ctx.db_conn.clone(), payload.email.clone())
+    //         .await
+    //     {
+    //         Ok(Some(user)) => user,
+    //         Ok(None) => {
+    //             return StatusCode::NOT_FOUND;
+    //         }
+    //         Err(_) => {
+    //             return StatusCode::INTERNAL_SERVER_ERROR;
+    //         }
+    //     };
+    //
+    //     let _ = utils::notification::send(
+    //         ctx.clone(),
+    //         utils::notification::Notification::customer_identification_failed(user, payload.reason),
+    //         utils::notification::Backend::Email,
+    //     )
+    //     .await;
+    //
+    //     StatusCode::OK
+    // }
 
     pub async fn dedicated_account_assignment_successful(
         ctx: Arc<types::Context>,
@@ -113,33 +113,42 @@ pub mod handler {
             _ => return StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        let wallet = match wallet::set_dedicated_bank_account_details_by_owner_id(
+        match wallet::update_metatata_by_owner_id(
             ctx.db_conn.clone(),
             user.id.clone(),
-            wallet::PaystackDedicatedAccount {
-                id: payload.dedicated_account.id,
-                bank: wallet::PaystackBank {
-                    id: payload.dedicated_account.bank.id,
-                    name: payload.dedicated_account.bank.name,
-                    slug: payload.dedicated_account.bank.slug,
-                },
-                account_name: payload.dedicated_account.account_name,
-                account_number: payload.dedicated_account.account_number,
-                active: payload.dedicated_account.active,
+            wallet::WalletMetadata {
+                backend: Some(wallet::WalletBackend::Paystack(
+                    wallet::PaystackWalletMetadata {
+                        customer: wallet::PaystackCustomer {
+                            id: payload.customer.id,
+                            code: payload.customer.code,
+                        },
+                        dedicated_account: wallet::PaystackDedicatedAccount {
+                            id: payload.dedicated_account.id,
+                            bank: wallet::PaystackBank {
+                                id: payload.dedicated_account.bank.id,
+                                name: payload.dedicated_account.bank.name,
+                                slug: payload.dedicated_account.bank.slug,
+                            },
+                            account_name: payload.dedicated_account.account_name,
+                            account_number: payload.dedicated_account.account_number,
+                            active: payload.dedicated_account.active,
+                        },
+                    },
+                )),
             },
         )
         .await
         {
-            Ok(w) => w,
+            Ok(_) => (),
             Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        let _ = utils::notification::send(
+        let _ = tokio::spawn(utils::notification::send(
             ctx.clone(),
             utils::notification::Notification::bank_account_creation_successful(user),
             utils::notification::Backend::Email,
-        )
-        .await;
+        ));
 
         StatusCode::OK
     }
