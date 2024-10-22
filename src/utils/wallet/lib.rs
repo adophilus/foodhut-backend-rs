@@ -1,7 +1,9 @@
 use axum::http::HeaderMap;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use serde_aux::field_attributes::deserialize_string_from_number;
 use serde_json::json;
+use sqlx::PgExecutor;
 use std::sync::Arc;
 
 use crate::{
@@ -30,6 +32,7 @@ pub enum CreationError {
 
 #[derive(Serialize, Deserialize)]
 struct CustomerCreationServiceResponseData {
+    #[serde(deserialize_with = "deserialize_string_from_number")]
     id: String,
     customer_code: String,
 }
@@ -41,10 +44,14 @@ struct CustomerCreationServiceResponse {
     data: CustomerCreationServiceResponseData,
 }
 
-pub async fn create(
+pub async fn create<'e, E>(
     ctx: Arc<types::Context>,
+    e: E,
     owner: repository::user::User,
-) -> std::result::Result<wallet::Wallet, CreationError> {
+) -> std::result::Result<wallet::Wallet, CreationError>
+where
+    E: PgExecutor<'e>,
+{
     let mut headers = HeaderMap::new();
     headers.insert(
         "Authorization",
@@ -96,7 +103,7 @@ pub async fn create(
     }
 
     wallet::create(
-        ctx.db_conn.clone(),
+        e,
         wallet::CreateWalletPayload {
             owner_id: owner.id.clone(),
             metadata: wallet::WalletMetadata {
@@ -137,7 +144,6 @@ pub async fn request_bank_account_verification(
         .await
         .map_err(|_| CreationError::UnexpectedError)?
         .ok_or(CreationError::UnexpectedError)?;
-    tracing::info!("Found wallet: {:?}", _wallet);
 
     let mut headers = HeaderMap::new();
     headers.insert(

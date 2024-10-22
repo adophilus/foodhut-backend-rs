@@ -10,6 +10,7 @@ use axum::{
     Router,
 };
 use chrono::NaiveDate;
+use futures::FutureExt;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::json;
@@ -48,8 +49,19 @@ async fn sign_up(
         return utils::validation::into_response(errors);
     }
 
+    let mut tx = match ctx.db_conn.clone().pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            tracing::error!("{}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to start transaction" })),
+            );
+        }
+    };
+
     match repository::user::find_by_email_or_phone_number(
-        ctx.db_conn.clone(),
+        &mut *tx,
         repository::user::FindByEmailOrPhoneNumber {
             email: payload.email.clone().to_lowercase(),
             phone_number: payload.phone_number.clone(),
@@ -78,8 +90,8 @@ async fn sign_up(
         }
     };
 
-    match repository::user::create(
-        ctx.db_conn.clone(),
+    let user = match repository::user::create(
+        &mut *tx,
         repository::user::CreateUserPayload {
             email: payload.email.clone(),
             phone_number: payload.phone_number.clone(),
@@ -90,35 +102,53 @@ async fn sign_up(
     )
     .await
     {
-        Ok(user) => {
-            notification::send(
-                ctx.clone(),
-                notification::Notification::registered(user.clone()),
-                notification::Backend::Email,
+        Ok(user) => user,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "Sign up failed!"
+                })),
             )
-            .await;
-
-            wallet::create(ctx.clone(), user.clone()).await;
-
-            match otp::send(ctx.clone(), user, "auth.verification".to_string()).await {
-                Ok(_) => (
-                    StatusCode::OK,
-                    Json(json!({ "message" :"Check your phone for a verification OTP"})),
-                ),
-                Err(otp::SendError::NotExpired) => unreachable!(),
-                Err(_) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error" : "Failed to send OTP"})),
-                ),
-            }
         }
-        Err(_) => (
+    };
+
+    // TODO: Notification failing to send is insignificant for now
+    let _ = tokio::spawn(notification::send(
+        ctx.clone(),
+        notification::Notification::registered(user.clone()),
+        notification::Backend::Email,
+    ));
+
+    if let Err(_) = wallet::create(ctx.clone(), &mut *tx, user.clone()).await {
+        return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "error": "Sign up failed!"
-            })),
-        ),
-    }
+            Json(json!({ "error": "Failed to create wallet" })),
+        );
+    };
+
+    match tx.commit().await {
+        Ok(_) => (),
+        Err(err) => {
+            tracing::error!("{}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Sorry an error occurred" })),
+            );
+        }
+    };
+
+    // TODO: if an error occurs at this point the user can always request for another OTP
+    let _ = tokio::spawn(otp::send(
+        ctx.clone(),
+        user,
+        "auth.verification".to_string(),
+    ));
+
+    (
+        StatusCode::OK,
+        Json(json!({ "message" :"Check your phone for a verification OTP"})),
+    )
 }
 
 #[derive(Deserialize)]

@@ -14,6 +14,7 @@ use crate::{
 };
 use std::sync::Arc;
 
+#[derive(Eq, PartialEq, Debug)]
 pub enum SendError {
     NotSent,
     NotExpired,

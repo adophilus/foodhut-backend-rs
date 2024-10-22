@@ -3,7 +3,7 @@ use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::types::BigDecimal;
+use sqlx::{types::BigDecimal, PgExecutor};
 use std::convert::Into;
 use ulid::Ulid;
 
@@ -41,6 +41,7 @@ pub struct PaystackWalletMetadata {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(untagged)]
 pub enum WalletBackend {
     Paystack(PaystackWalletMetadata),
 }
@@ -52,12 +53,7 @@ pub struct WalletMetadata {
 
 impl From<serde_json::Value> for WalletMetadata {
     fn from(value: serde_json::Value) -> Self {
-        serde_json::from_str::<Self>(
-            value
-                .as_str()
-                .expect("Not possible to decode from NULL data"),
-        )
-        .expect("Invalid WalletMetadata type")
+        serde_json::from_value::<Self>(value).unwrap()
     }
 }
 
@@ -80,25 +76,23 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateWalletPayload) -> Result<Wallet, Error> {
+pub async fn create<'e, E>(e: E, payload: CreateWalletPayload) -> Result<Wallet, Error>
+where
+    E: PgExecutor<'e>,
+{
     sqlx::query_as!(
         Wallet,
         "
-        INSERT INTO wallets (
-            id,
-            balance,
-            metadata,
-            owner_id
-        )
+        INSERT INTO wallets (id, balance, metadata, owner_id)
         VALUES ($1, $2, $3, $4)
         RETURNING *
-    ",
+        ",
         Ulid::new().to_string(),
         BigDecimal::from_u8(0).unwrap(),
         json!(payload.metadata),
         payload.owner_id,
     )
-    .fetch_one(&db.pool)
+    .fetch_one(e)
     .await
     .map_err(|err| {
         tracing::error!("Error occurred while trying to create a wallet: {}", err);

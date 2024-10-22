@@ -1,11 +1,12 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sqlx::{Executor, PgExecutor};
 
 use crate::utils::{self, database::DatabaseConnection};
 use ulid::Ulid;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProfilePicture(pub Option<utils::storage::UploadedMedia>);
 
 impl From<Option<serde_json::Value>> for ProfilePicture {
@@ -47,7 +48,7 @@ impl ToString for Role {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct User {
     pub id: String,
     pub email: String,
@@ -76,11 +77,15 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateUserPayload) -> Result<User> {
+pub async fn create<'e, E>(db: E, payload: CreateUserPayload) -> Result<User>
+where
+    E: PgExecutor<'e>,
+{
     match sqlx::query_as!(
         User,
         "
-        INSERT INTO users (id, email, phone_number, first_name, last_name, birthday, is_verified) VALUES ($1, $2, $3, $4, $5, $6, false)
+        INSERT INTO users (id, email, phone_number, first_name, last_name, birthday, is_verified)
+        VALUES ($1, $2, $3, $4, $5, $6, false)
         RETURNING *
         ",
         Ulid::new().to_string(),
@@ -90,8 +95,9 @@ pub async fn create(db: DatabaseConnection, payload: CreateUserPayload) -> Resul
         payload.last_name,
         payload.birthday.into(),
     )
-    .fetch_one(&db.pool)
-    .await {
+    .fetch_one(db)
+    .await
+    {
         Ok(user) => Ok(user),
         Err(err) => {
             tracing::error!("Error occured while creating a user account: {}", err);
@@ -114,14 +120,17 @@ pub async fn find_by_email(db: DatabaseConnection, email: String) -> Result<Opti
     sqlx::query_as!(User, "SELECT * FROM users WHERE email = $1", email)
         .fetch_optional(&db.pool)
         .await
-    .map_err(|err| {
+        .map_err(|err| {
             tracing::error!("Error occurred in find_by_email: {}", err);
-        Error::UnexpectedError
+            Error::UnexpectedError
         })
 }
 
-pub async fn find_by_phone_number(db: DatabaseConnection, phone_number: String) -> Result<Option<User>> {
-     sqlx::query_as!(
+pub async fn find_by_phone_number(
+    db: DatabaseConnection,
+    phone_number: String,
+) -> Result<Option<User>> {
+    sqlx::query_as!(
         User,
         "SELECT * FROM users WHERE phone_number = $1",
         phone_number
@@ -129,51 +138,52 @@ pub async fn find_by_phone_number(db: DatabaseConnection, phone_number: String) 
     .fetch_optional(&db.pool)
     .await
     .map_err(|err| {
-            tracing::error!("Error occurred in find_by_phone_number: {}", err);
-            Error::UnexpectedError
+        tracing::error!("Error occurred in find_by_phone_number: {}", err);
+        Error::UnexpectedError
     })
 }
 
 pub struct FindByEmailOrPhoneNumber {
     pub email: String,
-    pub phone_number: String
+    pub phone_number: String,
 }
 
-pub async fn find_by_email_or_phone_number(
-    db: DatabaseConnection, 
-    payload: FindByEmailOrPhoneNumber
-) -> Result<Option<User>> {
-     sqlx::query_as!(
+pub async fn find_by_email_or_phone_number<'e, E>(
+    db: E,
+    payload: FindByEmailOrPhoneNumber,
+) -> Result<Option<User>>
+where
+    E: PgExecutor<'e>,
+{
+    sqlx::query_as!(
         User,
         "SELECT * FROM users WHERE email = $1 OR phone_number = $2",
-         payload.email,
+        payload.email,
         payload.phone_number
     )
-    .fetch_optional(&db.pool)
+    .fetch_optional(db)
     .await
     .map_err(|err| {
-            tracing::error!("Error occurred in find_by_phone_number: {}", err);
-            Error::UnexpectedError
+        tracing::error!("Error occurred in find_by_phone_number: {}", err);
+        Error::UnexpectedError
     })
 }
 
-pub async fn verify_by_phone_number(
-    db: DatabaseConnection,
-    phone_number: String,
-) -> Result<()> {
+pub async fn verify_by_phone_number(db: DatabaseConnection, phone_number: String) -> Result<()> {
     sqlx::query!(
         "UPDATE users SET is_verified = true WHERE phone_number = $1",
         phone_number
     )
     .execute(&db.pool)
     .await
-    .map_err(|err|{
-            tracing::error!(
-                "Error occurred while trying to verify user by phone number: {}",
-                err
-            );
-            Error::UnexpectedError
-    }).map(|_|{})
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to verify user by phone number: {}",
+            err
+        );
+        Error::UnexpectedError
+    })
+    .map(|_| {})
 }
 
 pub struct UpdateUserPayload {
@@ -219,15 +229,15 @@ pub async fn update_by_id(
     )
     .execute(&db.pool)
     .await
-    .map_err(|err|{
-            tracing::error!(
-                "Error occurred while trying to update a user by id {}: {}",
-                id,
-                err
-            );
-            Error::UnexpectedError
-        })
-            .map(|_|{})
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to update a user by id {}: {}",
+            id,
+            err
+        );
+        Error::UnexpectedError
+    })
+    .map(|_| {})
 }
 
 pub async fn set_role_by_id(db: DatabaseConnection, id: String, role: Role) -> Result<()> {
@@ -244,15 +254,15 @@ pub async fn set_role_by_id(db: DatabaseConnection, id: String, role: Role) -> R
     )
     .execute(&db.pool)
     .await
-    .map_err(|err|{
-            tracing::error!(
-                "Error occurred while trying to set a user's role by id {}: {}",
-                id,
-                err
-            );
-            Error::UnexpectedError
-        })
-            .map(|_|{})
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to set a user's role by id {}: {}",
+            id,
+            err
+        );
+        Error::UnexpectedError
+    })
+    .map(|_| {})
 }
 
 pub fn is_admin(user: &User) -> bool {
