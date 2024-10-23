@@ -163,7 +163,7 @@ pub struct Order {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct OrderItems(pub Vec<OrderItem>);
+pub struct OrderItems(pub Vec<OrderItem>);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrderItem {
