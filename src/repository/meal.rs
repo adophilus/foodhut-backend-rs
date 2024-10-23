@@ -119,43 +119,10 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Mea
 }
 
 #[derive(Deserialize)]
-struct DatabaseCountedResult {
-    data: Vec<Meal>,
-    total: u32,
-}
-
-impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
-    fn into(self) -> DatabaseCountedResult {
-        match self {
-            Some(json) => {
-                match serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref()) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        tracing::error!("{}", err);
-                        DatabaseCountedResult {
-                            data: vec![],
-                            total: 0,
-                        }
-                    }
-                }
-            }
-            None => DatabaseCountedResult {
-                data: vec![],
-                total: 0,
-            },
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct DatabaseCounted {
-    result: DatabaseCountedResult,
-}
-
-#[derive(Deserialize)]
 pub struct Filters {
     pub kitchen_id: Option<String>,
     pub search: Option<String>,
+    pub is_liked_by: Option<String>,
 }
 
 pub async fn find_many(
@@ -166,35 +133,52 @@ pub async fn find_many(
     sqlx::query_as!(
         DatabasePaginatedMeal,
         r#"
-            WITH filtered_data AS (
-                SELECT *
-                FROM meals
-                WHERE
-                    ($3::TEXT IS NULL OR meals.kitchen_id = $3)
-                    AND ($4::TEXT IS NULL OR meals.name ILIKE CONCAT('%', $4, '%'))
-                LIMIT $1
-                OFFSET $2
-            ),
-            total_count AS (
-                SELECT COUNT(*) AS total_rows
-                FROM meals
-                WHERE
-                    ($3::TEXT IS NULL OR meals.kitchen_id = $3)
-                    AND ($4::TEXT IS NULL OR meals.name ILIKE CONCAT('%', $4, '%'))
+        WITH filtered_data AS (
+            SELECT meals.*
+            FROM meals
+            LEFT JOIN meal_user_reactions 
+            ON meals.id = meal_user_reactions.meal_id
+            AND (
+                $5::TEXT IS NOT NULL AND 
+                meal_user_reactions.user_id = $5 AND 
+                meal_user_reactions.reaction = 'LIKE'
             )
-            SELECT
-                COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
-                JSONB_BUILD_OBJECT(
-                    'total', (SELECT total_rows FROM total_count),
-                    'per_page', $1,
-                    'page', $2 / $1 + 1
-                ) AS meta
-            FROM filtered_data;
-        "#,
+            WHERE
+                meals.kitchen_id = COALESCE($3, meals.kitchen_id)
+                AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
+                AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
+            LIMIT $1
+            OFFSET $2
+        ),
+        total_count AS (
+            SELECT COUNT(meals.id) AS total_rows
+            FROM meals
+            LEFT JOIN meal_user_reactions 
+            ON meals.id = meal_user_reactions.meal_id
+            AND (
+                $5::TEXT IS NOT NULL AND 
+                meal_user_reactions.user_id = $5 AND 
+                meal_user_reactions.reaction = 'LIKE'
+            )
+            WHERE
+                meals.kitchen_id = COALESCE($3, meals.kitchen_id)
+                AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
+                AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
+        )
+        SELECT 
+            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
+            JSONB_BUILD_OBJECT(
+                'total', (SELECT total_rows FROM total_count),
+                'per_page', $1,
+                'page', $2 / $1 + 1
+            ) AS meta
+        FROM filtered_data;
+    "#,
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
         filters.kitchen_id,
-        filters.search
+        filters.search,
+        filters.is_liked_by,
     )
     .fetch_one(&db.pool)
     .await

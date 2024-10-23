@@ -131,12 +131,37 @@ async fn create_meal(
     }
 }
 
+#[derive(Deserialize)]
+struct Filters {
+    pub kitchen_id: Option<String>,
+    pub search: Option<String>,
+    pub is_liked: Option<bool>,
+}
+
 async fn get_meals(
     State(ctx): State<Arc<Context>>,
+    auth: Auth,
     pagination: Pagination,
-    Query(filters): Query<repository::meal::Filters>,
+    Query(filters): Query<Filters>,
 ) -> impl IntoResponse {
-    match repository::meal::find_many(ctx.db_conn.clone(), pagination.clone(), filters).await {
+    tracing::info!("{:?}", auth.user.id.clone());
+
+    let is_liked_by = match filters.is_liked {
+        Some(true) => Some(auth.user.id),
+        _ => None,
+    };
+
+    match repository::meal::find_many(
+        ctx.db_conn.clone(),
+        pagination.clone(),
+        repository::meal::Filters {
+            kitchen_id: filters.kitchen_id,
+            search: filters.search,
+            is_liked_by,
+        },
+    )
+    .await
+    {
         Ok(paginated_meals) => (StatusCode::OK, Json(json!(paginated_meals))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
