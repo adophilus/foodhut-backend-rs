@@ -378,6 +378,87 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Ord
     })
 }
 
+pub async fn find_full_order_by_id(
+    db: DatabaseConnection,
+    order_id: String,
+) -> Result<Option<FullOrder>, Error> {
+    sqlx::query_as!(
+        FullOrder,
+        r#"
+        WITH order_data AS (
+            SELECT orders.*,
+                   COALESCE(
+                       JSONB_AGG(
+                           JSONB_BUILD_OBJECT(
+                               'id', full_order_items.item_id,
+                               'status', full_order_items.item_status,
+                               'price', full_order_items.price,
+                               'meal_id', full_order_items.meal_id,
+                               'order_id', full_order_items.order_id,
+                               'kitchen_id', full_order_items.kitchen_id,
+                               'owner_id', full_order_items.owner_id,
+                               'created_at', full_order_items.item_created_at,
+                               'updated_at', full_order_items.item_updated_at,
+                               'meal', JSONB_BUILD_OBJECT(
+                                   'id', full_order_items.meal_id,
+                                   'name', full_order_items.meal_name,
+                                   'description', full_order_items.description,
+                                   'rating', full_order_items.rating,
+                                   'price', full_order_items.meal_price,
+                                   'likes', full_order_items.likes,
+                                   'cover_image', full_order_items.cover_image,
+                                   'is_available', full_order_items.is_available,
+                                   'kitchen_id', full_order_items.meal_kitchen_id,
+                                   'created_at', full_order_items.meal_created_at,
+                                   'updated_at', full_order_items.meal_updated_at
+                               )
+                           )
+                       ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
+                       '[]'::jsonb
+                   ) AS items
+            FROM orders
+            LEFT JOIN (
+                SELECT order_items.id AS item_id,
+                       order_items.order_id,
+                       order_items.kitchen_id,
+                       order_items.price,
+                       order_items.status AS item_status,
+                       order_items.created_at AS item_created_at,
+                       order_items.updated_at AS item_updated_at,
+                       order_items.owner_id,
+                       meals.id AS meal_id,
+                       meals.name AS meal_name,
+                       meals.description,
+                       meals.rating,
+                       meals.price AS meal_price,
+                       meals.likes,
+                       meals.cover_image,
+                       meals.is_available,
+                       meals.kitchen_id AS meal_kitchen_id,
+                       meals.created_at AS meal_created_at,
+                       meals.updated_at AS meal_updated_at
+                FROM order_items
+                LEFT JOIN meals ON order_items.meal_id = meals.id
+            ) AS full_order_items ON orders.id = full_order_items.order_id
+            WHERE orders.id = $1
+            GROUP BY orders.id
+        )
+        SELECT * FROM order_data;
+        "#,
+        order_id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch full order by id {}: {}",
+            order_id,
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
 pub async fn find_by_id_and_owner_id(
     db: DatabaseConnection,
     id: String,
@@ -405,6 +486,90 @@ pub async fn find_by_id_and_owner_id(
     .await
     .map_err(|err| {
         tracing::error!("Error occurred while trying to fetch order by id: {}", err);
+        Error::UnexpectedError
+    })
+}
+
+pub async fn find_full_order_by_id_and_owner_id(
+    db: DatabaseConnection,
+    order_id: String,
+    owner_id: String,
+) -> Result<Option<FullOrder>, Error> {
+    sqlx::query_as!(
+        FullOrder,
+        r#"
+        WITH order_data AS (
+            SELECT orders.*,
+                   COALESCE(
+                       JSONB_AGG(
+                           JSONB_BUILD_OBJECT(
+                               'id', full_order_items.item_id,
+                               'status', full_order_items.item_status,
+                               'price', full_order_items.price,
+                               'meal_id', full_order_items.meal_id,
+                               'order_id', full_order_items.order_id,
+                               'kitchen_id', full_order_items.kitchen_id,
+                               'owner_id', full_order_items.owner_id,
+                               'created_at', full_order_items.item_created_at,
+                               'updated_at', full_order_items.item_updated_at,
+                               'meal', JSONB_BUILD_OBJECT(
+                                   'id', full_order_items.meal_id,
+                                   'name', full_order_items.meal_name,
+                                   'description', full_order_items.description,
+                                   'rating', full_order_items.rating,
+                                   'price', full_order_items.meal_price,
+                                   'likes', full_order_items.likes,
+                                   'cover_image', full_order_items.cover_image,
+                                   'is_available', full_order_items.is_available,
+                                   'kitchen_id', full_order_items.meal_kitchen_id,
+                                   'created_at', full_order_items.meal_created_at,
+                                   'updated_at', full_order_items.meal_updated_at
+                               )
+                           )
+                       ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
+                       '[]'::jsonb
+                   ) AS items
+            FROM orders
+            LEFT JOIN (
+                SELECT order_items.id AS item_id,
+                       order_items.order_id,
+                       order_items.kitchen_id,
+                       order_items.price,
+                       order_items.status AS item_status,
+                       order_items.created_at AS item_created_at,
+                       order_items.updated_at AS item_updated_at,
+                       order_items.owner_id,
+                       meals.id AS meal_id,
+                       meals.name AS meal_name,
+                       meals.description,
+                       meals.rating,
+                       meals.price AS meal_price,
+                       meals.likes,
+                       meals.cover_image,
+                       meals.is_available,
+                       meals.kitchen_id AS meal_kitchen_id,
+                       meals.created_at AS meal_created_at,
+                       meals.updated_at AS meal_updated_at
+                FROM order_items
+                LEFT JOIN meals ON order_items.meal_id = meals.id
+            ) AS full_order_items ON orders.id = full_order_items.order_id
+            WHERE orders.id = $1 AND orders.owner_id = $2
+            GROUP BY orders.id
+        )
+        SELECT * FROM order_data;
+        "#,
+        order_id,
+        owner_id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch full order by id {} and owner id {}: {}",
+            order_id,
+            owner_id,
+            err
+        );
         Error::UnexpectedError
     })
 }

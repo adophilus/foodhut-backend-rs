@@ -191,6 +191,47 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Car
     }
 }
 
+pub async fn find_full_cart_by_id(
+    db: DatabaseConnection,
+    id: String,
+) -> Result<Option<FullCart>, Error> {
+    sqlx::query_as!(
+        FullCart,
+        r#"
+        WITH cart_data AS (
+            SELECT 
+                carts.id,
+                carts.status,
+                carts.owner_id,
+                carts.created_at,
+                carts.updated_at,
+                COALESCE(
+                    JSONB_AGG(
+                        TO_JSONB(ROW_TO_JSON(cart_items)) || 
+                        JSONB_BUILD_OBJECT(
+                            'meal', meals
+                        )
+                    ) FILTER (WHERE cart_items.meal_id IS NOT NULL),
+                    '[]'::jsonb
+                ) AS items
+            FROM carts
+            LEFT JOIN LATERAL jsonb_to_recordset(carts.items::jsonb) AS cart_items(meal_id TEXT, quantity INT) ON true
+            LEFT JOIN meals ON cart_items.meal_id = meals.id
+            WHERE carts.id = $1
+            GROUP BY carts.id
+        )
+        SELECT * FROM cart_data;
+        "#,
+        id
+    )
+    .fetch_optional(&db.pool)
+    .await
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch cart by id {}: {}", id, err);
+        Error::UnexpectedError
+    })
+}
+
 pub async fn find_active_cart_by_owner_id(
     db: DatabaseConnection,
     owner_id: String,
@@ -220,7 +261,7 @@ pub async fn find_active_full_cart_by_owner_id(
     db: DatabaseConnection,
     owner_id: String,
 ) -> Result<Option<FullCart>, Error> {
-    match sqlx::query_as!(
+    sqlx::query_as!(
         FullCart,
         r#"
         WITH cart_data AS (
@@ -232,22 +273,9 @@ pub async fn find_active_full_cart_by_owner_id(
                 carts.updated_at,
                 COALESCE(
                     JSONB_AGG(
+                        TO_JSONB(ROW_TO_JSON(cart_items)) || 
                         JSONB_BUILD_OBJECT(
-                            'meal_id', cart_items.meal_id,
-                            'quantity', cart_items.quantity,
-                            'meal', JSONB_BUILD_OBJECT(
-                                'id', meals.id,
-                                'name', meals.name,
-                                'description', meals.description,
-                                'rating', meals.rating,
-                                'price', meals.price,
-                                'likes', meals.likes,
-                                'cover_image', meals.cover_image,
-                                'is_available', meals.is_available,
-                                'kitchen_id', meals.kitchen_id,
-                                'created_at', meals.created_at,
-                                'updated_at', meals.updated_at
-                            )
+                            'meal', meals
                         )
                     ) FILTER (WHERE cart_items.meal_id IS NOT NULL),
                     '[]'::jsonb
@@ -258,52 +286,21 @@ pub async fn find_active_full_cart_by_owner_id(
             WHERE carts.owner_id = $1 AND carts.status = $2
             GROUP BY carts.id
         )
-        SELECT 
-        *
-        FROM cart_data;
-    "#,
+        SELECT * FROM cart_data;
+        "#,
         owner_id,
         CartStatus::NotCheckedOut.to_string()
     )
     .fetch_optional(&db.pool)
     .await
-    {
-        Ok(maybe_cart) => Ok(maybe_cart),
-        Err(err) => {
-            tracing::error!(
-                "Error occurred while trying to fetch active cart by owner id {}: {}",
-                owner_id,
-                err
-            );
-            Err(Error::UnexpectedError)
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct DatabaseCountedResult {
-    data: Vec<Cart>,
-    total: u32,
-}
-
-impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
-    fn into(self) -> DatabaseCountedResult {
-        match self {
-            Some(json) => {
-                serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref())
-                    .unwrap()
-            }
-            None => DatabaseCountedResult {
-                data: vec![],
-                total: 0,
-            },
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct DatabaseCounted {
-    result: DatabaseCountedResult,
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch active cart by owner id {}: {}",
+            owner_id,
+            err
+        );
+        Error::UnexpectedError
+    })
 }
 
 #[derive(Deserialize)]
@@ -430,49 +427,10 @@ pub async fn update_by_id(
     }
 }
 
-pub async fn get_meals_from_cart_by_id(
-    db: DatabaseConnection,
-    id: String,
-) -> Result<Vec<Meal>, Error> {
-    match find_by_id(db.clone(), id.clone()).await {
-        Ok(Some(cart)) => {
-            let meal_ids = cart
-                .items
-                .iter()
-                .map(|item| item.meal_id.clone())
-                .collect::<Vec<_>>();
-
-            match sqlx::query_as!(
-                Meal,
-                "SELECT * FROM meals WHERE $1 @> TO_JSONB(meals.id)",
-                json!(meal_ids),
-            )
-            .fetch_all(&db.pool)
-            .await
-            {
-                Ok(meals) => Ok(meals),
-                Err(e) => {
-                    log::error!(
-                        "Error occurred while trying to get meals from cart by id {}: {}",
-                        id,
-                        e
-                    );
-                    Err(Error::UnexpectedError)
-                }
-            }
-        }
-        Ok(None) => Err(Error::UnexpectedError),
-        Err(e) => {
-            log::error!(
-                "Error occurred while trying to get meals from cart by id {}: {:?}",
-                id,
-                e
-            );
-            Err(Error::UnexpectedError)
-        }
-    }
+pub fn is_owner(user: super::user::User, cart: &Cart) -> bool {
+    cart.owner_id == user.id
 }
 
-pub fn is_owner(user: super::user::User, cart: Cart) -> bool {
+pub fn is_owner_of_full_cart(user: super::user::User, cart: &FullCart) -> bool {
     cart.owner_id == user.id
 }

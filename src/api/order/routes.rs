@@ -76,9 +76,14 @@ async fn get_order_by_id(
     State(ctx): State<Arc<Context>>,
 ) -> impl IntoResponse {
     let maybe_order = match repository::user::is_admin(&auth.user) {
-        true => repository::order::find_by_id(ctx.db_conn.clone(), id).await,
+        true => repository::order::find_full_order_by_id(ctx.db_conn.clone(), id).await,
         false => {
-            repository::order::find_by_id_and_owner_id(ctx.db_conn.clone(), id, auth.user.id).await
+            repository::order::find_full_order_by_id_and_owner_id(
+                ctx.db_conn.clone(),
+                id,
+                auth.user.id,
+            )
+            .await
         }
     };
     match maybe_order {

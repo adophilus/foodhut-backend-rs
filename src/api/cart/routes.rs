@@ -96,7 +96,7 @@ async fn get_cart_by_id(
     State(ctx): State<Arc<Context>>,
     auth: Auth,
 ) -> impl IntoResponse {
-    let cart = match repository::cart::find_by_id(ctx.db_conn.clone(), id.clone()).await {
+    let cart = match repository::cart::find_full_cart_by_id(ctx.db_conn.clone(), id.clone()).await {
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -112,7 +112,7 @@ async fn get_cart_by_id(
         }
     };
 
-    if !repository::cart::is_owner(auth.user.clone(), cart.clone()) {
+    if !repository::cart::is_owner_of_full_cart(auth.user.clone(), &cart) {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({"error": "You are not the owner of this cart"})),
