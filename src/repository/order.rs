@@ -246,7 +246,7 @@ define_paginated!(DatabasePaginatedOrder, Order);
 define_paginated!(DatabasePaginatedFullOrder, FullOrder);
 
 pub struct CreateOrderPayload {
-    pub cart: Cart,
+    pub cart_id: String,
     pub payment_method: PaymentMethod,
     pub delivery_address: String,
     pub dispatch_rider_note: String,
@@ -338,7 +338,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
                 inserted_order.updated_at;
         ",
         Ulid::new().to_string(),
-        payload.cart.id,
+        payload.cart_id,
         OrderStatus::AwaitingPayment.to_string(),
         payload.payment_method.to_string(),
         // delivery_fee,

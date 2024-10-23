@@ -64,6 +64,7 @@ pub mod pagination {
 
     impl<T: serde::de::DeserializeOwned> From<Option<Value>> for Item<T> {
         fn from(option: Option<Value>) -> Self {
+            tracing::info!("{:?}", option);
             match option {
                 Some(value) => serde_json::from_value(value).expect("Invalid list found"),
                 None => unreachable!(),
