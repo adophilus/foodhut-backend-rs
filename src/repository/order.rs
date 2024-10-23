@@ -189,6 +189,51 @@ impl From<Option<serde_json::Value>> for OrderItems {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FullOrder {
+    pub id: String,
+    pub status: OrderStatus,
+    pub payment_method: PaymentMethod,
+    pub delivery_fee: BigDecimal,
+    pub service_fee: BigDecimal,
+    pub sub_total: BigDecimal,
+    pub total: BigDecimal,
+    pub delivery_address: String,
+    pub dispatch_rider_note: String,
+    pub items: FullOrderItems,
+    pub owner_id: String,
+    pub cart_id: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FullOrderItems(pub Vec<FullOrderItem>);
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FullOrderItem {
+    pub id: String,
+    pub status: OrderStatus,
+    pub price: BigDecimal,
+    pub meal_id: String,
+    pub order_id: String,
+    pub kitchen_id: String,
+    pub owner_id: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+    pub meal: Meal, // Embed the meal details here
+}
+
+impl From<Option<serde_json::Value>> for FullOrderItems {
+    fn from(v: Option<serde_json::Value>) -> Self {
+        match v {
+            Some(json) => serde_json::de::from_str::<_>(json.to_string().as_ref())
+                .expect("Invalid full order items list"),
+            None => unreachable!(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrderUpdate {
     pub id: i32,
     pub status: OrderStatus,
@@ -198,6 +243,7 @@ pub struct OrderUpdate {
 }
 
 define_paginated!(DatabasePaginatedOrder, Order);
+define_paginated!(DatabasePaginatedFullOrder, FullOrder);
 
 pub struct CreateOrderPayload {
     pub cart: Cart,
@@ -397,18 +443,65 @@ pub async fn find_many(
     db: DatabaseConnection,
     pagination: Pagination,
     filters: Filters,
-) -> Result<Paginated<Order>, Error> {
+) -> Result<Paginated<FullOrder>, Error> {
     sqlx::query_as!(
-        DatabasePaginatedOrder,
+        DatabasePaginatedFullOrder,
         r#"
             WITH filtered_data AS (
                 SELECT orders.*,
                        COALESCE(
-                           JSONB_AGG(ROW_TO_JSON(order_items)) FILTER (WHERE order_items.id IS NOT NULL),
+                           JSONB_AGG(
+                               JSONB_BUILD_OBJECT(
+                                   'id', full_order_items.item_id,
+                                   'status', full_order_items.item_status,
+                                   'price', full_order_items.price,
+                                   'meal_id', full_order_items.meal_id,
+                                   'order_id', full_order_items.order_id,
+                                   'kitchen_id', full_order_items.kitchen_id,
+                                   'owner_id', full_order_items.owner_id,
+                                   'created_at', full_order_items.item_created_at,
+                                   'updated_at', full_order_items.item_updated_at,
+                                   'meal', JSONB_BUILD_OBJECT(
+                                       'id', full_order_items.meal_id,
+                                       'name', full_order_items.meal_name,
+                                       'description', full_order_items.description,
+                                       'rating', full_order_items.rating,
+                                       'price', full_order_items.meal_price,
+                                       'likes', full_order_items.likes,
+                                       'cover_image', full_order_items.cover_image,
+                                       'is_available', full_order_items.is_available,
+                                       'kitchen_id', full_order_items.meal_kitchen_id,
+                                       'created_at', full_order_items.meal_created_at,
+                                       'updated_at', full_order_items.meal_updated_at
+                                   )
+                               )
+                           ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
                            '[]'::jsonb
                        ) AS items
                 FROM orders
-                LEFT JOIN order_items ON orders.id = order_items.order_id
+                LEFT JOIN (
+                    SELECT order_items.id AS item_id,
+                           order_items.order_id,
+                           order_items.kitchen_id,
+                           order_items.price,
+                           order_items.status AS item_status,
+                           order_items.created_at AS item_created_at,
+                           order_items.updated_at AS item_updated_at,
+                           order_items.owner_id,
+                           meals.id AS meal_id,
+                           meals.name AS meal_name,
+                           meals.description,
+                           meals.rating,
+                           meals.price AS meal_price,
+                           meals.likes,
+                           meals.cover_image,
+                           meals.is_available,
+                           meals.kitchen_id AS meal_kitchen_id,
+                           meals.created_at AS meal_created_at,
+                           meals.updated_at AS meal_updated_at
+                    FROM order_items
+                    LEFT JOIN meals ON order_items.meal_id = meals.id
+                ) AS full_order_items ON orders.id = full_order_items.order_id
                 WHERE
                     ($3::TEXT IS NULL OR orders.owner_id = $3)
                     AND (
@@ -420,11 +513,11 @@ pub async fn find_many(
                         END
                     )
                     AND ($5::TEXT IS NULL OR orders.payment_method = $5)
-                    AND ($6::TEXT IS NULL OR order_items.kitchen_id = $6)
+                    AND ($6::TEXT IS NULL OR full_order_items.kitchen_id = $6)
                 GROUP BY orders.id
                 LIMIT $1
                 OFFSET $2
-            ), 
+            ),
             total_count AS (
                 SELECT COUNT(DISTINCT orders.id) AS total_rows
                 FROM orders
@@ -460,7 +553,7 @@ pub async fn find_many(
     )
     .fetch_one(&db.pool)
     .await
-    .map(DatabasePaginatedOrder::into)
+    .map(DatabasePaginatedFullOrder::into)
     .map_err(|err| {
         tracing::error!("Error occurred while trying to fetch many orders: {}", err);
         Error::UnexpectedError
