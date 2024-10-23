@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH filtered_data AS (\n                SELECT *\n                FROM meals\n                WHERE\n                    ($3::TEXT IS NULL OR meals.kitchen_id = $3)\n                    AND ($4::TEXT IS NULL OR meals.name ILIKE CONCAT('%', $4, '%'))\n                LIMIT $1\n                OFFSET $2\n            ),\n            total_count AS (\n                SELECT COUNT(*) AS total_rows\n                FROM meals\n                WHERE\n                    ($3::TEXT IS NULL OR meals.kitchen_id = $3)\n                    AND ($4::TEXT IS NULL OR meals.name ILIKE CONCAT('%', $4, '%'))\n            )\n            SELECT\n                COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,\n                JSONB_BUILD_OBJECT(\n                    'total', (SELECT total_rows FROM total_count),\n                    'per_page', $1,\n                    'page', $2 / $1 + 1\n                ) AS meta\n            FROM filtered_data;\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "items",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 1,
+        "name": "meta",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "2aa8ddd6c0a81c7f8b828a8a8d4e49c1200d4d6d91fc7cdc40906f7d761c30da"
+}
