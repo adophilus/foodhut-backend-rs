@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM ads WHERE created_at + (duration * INTERVAL '1 second') < NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "31fa4069a92b9285707adf886502393a368344cad9d9302e2d16182a333faece"
+}

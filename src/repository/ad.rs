@@ -1,9 +1,9 @@
-use std::ops::Deref;
-
+use crate::define_paginated;
 use chrono::{NaiveDate, NaiveDateTime};
 use log;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::ops::Deref;
 
 use crate::utils::{
     self,
@@ -12,7 +12,7 @@ use crate::utils::{
 };
 use ulid::Ulid;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Ad {
     pub id: String,
     pub banner_image: utils::storage::UploadedMedia,
@@ -21,6 +21,8 @@ pub struct Ad {
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
+
+define_paginated!(DatabasePaginatedAd, Ad);
 
 pub struct CreateAdPayload {
     pub banner_image: utils::storage::UploadedMedia,
@@ -114,8 +116,8 @@ pub async fn find_many(
     pagination: Pagination,
     filters: Filters,
 ) -> Result<Paginated<Ad>, Error> {
-    match sqlx::query_as!(
-        DatabaseCounted,
+    sqlx::query_as!(
+        DatabasePaginatedAd,
         "
             WITH filtered_data AS (
                 SELECT *
@@ -131,10 +133,13 @@ pub async fn find_many(
                 WHERE
                     link ILIKE CONCAT('%', COALESCE($3, link), '%')
             )
-            SELECT JSONB_BUILD_OBJECT(
-                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
-                'total', (SELECT total_rows FROM total_count)
-            ) AS result
+            SELECT 
+                COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) as items,
+                JSONB_BUILD_OBJECT(
+                    'total', (SELECT total_rows FROM total_count),
+                    'per_page', $1,
+                    'page', $2 / $1 + 1
+                ) AS meta
             FROM filtered_data;
         ",
         pagination.per_page as i64,
@@ -143,18 +148,11 @@ pub async fn find_many(
     )
     .fetch_one(&db.pool)
     .await
-    {
-        Ok(counted) => Ok(Paginated::new(
-            counted.result.data,
-            counted.result.total,
-            pagination.page,
-            pagination.per_page,
-        )),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to fetch many ads: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
+    .map(DatabasePaginatedAd::into)
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch many ads: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 pub struct UpdateAdPayload {
@@ -168,7 +166,7 @@ pub async fn update_by_id(
     id: String,
     payload: UpdateAdPayload,
 ) -> Result<(), Error> {
-    match sqlx::query!(
+    sqlx::query!(
         "
             UPDATE ads SET
                 banner_image = COALESCE(
@@ -188,32 +186,41 @@ pub async fn update_by_id(
     )
     .execute(&db.pool)
     .await
-    {
-        Err(e) => {
-            log::error!(
-                "Error occurred while trying to update a ad by id {}: {}",
-                id,
-                e
-            );
-            return Err(Error::UnexpectedError);
-        }
-        _ => Ok(()),
-    }
+    .map(|_| ())
+    .map_err(|e| {
+        log::error!(
+            "Error occurred while trying to update a ad by id {}: {}",
+            id,
+            e
+        );
+        Error::UnexpectedError
+    })
 }
 
-pub async fn delete_by_id(db: DatabaseConnection, id: String) -> Result<(), Error> {
-    match sqlx::query_as!(Ad, "DELETE FROM ads WHERE id = $1 RETURNING *", id)
+pub async fn delete_by_id(db: DatabaseConnection, id: String) -> Result<Ad, Error> {
+    sqlx::query_as!(Ad, "DELETE FROM ads WHERE id = $1 RETURNING *", id)
         .fetch_one(&db.pool)
         .await
-    {
-        Err(err) => {
-            log::error!(
+        .map_err(|err| {
+            tracing::error!(
                 "Error occurred while trying to delete an ad by id {}: {}",
                 id,
                 err
             );
-            return Err(Error::UnexpectedError);
-        }
-        Ok(_) => Ok(()),
-    }
+            Error::UnexpectedError
+        })
+}
+
+pub async fn delete_expired(db: DatabaseConnection) -> Result<(), Error> {
+    sqlx::query_as!(
+        Ad,
+        "DELETE FROM ads WHERE created_at + (duration * INTERVAL '1 second') < NOW()"
+    )
+    .execute(&db.pool)
+    .await
+    .map(|_| ())
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to delete expired ads: {}", err);
+        Error::UnexpectedError
+    })
 }

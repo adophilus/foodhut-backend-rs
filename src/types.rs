@@ -5,6 +5,8 @@ use core::time::Duration;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -256,9 +258,18 @@ impl apalis::prelude::Storage for JobStorage {
     }
 }
 
-pub trait SchedulableJob: Send + Sync + Clone {
-    fn schedule(&self) -> apalis::cron::Schedule;
-    fn run(&self) -> impl std::future::Future<Output = Result<(), apalis::prelude::Error>> + Send;
+// pub trait SchedulableJob: Send + Sync + Clone {
+//     fn schedule(&self) -> apalis::cron::Schedule;
+//     fn run(&self) -> impl std::future::Future<Output = Result<(), apalis::prelude::Error>> + Send;
+// }
+
+pub struct SchedulableJob {
+    pub schedule: apalis::cron::Schedule,
+    pub job: Arc<
+        dyn Fn() -> Pin<Box<dyn Future<Output = Result<(), apalis::prelude::Error>> + Send>>
+            + Send
+            + Sync,
+    >,
 }
 
 impl Default for Config {
