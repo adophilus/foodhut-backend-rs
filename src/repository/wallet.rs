@@ -3,13 +3,18 @@ use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::{types::BigDecimal, PgExecutor};
+use sqlx::{types::BigDecimal, Executor, PgExecutor, Postgres, Transaction};
 use std::convert::Into;
+use std::ops::DerefMut;
+use std::sync::Arc;
 use ulid::Ulid;
 
-use crate::utils::{
-    database::DatabaseConnection,
-    pagination::{Paginated, Pagination},
+use crate::{
+    types::Context,
+    utils::{
+        database::DatabaseConnection,
+        pagination::{Paginated, Pagination},
+    },
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -112,28 +117,25 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Wal
     }
 }
 
-pub async fn find_by_owner_id(
-    db: DatabaseConnection,
+pub async fn find_by_owner_id<'e, Executor: PgExecutor<'e>>(
+    e: Executor,
     owner_id: String,
 ) -> Result<Option<Wallet>, Error> {
-    match sqlx::query_as!(
+    sqlx::query_as!(
         Wallet,
         "SELECT * FROM wallets WHERE owner_id = $1",
         owner_id
     )
-    .fetch_optional(&db.pool)
+    .fetch_optional(e)
     .await
-    {
-        Ok(maybe_wallet) => Ok(maybe_wallet),
-        Err(err) => {
-            tracing::error!(
-                "Error occurred while trying to fetch a wallet by owner_id {}: {}",
-                owner_id,
-                err
-            );
-            Err(Error::UnexpectedError)
-        }
-    }
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch a wallet by owner_id {}: {}",
+            owner_id,
+            err
+        );
+        Error::UnexpectedError
+    })
 }
 
 #[derive(Deserialize)]
@@ -227,34 +229,32 @@ pub struct UpdateWalletPayload {
     pub amount: BigDecimal,
 }
 
-pub async fn update_by_id(
-    db: DatabaseConnection,
+pub async fn update_by_id<'e, Executor: PgExecutor<'e>>(
+    e: Executor,
     id: String,
     payload: UpdateWalletPayload,
 ) -> Result<(), Error> {
     // FIX: checks need to be made so that the user's balance cannot be negagtive
 
-    match sqlx::query!(
+    sqlx::query!(
         "
-            UPDATE wallets SET
-                 balance = CASE WHEN $1 = $2 THEN balance + $3::numeric ELSE balance - $3::numeric END
-            WHERE
-                id = $4
+        UPDATE wallets SET
+                balance = CASE WHEN $1 = $2 THEN balance + $3::numeric ELSE balance - $3::numeric END
+        WHERE
+            id = $4
         ",
         payload.operation.to_string(),
         UpdateWalletOperation::Credit.to_string(),
         payload.amount,
         id
     )
-    .execute(&db.pool)
-    .await
-    {
-        Err(e) => {
-            log::error!("Error occurred while trying to update wallet by id: {}", e);
-            return Err(Error::UnexpectedError);
-        }
-        _ => Ok(()),
-    }
+    .execute(e)
+        .await
+        .map(|_|())
+    .map_err(|err|{
+        log::error!("Error occurred while trying to update wallet by id: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 pub async fn update_metatata_by_owner_id(

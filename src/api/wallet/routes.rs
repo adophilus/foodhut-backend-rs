@@ -51,7 +51,7 @@ async fn create_bank_account(
 }
 
 async fn get_wallet_by_profile(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {
-    match repository::wallet::find_by_owner_id(ctx.db_conn.clone(), auth.user.id).await {
+    match repository::wallet::find_by_owner_id(&ctx.db_conn.pool, auth.user.id).await {
         Ok(Some(wallet)) => (StatusCode::OK, Json(json!(wallet))),
         Ok(None) => (
             StatusCode::NOT_FOUND,

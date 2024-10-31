@@ -148,20 +148,17 @@ pub struct FindByEmailOrPhoneNumber {
     pub phone_number: String,
 }
 
-pub async fn find_by_email_or_phone_number<'e, E>(
-    db: E,
+pub async fn find_by_email_or_phone_number<'e, E: PgExecutor<'e>>(
+    e: E,
     payload: FindByEmailOrPhoneNumber,
-) -> Result<Option<User>>
-where
-    E: PgExecutor<'e>,
-{
+) -> Result<Option<User>> {
     sqlx::query_as!(
         User,
         "SELECT * FROM users WHERE email = $1 OR phone_number = $2",
         payload.email,
         payload.phone_number
     )
-    .fetch_optional(db)
+    .fetch_optional(e)
     .await
     .map_err(|err| {
         tracing::error!("Error occurred in find_by_phone_number: {}", err);

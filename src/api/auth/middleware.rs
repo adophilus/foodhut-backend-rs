@@ -16,6 +16,7 @@ use crate::repository::user::User;
 use crate::types::Context;
 use crate::utils::{self, database::DatabaseConnection};
 use crate::{repository, types};
+use axum::RequestPartsExt;
 use std::sync::Arc;
 
 enum Error {
@@ -71,11 +72,10 @@ pub struct Auth {
 }
 
 async fn get_user_from_request<State: Send + Sync>(
+    ctx: Arc<Context>,
     parts: &mut Parts,
     state: &State,
 ) -> Result<User, Response> {
-    use axum::RequestPartsExt;
-    let Extension(ctx) = parts.extract::<Extension<Arc<Context>>>().await.unwrap();
     let headers = parts.extract::<HeaderMap>().await.unwrap();
 
     let err = (
@@ -98,7 +98,8 @@ impl<S: Send + Sync> FromRequestParts<S> for Auth {
     type Rejection = Response;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        get_user_from_request(parts, state)
+        let Extension(ctx) = parts.extract::<Extension<Arc<Context>>>().await.unwrap();
+        get_user_from_request(ctx, parts, state)
             .await
             .map(|user| Self { user })
     }
@@ -114,8 +115,24 @@ impl<S: Send + Sync> FromRequestParts<S> for AdminAuth {
     type Rejection = Response;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        get_user_from_request(parts, state)
+        let Extension(ctx) = parts.extract::<Extension<Arc<Context>>>().await.unwrap();
+
+        let user = get_user_from_request(ctx, parts, state)
             .await
-            .map(|user| Self { user })
+            .map_err(|err| {
+                (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({ "error": "Unauthorized" })),
+                )
+                    .into_response()
+            })?;
+
+        if !repository::user::is_admin(&user) {
+            return Err(
+                (StatusCode::FORBIDDEN, Json(json!({ "error": "Forbidden" }))).into_response(),
+            );
+        }
+
+        Ok(Self { user })
     }
 }

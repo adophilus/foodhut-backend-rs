@@ -8,7 +8,7 @@ pub mod jobs {
     async fn clean_ads_job(ctx: Arc<Context>) -> Result<(), apalis::prelude::Error> {
         tracing::info!("Cleaning up ads");
 
-        repository::ad::delete_expired(ctx.db_conn.clone()).await;
+        let _ = repository::ad::delete_expired(ctx.db_conn.clone()).await;
 
         Ok(())
     }

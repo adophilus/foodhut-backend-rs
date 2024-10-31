@@ -3,7 +3,7 @@ use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_string_from_number;
 use serde_json::json;
-use sqlx::PgExecutor;
+use sqlx::{PgExecutor, Postgres, Transaction};
 use std::sync::Arc;
 
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
         user::User,
         wallet::{self, WalletBackend},
     },
-    types::{self, AppEnvironment},
+    types::{self, AppEnvironment, Context},
     utils::database::DatabaseConnection,
 };
 
@@ -44,14 +44,10 @@ struct CustomerCreationServiceResponse {
     data: CustomerCreationServiceResponseData,
 }
 
-pub async fn create<'e, E>(
+pub async fn create(
     ctx: Arc<types::Context>,
-    e: E,
     owner: repository::user::User,
-) -> std::result::Result<(), CreationError>
-where
-    E: PgExecutor<'e>,
-{
+) -> std::result::Result<(), CreationError> {
     let mut headers = HeaderMap::new();
     headers.insert(
         "Authorization",
@@ -142,7 +138,7 @@ pub async fn request_virtual_account(
     ctx: Arc<types::Context>,
     payload: RequestVirtualAccountPayload,
 ) -> std::result::Result<String, CreationError> {
-    let _wallet = wallet::find_by_owner_id(ctx.db_conn.clone(), payload.user.id.clone())
+    let _wallet = wallet::find_by_owner_id(&ctx.db_conn.pool, payload.user.id.clone())
         .await
         .map_err(|_| CreationError::UnexpectedError)?
         .ok_or(CreationError::UnexpectedError)?;
@@ -300,10 +296,10 @@ pub struct InitializePaymentForOrder {
 }
 
 pub async fn initialize_payment_for_order(
-    db: DatabaseConnection,
+    tx: &mut Transaction<'_, Postgres>,
     payload: InitializePaymentForOrder,
 ) -> Result<()> {
-    let wallet = match wallet::find_by_owner_id(db.clone(), payload.payer.id.clone()).await {
+    let wallet = match wallet::find_by_owner_id(&mut **tx, payload.payer.id.clone()).await {
         Ok(Some(wallet)) => wallet,
         Ok(None) => return Err(Error::WalletNotFound),
         Err(_) => return Err(Error::UnexpectedError),
@@ -314,7 +310,7 @@ pub async fn initialize_payment_for_order(
     }
 
     if let Err(_) = wallet::update_by_id(
-        db.clone(),
+        &mut **tx,
         wallet.id.clone(),
         wallet::UpdateWalletPayload {
             operation: wallet::UpdateWalletOperation::Debit,
@@ -327,7 +323,7 @@ pub async fn initialize_payment_for_order(
     };
 
     wallet::update_by_id(
-        db.clone(),
+        &mut **tx,
         wallet.id.clone(),
         wallet::UpdateWalletPayload {
             operation: wallet::UpdateWalletOperation::Debit,
@@ -338,10 +334,10 @@ pub async fn initialize_payment_for_order(
     .map_err(|_| Error::UnexpectedError)?;
 
     transaction::create(
-        db.clone(),
+        &mut **tx,
         transaction::CreatePayload::Wallet(transaction::CreateWalletTransactionPayload {
             amount: payload.order.total.clone(),
-            r#type: transaction::TransactionType::Debit,
+            direction: transaction::TransactionDirection::Outgoing,
             note: Some(format!("Paid for order {}", payload.order.id.clone())),
             wallet_id: wallet.id.clone(),
         }),

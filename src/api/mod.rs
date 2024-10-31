@@ -7,6 +7,7 @@ pub mod meal;
 pub mod media;
 pub mod notification;
 pub mod order;
+pub mod transaction;
 pub mod user;
 pub mod wallet;
 pub mod webhooks;

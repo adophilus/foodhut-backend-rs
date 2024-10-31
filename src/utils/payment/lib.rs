@@ -4,6 +4,7 @@ use crate::types::Context;
 use crate::utils::{online, wallet};
 use serde::Serialize;
 use serde_json::json;
+use sqlx::{PgExecutor, Postgres, Transaction};
 use std::sync::Arc;
 
 pub enum Error {
@@ -27,6 +28,7 @@ pub struct PaymentDetails(serde_json::Value);
 
 pub async fn initialize_payment_for_order(
     ctx: Arc<Context>,
+    mut tx: &mut Transaction<'_, Postgres>,
     payload: InitializePaymentForOrder,
 ) -> Result<PaymentDetails, Error> {
     if payload.order.status != repository::order::OrderStatus::AwaitingPayment {
@@ -35,7 +37,7 @@ pub async fn initialize_payment_for_order(
 
     match payload.method {
         PaymentMethod::Wallet => match wallet::initialize_payment_for_order(
-            ctx.db_conn.clone(),
+            &mut tx,
             wallet::InitializePaymentForOrder {
                 order: payload.order,
                 payer: payload.payer,

@@ -1,6 +1,7 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sqlx::PgExecutor;
 use std::{
     convert::{From, Into},
     ops::{Deref, DerefMut},
@@ -172,23 +173,23 @@ pub async fn create(db: DatabaseConnection, payload: CreateCartPayload) -> Resul
     }
 }
 
-pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Cart>, Error> {
-    match sqlx::query_as!(
+pub async fn find_by_id<'e, Executor: PgExecutor<'e>>(
+    e: Executor,
+    id: String,
+) -> Result<Option<Cart>, Error> {
+    sqlx::query_as!(
         Cart,
         "
             SELECT * FROM carts WHERE id = $1
         ",
         id
     )
-    .fetch_optional(&db.pool)
+    .fetch_optional(e)
     .await
-    {
-        Ok(maybe_cart) => Ok(maybe_cart),
-        Err(err) => {
-            tracing::error!("Error occurred while trying to fetch many carts: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch many carts: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 pub async fn find_full_cart_by_id(

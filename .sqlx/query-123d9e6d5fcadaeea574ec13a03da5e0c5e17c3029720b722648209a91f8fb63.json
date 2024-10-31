@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO transactions (id, amount, type, note, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+  "query": "SELECT * FROM transactions WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -35,22 +35,23 @@
       },
       {
         "ordinal": 6,
-        "name": "type",
+        "name": "direction",
         "type_info": "Varchar"
       },
       {
         "ordinal": 7,
         "name": "user_id",
         "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "type",
+        "type_info": "Varchar"
       }
     ],
     "parameters": {
       "Left": [
-        "Varchar",
-        "Numeric",
-        "Varchar",
-        "Varchar",
-        "Varchar"
+        "Text"
       ]
     },
     "nullable": [
@@ -61,8 +62,9 @@
       false,
       true,
       false,
-      true
+      false,
+      false
     ]
   },
-  "hash": "4166088165d45e24467958c92ce628e7edf281a7ce3e935710a074a62c5b9e66"
+  "hash": "123d9e6d5fcadaeea574ec13a03da5e0c5e17c3029720b722648209a91f8fb63"
 }

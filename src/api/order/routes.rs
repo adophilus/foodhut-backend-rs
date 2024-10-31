@@ -255,7 +255,7 @@ async fn pay_for_order(
     Path(id): Path<String>,
     Json(payload): Json<PayForOrderPayload>,
 ) -> impl IntoResponse {
-    let order = match repository::order::find_by_id(ctx.db_conn.clone(), id).await {
+    let order = match repository::order::find_by_id(&ctx.db_conn.pool, id).await {
         Ok(Some(order)) => order,
         Ok(None) => {
             return (
@@ -276,8 +276,20 @@ async fn pay_for_order(
         repository::order::PaymentMethod::Wallet => utils::payment::PaymentMethod::Wallet,
     };
 
-    match utils::payment::initialize_payment_for_order(
+    let mut tx = match ctx.db_conn.pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            tracing::error!("{}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to start transaction" })),
+            );
+        }
+    };
+
+    let details = match utils::payment::initialize_payment_for_order(
         ctx.clone(),
+        &mut tx,
         utils::payment::InitializePaymentForOrder {
             method,
             order,
@@ -286,16 +298,33 @@ async fn pay_for_order(
     )
     .await
     {
-        Ok(details) => (StatusCode::OK, Json(json!(details))),
-        Err(utils::payment::Error::AlreadyPaid) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Payment has already been made" })),
-        ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Payment failed!" })),
-        ),
-    }
+        Ok(details) => details,
+        Err(utils::payment::Error::AlreadyPaid) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "Payment has already been made" })),
+            )
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Payment failed!" })),
+            )
+        }
+    };
+
+    match tx.commit().await {
+        Ok(_) => (),
+        Err(err) => {
+            tracing::error!("{}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Sorry an error occurred" })),
+            );
+        }
+    };
+
+    (StatusCode::OK, Json(json!(details)))
 }
 
 pub fn get_router() -> Router<Arc<Context>> {

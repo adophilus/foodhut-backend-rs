@@ -6,6 +6,7 @@ use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::types::Json;
+use sqlx::PgExecutor;
 use sqlx::{types::BigDecimal, Database};
 use std::{convert::Into, str::FromStr};
 use ulid::Ulid;
@@ -359,7 +360,10 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
     })
 }
 
-pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Order>, Error> {
+pub async fn find_by_id<'e, Executor: PgExecutor<'e>>(
+    e: Executor,
+    id: String,
+) -> Result<Option<Order>, Error> {
     sqlx::query_as!(
         Order,
         "
@@ -373,7 +377,7 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Ord
         ",
         id
     )
-    .fetch_optional(&db.pool)
+    .fetch_optional(e)
     .await
     .map_err(|err| {
         tracing::error!("Error occurred while trying to fetch order by id: {}", err);

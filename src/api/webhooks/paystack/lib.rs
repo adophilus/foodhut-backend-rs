@@ -15,12 +15,20 @@ pub mod handler {
         amount: BigDecimal,
         metadata: utils::online::Metadata,
     ) -> impl IntoResponse {
-        let order =
-            match repository::order::find_by_id(ctx.db_conn.clone(), metadata.order_id).await {
-                Ok(Some(order)) => order,
-                Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            };
+        let mut tx = match ctx.db_conn.pool.begin().await {
+            Ok(tx) => tx,
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+
+        let order = match repository::order::find_by_id(&mut *tx, metadata.order_id).await {
+            Ok(Some(order)) => order,
+            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+
+        if order.status != repository::order::OrderStatus::AwaitingPayment {
+            return StatusCode::OK.into_response();
+        }
 
         if amount / BigDecimal::from_u8(100).expect("Invalid primitive value to convert from")
             < order.total
@@ -28,19 +36,18 @@ pub mod handler {
             return StatusCode::BAD_REQUEST.into_response();
         }
 
-        let cart =
-            match repository::cart::find_by_id(ctx.db_conn.clone(), order.cart_id.clone()).await {
-                Ok(Some(cart)) => cart,
-                Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            };
+        let cart = match repository::cart::find_by_id(&mut *tx, order.cart_id.clone()).await {
+            Ok(Some(cart)) => cart,
+            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
 
         if let Err(_) = repository::transaction::create(
-            ctx.db_conn.clone(),
+            &mut *tx,
             repository::transaction::CreatePayload::Online(
                 repository::transaction::CreateOnlineTransactionPayload {
                     amount: order.total.clone(),
-                    r#type: repository::transaction::TransactionType::Debit,
+                    direction: repository::transaction::TransactionDirection::Outgoing,
                     note: Some(format!("Paid for order {}", order.id.clone())),
                     user_id: cart.owner_id.clone(),
                 },
@@ -55,7 +62,10 @@ pub mod handler {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         };
 
-        StatusCode::OK.into_response()
+        match tx.commit().await {
+            Ok(_) => StatusCode::OK.into_response(),
+            Err(err) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }
     }
 
     // pub async fn customer_identification_successful(
