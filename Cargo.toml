@@ -20,7 +20,11 @@ futures = "0.3.30"
 hex = "0.4.3"
 hmac = "0.12.1"
 hyper = "1.4.1"
-lettre = { version = "0.11.7", features = ["tokio1", "builder", "tokio1-native-tls"] }
+lettre = { version = "0.11.7", features = [
+    "tokio1",
+    "builder",
+    "tokio1-native-tls",
+] }
 log = "0.4.22"
 num-bigint = "0.4.6"
 regex = "1.10.5"
@@ -46,3 +50,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["std", "env-filter"] }
 ulid = "1.1.2"
 validator = { version = "0.18.1", features = ["derive"] }
+
+[[test]]
+name = "unit"
+path = "tests/unit/transactions.rs"
