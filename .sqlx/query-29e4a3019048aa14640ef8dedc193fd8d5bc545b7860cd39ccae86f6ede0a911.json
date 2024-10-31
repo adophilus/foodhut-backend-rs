@@ -70,6 +70,11 @@
       },
       {
         "ordinal": 13,
+        "name": "delivery_date",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 14,
         "name": "items",
         "type_info": "Jsonb"
       }
@@ -94,6 +99,7 @@
       false,
       true,
       false,
+      true,
       null
     ]
   },

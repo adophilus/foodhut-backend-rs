@@ -154,6 +154,7 @@ pub struct Order {
     pub sub_total: BigDecimal,
     pub total: BigDecimal,
     pub delivery_address: String,
+    pub delivery_date: Option<NaiveDateTime>,
     pub dispatch_rider_note: String,
     pub items: OrderItems,
     pub owner_id: String,
@@ -198,6 +199,7 @@ pub struct FullOrder {
     pub sub_total: BigDecimal,
     pub total: BigDecimal,
     pub delivery_address: String,
+    pub delivery_date: Option<NaiveDateTime>,
     pub dispatch_rider_note: String,
     pub items: FullOrderItems,
     pub owner_id: String,
@@ -249,6 +251,7 @@ pub struct CreateOrderPayload {
     pub cart_id: String,
     pub payment_method: PaymentMethod,
     pub delivery_address: String,
+    pub delivery_date: Option<NaiveDateTime>,
     pub dispatch_rider_note: String,
 }
 
@@ -284,6 +287,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
                     sub_total,
                     total,
                     delivery_address,
+                    delivery_date,
                     dispatch_rider_note,
                     cart_id,
                     owner_id
@@ -298,6 +302,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
                     sub_total_calculation.sub_total + 0,
                     $5,
                     $6,
+                    $7,
                     $2,
                     active_cart.owner_id
                 FROM sub_total_calculation, active_cart
@@ -327,6 +332,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
                 inserted_order.status,
                 inserted_order.payment_method,
                 inserted_order.delivery_fee,
+                inserted_order.delivery_date,
                 inserted_order.service_fee,
                 inserted_order.sub_total,
                 inserted_order.total,
@@ -341,11 +347,8 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
         payload.cart_id,
         OrderStatus::AwaitingPayment.to_string(),
         payload.payment_method.to_string(),
-        // delivery_fee,
-        // service_fee,
-        // sub_total,
-        // total,
         payload.delivery_address,
+        payload.delivery_date,
         payload.dispatch_rider_note,
     )
     .fetch_one(&db.pool)

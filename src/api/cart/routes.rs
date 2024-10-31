@@ -7,9 +7,12 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
+use chrono::NaiveDateTime;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::json;
+use std::str::FromStr;
+use tower::util::error::optional::None;
 use validator::{Validate, ValidationError};
 
 use crate::{
@@ -315,6 +318,7 @@ async fn remove_meal_from_active_cart(
 pub struct CheckoutCartByIdPayload {
     payment_method: repository::order::PaymentMethod,
     delivery_address: String,
+    delivery_date: Option<u64>,
     dispatch_rider_note: String,
 }
 
@@ -323,6 +327,32 @@ pub async fn checkout_active_cart(
     auth: Auth,
     Json(payload): Json<CheckoutCartByIdPayload>,
 ) -> impl IntoResponse {
+    let parsed_delivery_date = match payload
+        .delivery_date
+        .map(|d| chrono::NaiveDateTime::parse_from_str(&d.to_string(), "%s"))
+        .transpose()
+    {
+        Err(err) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": err.to_string() })),
+            )
+        }
+        Ok(x) => x,
+    };
+
+    match parsed_delivery_date.clone() {
+        Some(delivery_date) => {
+            if delivery_date < chrono::Utc::now().naive_utc() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": "Delivery date cannot be in the past" })),
+                );
+            }
+        }
+        None => (),
+    }
+
     let cart = match repository::cart::find_active_full_cart_by_owner_id(
         ctx.db_conn.clone(),
         auth.user.id.clone(),
@@ -369,6 +399,7 @@ pub async fn checkout_active_cart(
             cart_id: cart.id.clone(),
             payment_method: payload.payment_method.clone(),
             delivery_address: payload.delivery_address.clone(),
+            delivery_date: parsed_delivery_date.clone(),
             dispatch_rider_note: payload.dispatch_rider_note.clone(),
         },
     )
