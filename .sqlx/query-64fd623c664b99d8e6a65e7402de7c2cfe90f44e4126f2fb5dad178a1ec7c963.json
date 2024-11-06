@@ -57,6 +57,11 @@
         "ordinal": 10,
         "name": "likes",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "original_price",
+        "type_info": "Numeric"
       }
     ],
     "parameters": {
@@ -83,6 +88,7 @@
       false,
       false,
       true,
+      false,
       false
     ]
   },
