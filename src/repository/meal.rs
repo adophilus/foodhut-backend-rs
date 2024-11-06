@@ -21,6 +21,7 @@ pub struct Meal {
     pub name: String,
     pub description: String,
     pub rating: BigDecimal,
+    pub original_price: BigDecimal,
     pub price: BigDecimal,
     pub likes: i32,
     pub cover_image: utils::storage::UploadedMedia,
@@ -74,6 +75,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateMealPayload) -> Resul
             id, 
             name, 
             description, 
+            original_price,
             price,
             rating, 
             likes,
@@ -81,7 +83,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateMealPayload) -> Resul
             is_available, 
             kitchen_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $4 + ($4 * 0.2), $5, $6, $7, $8, $9)
         RETURNING *
         ",
         Ulid::new().to_string(),
@@ -211,7 +213,8 @@ pub async fn update_by_id(
                 name = COALESCE($1, name),
                 description = COALESCE($2, description),
                 rating = COALESCE($3, rating),
-                price = COALESCE($4, price),
+                original_price = COALESCE($4, original_price),
+                price = COALESCE($4, original_price) + (COALESCE($4, original_price) * 0.2),
                 cover_image = COALESCE(
                     CASE WHEN $5::text = 'null' THEN NULL ELSE $5::json END, 
                     cover_image
