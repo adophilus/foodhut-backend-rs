@@ -17,6 +17,7 @@ cloudinary = "0.4.0"
 crypto-common = "0.1.6"
 env_logger = "0.11.3"
 futures = "0.3.30"
+google-fcm1 = "6.0.0"
 hex = "0.4.3"
 hmac = "0.12.1"
 hyper = "1.4.1"
@@ -27,6 +28,7 @@ lettre = { version = "0.11.7", features = [
 ] }
 log = "0.4.22"
 num-bigint = "0.4.6"
+oauth_fcm = "0.2.0"
 regex = "1.10.5"
 reqwest = { version = "0.12.5", features = ["multipart"] }
 serde = { version = "1.0.203", features = ["derive"] }
