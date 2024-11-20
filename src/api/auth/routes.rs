@@ -313,7 +313,7 @@ async fn sign_in(
 
     if !user.is_verified {
         return (
-            StatusCode::BAD_REQUEST,
+            StatusCode::FORBIDDEN,
             Json(json!({"error": "User not verified"})),
         );
     }
