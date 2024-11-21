@@ -82,7 +82,6 @@ async fn create_ad(
 
 async fn get_ads(
     State(ctx): State<Arc<Context>>,
-    auth: AdminAuth,
     pagination: Pagination,
     Query(filters): Query<repository::ad::Filters>,
 ) -> impl IntoResponse {
@@ -97,7 +96,6 @@ async fn get_ads(
 
 async fn get_ad_by_id(
     Path(id): Path<String>,
-    auth: AdminAuth,
     State(ctx): State<Arc<Context>>,
 ) -> impl IntoResponse {
     match repository::ad::find_by_id(ctx.db_conn.clone(), id).await {
