@@ -334,6 +334,7 @@ pub async fn find_many(
                                        'name', meals.name,
                                        'description', meals.description,
                                        'rating', meals.rating,
+                                       'original_price', meals.original_price,
                                        'price', meals.price,
                                        'likes', meals.likes,
                                        'cover_image', meals.cover_image,
