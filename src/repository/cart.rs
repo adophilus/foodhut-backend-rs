@@ -393,11 +393,10 @@ pub struct UpdateCartPayload {
     pub status: Option<CartStatus>,
 }
 
-pub async fn update_by_id(
-    db: DatabaseConnection,
-    id: String,
-    payload: UpdateCartPayload,
-) -> Result<(), Error> {
+pub async fn update_by_id<'e, E>(db: E, id: String, payload: UpdateCartPayload) -> Result<(), Error>
+where
+    E: PgExecutor<'e>,
+{
     match sqlx::query!(
         "
             UPDATE carts SET
@@ -414,7 +413,7 @@ pub async fn update_by_id(
         payload.status.map(|p| p.to_string()),
         id.clone(),
     )
-    .execute(&db.pool)
+    .execute(db)
     .await
     {
         Err(e) => {

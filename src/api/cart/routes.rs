@@ -208,7 +208,7 @@ async fn set_meal_in_active_cart(
     }
 
     match repository::cart::update_by_id(
-        ctx.db_conn.clone(),
+        &ctx.db_conn.pool,
         cart.id.clone(),
         repository::cart::UpdateCartPayload {
             items: Some(CartItems(items)),
@@ -294,7 +294,7 @@ async fn remove_meal_from_active_cart(
     }
 
     match repository::cart::update_by_id(
-        ctx.db_conn.clone(),
+        &ctx.db_conn.pool,
         cart.id.clone(),
         repository::cart::UpdateCartPayload {
             items: Some(CartItems(new_items)),
@@ -391,10 +391,19 @@ pub async fn checkout_active_cart(
         );
     }
 
-    // TODO: this should be in a transaction
+    let mut tx = match ctx.db_conn.clone().pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            tracing::error!("Failed to start database transaction: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Sorry, an error occurred" })),
+            );
+        }
+    };
 
     let order = match repository::order::create(
-        ctx.db_conn.clone(),
+        &mut *tx,
         repository::order::CreateOrderPayload {
             cart_id: cart.id.clone(),
             payment_method: payload.payment_method.clone(),
@@ -415,7 +424,7 @@ pub async fn checkout_active_cart(
     };
 
     if let Err(_) = repository::cart::update_by_id(
-        ctx.db_conn.clone(),
+        &mut *tx,
         cart.id.clone(),
         repository::cart::UpdateCartPayload {
             items: None,
@@ -429,6 +438,14 @@ pub async fn checkout_active_cart(
             Json(json!({ "error": "Failed to checkout cart" })),
         );
     };
+
+    if let Err(err) = tx.commit().await {
+        log::error!("Failed to commit transaction: {}", err);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to checkout cart" })),
+        );
+    }
 
     (
         StatusCode::OK,

@@ -1,13 +1,8 @@
 use super::meal::Meal;
-use super::user::User;
-use bigdecimal::FromPrimitive;
 use chrono::NaiveDateTime;
-use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use sqlx::types::Json;
+use sqlx::types::BigDecimal;
 use sqlx::PgExecutor;
-use sqlx::{types::BigDecimal, Database};
 use std::{convert::Into, str::FromStr};
 use ulid::Ulid;
 
@@ -18,8 +13,6 @@ use crate::{
         pagination::{Paginated, Pagination},
     },
 };
-
-use super::cart::{self, Cart};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OrderStatus {
@@ -261,7 +254,10 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Result<Order, Error> {
+pub async fn create<'e, E>(db: E, payload: CreateOrderPayload) -> Result<Order, Error>
+where
+    E: PgExecutor<'e>,
+{
     // TODO: service fee and delivery fee calculation required (in query)
     sqlx::query_as!(
         Order,
@@ -352,7 +348,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOrderPayload) -> Resu
         payload.delivery_date,
         payload.dispatch_rider_note,
     )
-    .fetch_one(&db.pool)
+    .fetch_one(db)
     .await
     .map_err(|err| {
             tracing::error!("Error occurred while trying to create a order: {}", err);
@@ -808,11 +804,14 @@ pub struct UpdateOrderPayload {
     pub status: OrderStatus,
 }
 
-pub async fn update_by_id(
-    db: DatabaseConnection,
+pub async fn update_by_id<'e, E>(
+    db: E,
     id: String,
     payload: UpdateOrderPayload,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    E: PgExecutor<'e>,
+{
     match sqlx::query!(
         "
             UPDATE orders SET
@@ -824,7 +823,7 @@ pub async fn update_by_id(
         payload.status.to_string(),
         id,
     )
-    .execute(&db.pool)
+    .execute(db)
     .await
     {
         Err(e) => {

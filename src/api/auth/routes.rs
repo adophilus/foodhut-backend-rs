@@ -52,10 +52,10 @@ async fn sign_up(
     let mut tx = match ctx.db_conn.clone().pool.begin().await {
         Ok(tx) => tx,
         Err(err) => {
-            tracing::error!("{}", err);
+            tracing::error!("Failed to start database transaction: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Failed to start transaction" })),
+                Json(json!({ "error": "Sorry, an error occurred" })),
             );
         }
     };
