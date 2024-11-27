@@ -103,7 +103,7 @@ async fn set_meal_in_active_cart(
     .await
     {
         Ok(None) => match repository::cart::create(
-            ctx.db_conn.clone(),
+            &ctx.db_conn.pool,
             repository::cart::CreateCartPayload {
                 owner_id: auth.user.id.clone(),
             },

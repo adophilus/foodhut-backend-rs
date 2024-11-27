@@ -1,11 +1,12 @@
 use std::{io::Read, sync::Arc};
 
-use crate::repository;
+use crate::repository::{self, meal::MealWithCartStatus};
+use crate::utils::pagination;
 use axum::{
     async_trait,
     extract::{multipart::Field, Path, Query, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     routing::{get, post, put},
     Json, Router,
 };
@@ -144,15 +145,46 @@ async fn get_meals(
     pagination: Pagination,
     Query(filters): Query<Filters>,
 ) -> impl IntoResponse {
-    tracing::info!("{:?}", auth.user.id.clone());
-
     let is_liked_by = match filters.is_liked {
-        Some(true) => Some(auth.user.id),
+        Some(true) => Some(auth.user.id.clone()),
         _ => None,
     };
 
+    let cart = match repository::cart::find_active_cart_by_owner_id(
+        &ctx.db_conn.pool,
+        auth.user.id.clone(),
+    )
+    .await
+    {
+        Ok(Some(cart)) => cart,
+        Ok(None) => {
+            match repository::cart::create(
+                &ctx.db_conn.pool,
+                repository::cart::CreateCartPayload {
+                    owner_id: auth.user.id.clone(),
+                },
+            )
+            .await
+            {
+                Ok(cart) => cart,
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"error": "Failed to fetch meals"})),
+                    )
+                }
+            }
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to fetch meals"})),
+            )
+        }
+    };
+
     match repository::meal::find_many(
-        ctx.db_conn.clone(),
+        &ctx.db_conn.pool,
         pagination.clone(),
         repository::meal::Filters {
             kitchen_id: filters.kitchen_id,
@@ -162,7 +194,43 @@ async fn get_meals(
     )
     .await
     {
-        Ok(paginated_meals) => (StatusCode::OK, Json(json!(paginated_meals))),
+        Ok(paginated_meals) => {
+            let augmented_meals = paginated_meals
+                .items
+                .clone()
+                .into_iter()
+                .map(|meal| MealWithCartStatus {
+                    id: meal.id.clone(),
+                    name: meal.name,
+                    description: meal.description,
+                    rating: meal.rating,
+                    original_price: meal.original_price,
+                    price: meal.price,
+                    likes: meal.likes,
+                    cover_image: meal.cover_image,
+                    is_available: meal.is_available,
+                    in_cart: cart
+                        .items
+                        .0
+                        .iter()
+                        .find(|item| item.meal_id == meal.id)
+                        .is_some(),
+                    kitchen_id: meal.kitchen_id,
+                    created_at: meal.created_at,
+                    updated_at: meal.updated_at,
+                })
+                .collect::<Vec<_>>();
+
+            (
+                StatusCode::OK,
+                Json(json!(pagination::Paginated::new(
+                    augmented_meals,
+                    paginated_meals.meta.total,
+                    paginated_meals.meta.page,
+                    paginated_meals.meta.per_page,
+                ))),
+            )
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "Failed to fetch meals"})),

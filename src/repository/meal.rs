@@ -5,6 +5,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::types::BigDecimal;
+use sqlx::PgExecutor;
 use std::convert::Into;
 use ulid::Ulid;
 
@@ -26,6 +27,23 @@ pub struct Meal {
     pub likes: i32,
     pub cover_image: utils::storage::UploadedMedia,
     pub is_available: bool,
+    pub kitchen_id: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MealWithCartStatus {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub rating: BigDecimal,
+    pub original_price: BigDecimal,
+    pub price: BigDecimal,
+    pub likes: i32,
+    pub cover_image: utils::storage::UploadedMedia,
+    pub is_available: bool,
+    pub in_cart: bool,
     pub kitchen_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -127,11 +145,14 @@ pub struct Filters {
     pub is_liked_by: Option<String>,
 }
 
-pub async fn find_many(
-    db: DatabaseConnection,
+pub async fn find_many<'e, E>(
+    e: E,
     pagination: Pagination,
     filters: Filters,
-) -> Result<Paginated<Meal>, Error> {
+) -> Result<Paginated<Meal>, Error>
+where
+    E: PgExecutor<'e>,
+{
     sqlx::query_as!(
         DatabasePaginatedMeal,
         r#"
@@ -175,14 +196,14 @@ pub async fn find_many(
                 'page', $2 / $1 + 1
             ) AS meta
         FROM filtered_data;
-    "#,
+        "#,
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
         filters.kitchen_id,
         filters.search,
         filters.is_liked_by,
     )
-    .fetch_one(&db.pool)
+    .fetch_one(e)
     .await
     .map(DatabasePaginatedMeal::into)
     .map_err(|err| {

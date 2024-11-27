@@ -140,7 +140,10 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create(db: DatabaseConnection, payload: CreateCartPayload) -> Result<Cart, Error> {
+pub async fn create<'e, E>(e: E, payload: CreateCartPayload) -> Result<Cart, Error>
+where
+    E: PgExecutor<'e>,
+{
     match sqlx::query_as!(
         Cart,
         "
@@ -158,7 +161,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateCartPayload) -> Resul
         CartStatus::NotCheckedOut.to_string(),
         payload.owner_id
     )
-    .fetch_one(&db.pool)
+    .fetch_one(e)
     .await
     {
         Ok(cart) => Ok(cart),
