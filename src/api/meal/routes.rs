@@ -241,9 +241,66 @@ async fn get_meals(
 async fn get_meal_by_id(
     Path(id): Path<String>,
     State(ctx): State<Arc<Context>>,
+    auth: Auth,
 ) -> impl IntoResponse {
+    let cart = match repository::cart::find_active_cart_by_owner_id(
+        &ctx.db_conn.pool,
+        auth.user.id.clone(),
+    )
+    .await
+    {
+        Ok(Some(cart)) => cart,
+        Ok(None) => {
+            match repository::cart::create(
+                &ctx.db_conn.pool,
+                repository::cart::CreateCartPayload {
+                    owner_id: auth.user.id.clone(),
+                },
+            )
+            .await
+            {
+                Ok(cart) => cart,
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"error": "Failed to fetch meals"})),
+                    )
+                }
+            }
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to fetch meals"})),
+            )
+        }
+    };
+
     match repository::meal::find_by_id(ctx.db_conn.clone(), id).await {
-        Ok(Some(meal)) => (StatusCode::OK, Json(json!(meal))),
+        Ok(Some(meal)) => {
+            let augmented_meal = MealWithCartStatus {
+                id: meal.id.clone(),
+                name: meal.name,
+                description: meal.description,
+                rating: meal.rating,
+                original_price: meal.original_price,
+                price: meal.price,
+                likes: meal.likes,
+                cover_image: meal.cover_image,
+                is_available: meal.is_available,
+                in_cart: cart
+                    .items
+                    .0
+                    .iter()
+                    .find(|item| item.meal_id == meal.id)
+                    .is_some(),
+                kitchen_id: meal.kitchen_id,
+                created_at: meal.created_at,
+                updated_at: meal.updated_at,
+            };
+
+            (StatusCode::OK, Json(json!(augmented_meal)))
+        }
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "Meal not found" })),
