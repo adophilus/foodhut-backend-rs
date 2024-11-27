@@ -67,12 +67,14 @@ pub async fn confirm_payment_for_order(
     ctx: Arc<Context>,
     order: repository::order::Order,
 ) -> Result<(), Error> {
-    if let Err(_) = repository::order::confirm_payment(ctx.db_conn.clone(), order.id.clone()).await
-    {
-        return Err(Error::UnexpectedError);
-    };
+    unimplemented!()
+
+    // if let Err(_) = repository::order::confirm_payment(ctx.db_conn.clone(), order.id.clone()).await
+    // {
+    //     return Err(Error::UnexpectedError);
+    // };
 
     // TODO: send notification to the end user
 
-    Ok(())
+    // Ok(())
 }

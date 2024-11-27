@@ -275,17 +275,18 @@ async fn remove_meal_from_active_cart(
 }
 
 #[derive(Deserialize)]
-pub struct CheckoutCartByIdPayload {
+pub struct CheckoutCartItemsByKitchenIdPayload {
     payment_method: repository::order::PaymentMethod,
     delivery_address: String,
     delivery_date: Option<u64>,
     dispatch_rider_note: String,
 }
 
-pub async fn checkout_active_cart(
+pub async fn checkout_cart_items_by_kitchen_id(
     State(ctx): State<Arc<Context>>,
+    Path(kitchen_id): Path<String>,
     auth: Auth,
-    Json(payload): Json<CheckoutCartByIdPayload>,
+    Json(payload): Json<CheckoutCartItemsByKitchenIdPayload>,
 ) -> impl IntoResponse {
     let parsed_delivery_date = match payload
         .delivery_date
@@ -334,20 +335,17 @@ pub async fn checkout_active_cart(
         }
     };
 
-    match cart.status {
-        repository::cart::CartStatus::CheckedOut => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "Cart is already checked out" })),
-            )
-        }
-        repository::cart::CartStatus::NotCheckedOut => (),
-    };
+    let items_to_checkout = cart
+        .items
+        .0
+        .into_iter()
+        .filter(|item| item.kitchen.id == kitchen_id)
+        .collect::<Vec<_>>();
 
-    if cart.items.len() == 0 {
+    if items_to_checkout.len() == 0 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Cart is empty!" })),
+            Json(json!({ "error": "No items to checkout!" })),
         );
     }
 
@@ -365,11 +363,13 @@ pub async fn checkout_active_cart(
     let order = match repository::order::create(
         &mut *tx,
         repository::order::CreateOrderPayload {
-            cart_id: cart.id.clone(),
+            items: items_to_checkout,
             payment_method: payload.payment_method.clone(),
             delivery_address: payload.delivery_address.clone(),
             delivery_date: parsed_delivery_date.clone(),
             dispatch_rider_note: payload.dispatch_rider_note.clone(),
+            kitchen_id,
+            owner_id: auth.user.id.clone(),
         },
     )
     .await
@@ -474,7 +474,10 @@ async fn remove_all_meals_from_active_cart_by_kitchen_id(
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", get(get_active_cart))
-        .route("/checkout", post(checkout_active_cart))
+        .route(
+            "/kitchens/:kitchen_id/checkout",
+            post(checkout_cart_items_by_kitchen_id),
+        )
         .route(
             "/items/:meal_id",
             put(set_meal_in_active_cart).delete(remove_meal_from_active_cart),

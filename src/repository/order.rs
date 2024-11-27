@@ -1,6 +1,10 @@
-use super::meal::Meal;
+use super::{
+    cart::{CartItem, FullCartItem},
+    meal::Meal,
+};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::types::BigDecimal;
 use sqlx::PgExecutor;
 use std::{convert::Into, str::FromStr};
@@ -151,8 +155,8 @@ pub struct Order {
     pub delivery_date: Option<NaiveDateTime>,
     pub dispatch_rider_note: String,
     pub items: OrderItems,
+    pub kitchen_id: String,
     pub owner_id: String,
-    pub cart_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -162,15 +166,15 @@ pub struct OrderItems(pub Vec<OrderItem>);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrderItem {
-    pub id: String,
-    pub status: OrderStatus,
     pub price: BigDecimal,
+    pub quantity: i32,
     pub meal_id: String,
-    pub order_id: String,
-    pub kitchen_id: String,
-    pub owner_id: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: Option<NaiveDateTime>,
+}
+
+impl From<serde_json::Value> for OrderItems {
+    fn from(json: serde_json::Value) -> Self {
+        serde_json::de::from_str::<_>(json.to_string().as_ref()).expect("Invalid order items list")
+    }
 }
 
 impl From<Option<serde_json::Value>> for OrderItems {
@@ -196,8 +200,8 @@ pub struct FullOrder {
     pub delivery_date: Option<NaiveDateTime>,
     pub dispatch_rider_note: String,
     pub items: FullOrderItems,
+    pub kitchen_id: String,
     pub owner_id: String,
-    pub cart_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -207,16 +211,10 @@ pub struct FullOrderItems(pub Vec<FullOrderItem>);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FullOrderItem {
-    pub id: String,
-    pub status: OrderStatus,
     pub price: BigDecimal,
+    pub quantity: i32,
     pub meal_id: String,
-    pub order_id: String,
-    pub kitchen_id: String,
-    pub owner_id: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: Option<NaiveDateTime>,
-    pub meal: Meal, // Embed the meal details here
+    pub meal: Meal,
 }
 
 impl From<Option<serde_json::Value>> for FullOrderItems {
@@ -242,11 +240,13 @@ define_paginated!(DatabasePaginatedOrder, Order);
 define_paginated!(DatabasePaginatedFullOrder, FullOrder);
 
 pub struct CreateOrderPayload {
-    pub cart_id: String,
+    pub items: Vec<FullCartItem>,
     pub payment_method: PaymentMethod,
     pub delivery_address: String,
     pub delivery_date: Option<NaiveDateTime>,
     pub dispatch_rider_note: String,
+    pub kitchen_id: String,
+    pub owner_id: String,
 }
 
 #[derive(Debug)]
@@ -254,122 +254,89 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create<'e, E>(db: E, payload: CreateOrderPayload) -> Result<Order, Error>
+pub async fn create<'e, E>(e: E, payload: CreateOrderPayload) -> Result<Order, Error>
 where
     E: PgExecutor<'e>,
 {
-    // TODO: service fee and delivery fee calculation required (in query)
+    let sub_total = payload
+        .items
+        .clone()
+        .into_iter()
+        .fold(BigDecimal::from(0), |acc, item| acc + item.meal.price);
+    let total = sub_total.clone();
+
+    let order_items = OrderItems(
+        payload
+            .items
+            .into_iter()
+            .map(|item| OrderItem {
+                price: item.meal.price,
+                quantity: item.quantity,
+                meal_id: item.meal.id,
+            })
+            .collect::<Vec<OrderItem>>(),
+    );
+
     sqlx::query_as!(
         Order,
-        "
-            WITH active_cart AS (
-                SELECT * FROM carts WHERE id = $2
-            ), cart_items AS (
-                SELECT * FROM JSON_TO_RECORDSET((SELECT active_cart.items FROM active_cart)) AS (meal_id VARCHAR, quantity NUMERIC)
-            ),
-            meals_in_cart AS (
-                SELECT meals.*, cart_items.quantity AS quantity FROM cart_items INNER JOIN meals ON cart_items.meal_id = meals.id
-            ),
-            sub_total_calculation AS (
-                SELECT SUM(meals_in_cart.price * meals_in_cart.quantity) AS sub_total 
-                FROM meals_in_cart
-            ),
-            inserted_order AS (
-                INSERT INTO orders (
-                    id,
-                    status,
-                    payment_method,
-                    delivery_fee,
-                    service_fee,
-                    sub_total,
-                    total,
-                    delivery_address,
-                    delivery_date,
-                    dispatch_rider_note,
-                    cart_id,
-                    owner_id
-                )
-                SELECT 
-                    $1,
-                    $3,
-                    $4,
-                    0,
-                    0,
-                    sub_total_calculation.sub_total,
-                    sub_total_calculation.sub_total + 0,
-                    $5,
-                    $6,
-                    $7,
-                    $2,
-                    active_cart.owner_id
-                FROM sub_total_calculation, active_cart
-                RETURNING *
-            ),
-            inserted_items AS (
-                INSERT INTO order_items (id, status, price, meal_id, order_id, kitchen_id, owner_id)
-                SELECT 
-                    GEN_RANDOM_UUID(),
-                    $3,
-                    meals_in_cart.price,
-                    meals_in_cart.id,
-                    inserted_order.id,
-                    meals_in_cart.kitchen_id,
-                    active_cart.owner_id
-                FROM meals_in_cart, active_cart
-                CROSS JOIN inserted_order
-                RETURNING *
-            )
-            SELECT 
-                inserted_order.*,
-                COALESCE(JSON_AGG(inserted_items.*), '[]'::json) AS items
-            FROM inserted_order
-            LEFT JOIN inserted_items ON inserted_order.id = inserted_items.order_id
-            GROUP BY 
-                inserted_order.id, 
-                inserted_order.status,
-                inserted_order.payment_method,
-                inserted_order.delivery_fee,
-                inserted_order.delivery_date,
-                inserted_order.service_fee,
-                inserted_order.sub_total,
-                inserted_order.total,
-                inserted_order.delivery_address,
-                inserted_order.dispatch_rider_note,
-                inserted_order.cart_id,
-                inserted_order.owner_id,
-                inserted_order.created_at,
-                inserted_order.updated_at;
-        ",
+        r#"
+        INSERT INTO orders (
+            id,
+            status,
+            payment_method,
+            delivery_fee,
+            service_fee,
+            sub_total,
+            total,
+            delivery_address,
+            delivery_date,
+            dispatch_rider_note,
+            items,
+            kitchen_id,
+            owner_id
+        )
+        VALUES (
+            $1,
+            $2,
+            $3,
+            0,
+            0,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11
+        )
+        RETURNING *
+        "#,
         Ulid::new().to_string(),
-        payload.cart_id,
         OrderStatus::AwaitingPayment.to_string(),
         payload.payment_method.to_string(),
+        sub_total,
+        total,
         payload.delivery_address,
         payload.delivery_date,
         payload.dispatch_rider_note,
+        json!(order_items),
+        payload.kitchen_id,
+        payload.owner_id,
     )
-    .fetch_one(db)
+    .fetch_one(e)
     .await
     .map_err(|err| {
-            tracing::error!("Error occurred while trying to create a order: {}", err);
-            Error::UnexpectedError
+        tracing::error!("Error occurred while trying to create a order: {}", err);
+        Error::UnexpectedError
     })
 }
 
-pub async fn find_by_id<'e, Executor: PgExecutor<'e>>(
-    e: Executor,
-    id: String,
-) -> Result<Option<Order>, Error> {
+pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Option<Order>, Error> {
     sqlx::query_as!(
         Order,
         "
-            WITH order_items AS (
-                SELECT * FROM order_items WHERE order_id = $1
-            )
-            SELECT orders.*, JSON_AGG(order_items.*) as items
-                FROM orders JOIN order_items ON order_items.order_id = orders.id
-            GROUP BY
-                orders.id;
+        SELECT * FROM orders WHERE id = $1
         ",
         id
     )
@@ -381,111 +348,108 @@ pub async fn find_by_id<'e, Executor: PgExecutor<'e>>(
     })
 }
 
-pub async fn find_full_order_by_id(
-    db: DatabaseConnection,
+pub async fn find_full_order_by_id<'e, E: PgExecutor<'e>>(
+    e: E,
     order_id: String,
 ) -> Result<Option<FullOrder>, Error> {
-    sqlx::query_as!(
-        FullOrder,
-        r#"
-        WITH order_data AS (
-            SELECT orders.*,
-                   COALESCE(
-                       JSONB_AGG(
-                           JSONB_BUILD_OBJECT(
-                               'id', full_order_items.item_id,
-                               'status', full_order_items.item_status,
-                               'price', full_order_items.price,
-                               'meal_id', full_order_items.meal_id,
-                               'order_id', full_order_items.order_id,
-                               'kitchen_id', full_order_items.kitchen_id,
-                               'owner_id', full_order_items.owner_id,
-                               'created_at', full_order_items.item_created_at,
-                               'updated_at', full_order_items.item_updated_at,
-                               'meal', JSONB_BUILD_OBJECT(
-                                   'id', full_order_items.meal_id,
-                                   'name', full_order_items.meal_name,
-                                   'description', full_order_items.description,
-                                   'rating', full_order_items.rating,
-                                   'price', full_order_items.meal_price,
-                                   'likes', full_order_items.likes,
-                                   'cover_image', full_order_items.cover_image,
-                                   'is_available', full_order_items.is_available,
-                                   'kitchen_id', full_order_items.meal_kitchen_id,
-                                   'created_at', full_order_items.meal_created_at,
-                                   'updated_at', full_order_items.meal_updated_at
-                               )
-                           )
-                       ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
-                       '[]'::jsonb
-                   ) AS items
-            FROM orders
-            LEFT JOIN (
-                SELECT order_items.id AS item_id,
-                       order_items.order_id,
-                       order_items.kitchen_id,
-                       order_items.price,
-                       order_items.status AS item_status,
-                       order_items.created_at AS item_created_at,
-                       order_items.updated_at AS item_updated_at,
-                       order_items.owner_id,
-                       meals.id AS meal_id,
-                       meals.name AS meal_name,
-                       meals.description,
-                       meals.rating,
-                       meals.price AS meal_price,
-                       meals.likes,
-                       meals.cover_image,
-                       meals.is_available,
-                       meals.kitchen_id AS meal_kitchen_id,
-                       meals.created_at AS meal_created_at,
-                       meals.updated_at AS meal_updated_at
-                FROM order_items
-                LEFT JOIN meals ON order_items.meal_id = meals.id
-            ) AS full_order_items ON orders.id = full_order_items.order_id
-            WHERE orders.id = $1
-            GROUP BY orders.id
-        )
-        SELECT * FROM order_data;
-        "#,
-        order_id
-    )
-    .fetch_optional(&db.pool)
-    .await
-    .map_err(|err| {
-        tracing::error!(
-            "Error occurred while trying to fetch full order by id {}: {}",
-            order_id,
-            err
-        );
-        Error::UnexpectedError
-    })
+    unimplemented!()
 }
 
-pub async fn find_by_id_and_owner_id(
-    db: DatabaseConnection,
+// pub async fn find_full_order_by_id(
+//     db: DatabaseConnection,
+//     order_id: String,
+// ) -> Result<Option<FullOrder>, Error> {
+//     sqlx::query_as!(
+//         FullOrder,
+//         r#"
+//         WITH order_data AS (
+//             SELECT orders.*,
+//                    COALESCE(
+//                        JSONB_AGG(
+//                            JSONB_BUILD_OBJECT(
+//                                'id', full_order_items.item_id,
+//                                'status', full_order_items.item_status,
+//                                'price', full_order_items.price,
+//                                'meal_id', full_order_items.meal_id,
+//                                'order_id', full_order_items.order_id,
+//                                'kitchen_id', full_order_items.kitchen_id,
+//                                'owner_id', full_order_items.owner_id,
+//                                'created_at', full_order_items.item_created_at,
+//                                'updated_at', full_order_items.item_updated_at,
+//                                'meal', JSONB_BUILD_OBJECT(
+//                                    'id', full_order_items.meal_id,
+//                                    'name', full_order_items.meal_name,
+//                                    'description', full_order_items.description,
+//                                    'rating', full_order_items.rating,
+//                                    'price', full_order_items.meal_price,
+//                                    'likes', full_order_items.likes,
+//                                    'cover_image', full_order_items.cover_image,
+//                                    'is_available', full_order_items.is_available,
+//                                    'kitchen_id', full_order_items.meal_kitchen_id,
+//                                    'created_at', full_order_items.meal_created_at,
+//                                    'updated_at', full_order_items.meal_updated_at
+//                                )
+//                            )
+//                        ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
+//                        '[]'::jsonb
+//                    ) AS items
+//             FROM orders
+//             LEFT JOIN (
+//                 SELECT order_items.id AS item_id,
+//                        order_items.order_id,
+//                        order_items.kitchen_id,
+//                        order_items.price,
+//                        order_items.status AS item_status,
+//                        order_items.created_at AS item_created_at,
+//                        order_items.updated_at AS item_updated_at,
+//                        order_items.owner_id,
+//                        meals.id AS meal_id,
+//                        meals.name AS meal_name,
+//                        meals.description,
+//                        meals.rating,
+//                        meals.price AS meal_price,
+//                        meals.likes,
+//                        meals.cover_image,
+//                        meals.is_available,
+//                        meals.kitchen_id AS meal_kitchen_id,
+//                        meals.created_at AS meal_created_at,
+//                        meals.updated_at AS meal_updated_at
+//                 FROM order_items
+//                 LEFT JOIN meals ON order_items.meal_id = meals.id
+//             ) AS full_order_items ON orders.id = full_order_items.order_id
+//             WHERE orders.id = $1
+//             GROUP BY orders.id
+//         )
+//         SELECT * FROM order_data;
+//         "#,
+//         order_id
+//     )
+//     .fetch_optional(&db.pool)
+//     .await
+//     .map_err(|err| {
+//         tracing::error!(
+//             "Error occurred while trying to fetch full order by id {}: {}",
+//             order_id,
+//             err
+//         );
+//         Error::UnexpectedError
+//     })
+// }
+
+pub async fn find_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
+    e: E,
     id: String,
     owner_id: String,
 ) -> Result<Option<Order>, Error> {
     sqlx::query_as!(
         Order,
         "
-            WITH order_items AS (
-                SELECT * FROM order_items
-                WHERE
-                    order_id = $1
-            )
-            SELECT orders.*, JSON_AGG(order_items.*) as items
-                FROM orders JOIN order_items ON order_items.order_id = orders.id
-            WHERE
-                orders.owner_id = $2
-            GROUP BY
-                orders.id;
+        SELECT * FROM orders WHERE id = $1 AND owner_id = $2
         ",
         id,
         owner_id
     )
-    .fetch_optional(&db.pool)
+    .fetch_optional(e)
     .await
     .map_err(|err| {
         tracing::error!("Error occurred while trying to fetch order by id: {}", err);
@@ -493,111 +457,126 @@ pub async fn find_by_id_and_owner_id(
     })
 }
 
-pub async fn find_full_order_by_id_and_owner_id(
-    db: DatabaseConnection,
+pub async fn find_full_order_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
+    e: E,
     order_id: String,
     owner_id: String,
 ) -> Result<Option<FullOrder>, Error> {
-    sqlx::query_as!(
-        FullOrder,
-        r#"
-        WITH order_data AS (
-            SELECT orders.*,
-                   COALESCE(
-                       JSONB_AGG(
-                           JSONB_BUILD_OBJECT(
-                               'id', full_order_items.item_id,
-                               'status', full_order_items.item_status,
-                               'price', full_order_items.price,
-                               'meal_id', full_order_items.meal_id,
-                               'order_id', full_order_items.order_id,
-                               'kitchen_id', full_order_items.kitchen_id,
-                               'owner_id', full_order_items.owner_id,
-                               'created_at', full_order_items.item_created_at,
-                               'updated_at', full_order_items.item_updated_at,
-                               'meal', JSONB_BUILD_OBJECT(
-                                   'id', full_order_items.meal_id,
-                                   'name', full_order_items.meal_name,
-                                   'description', full_order_items.description,
-                                   'rating', full_order_items.rating,
-                                   'price', full_order_items.meal_price,
-                                   'likes', full_order_items.likes,
-                                   'cover_image', full_order_items.cover_image,
-                                   'is_available', full_order_items.is_available,
-                                   'kitchen_id', full_order_items.meal_kitchen_id,
-                                   'created_at', full_order_items.meal_created_at,
-                                   'updated_at', full_order_items.meal_updated_at
-                               )
-                           )
-                       ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
-                       '[]'::jsonb
-                   ) AS items
-            FROM orders
-            LEFT JOIN (
-                SELECT order_items.id AS item_id,
-                       order_items.order_id,
-                       order_items.kitchen_id,
-                       order_items.price,
-                       order_items.status AS item_status,
-                       order_items.created_at AS item_created_at,
-                       order_items.updated_at AS item_updated_at,
-                       order_items.owner_id,
-                       meals.id AS meal_id,
-                       meals.name AS meal_name,
-                       meals.description,
-                       meals.rating,
-                       meals.price AS meal_price,
-                       meals.likes,
-                       meals.cover_image,
-                       meals.is_available,
-                       meals.kitchen_id AS meal_kitchen_id,
-                       meals.created_at AS meal_created_at,
-                       meals.updated_at AS meal_updated_at
-                FROM order_items
-                LEFT JOIN meals ON order_items.meal_id = meals.id
-            ) AS full_order_items ON orders.id = full_order_items.order_id
-            WHERE orders.id = $1 AND orders.owner_id = $2
-            GROUP BY orders.id
-        )
-        SELECT * FROM order_data;
-        "#,
-        order_id,
-        owner_id
-    )
-    .fetch_optional(&db.pool)
-    .await
-    .map_err(|err| {
-        tracing::error!(
-            "Error occurred while trying to fetch full order by id {} and owner id {}: {}",
-            order_id,
-            owner_id,
-            err
-        );
-        Error::UnexpectedError
-    })
+    unimplemented!()
 }
 
-pub async fn find_order_item_by_id(
-    db: DatabaseConnection,
+// pub async fn find_full_order_by_id_and_owner_id(
+//     db: DatabaseConnection,
+//     order_id: String,
+//     owner_id: String,
+// ) -> Result<Option<FullOrder>, Error> {
+//     sqlx::query_as!(
+//         FullOrder,
+//         r#"
+//         WITH order_data AS (
+//             SELECT orders.*,
+//                    COALESCE(
+//                        JSONB_AGG(
+//                            JSONB_BUILD_OBJECT(
+//                                'id', full_order_items.item_id,
+//                                'status', full_order_items.item_status,
+//                                'price', full_order_items.price,
+//                                'meal_id', full_order_items.meal_id,
+//                                'order_id', full_order_items.order_id,
+//                                'kitchen_id', full_order_items.kitchen_id,
+//                                'owner_id', full_order_items.owner_id,
+//                                'created_at', full_order_items.item_created_at,
+//                                'updated_at', full_order_items.item_updated_at,
+//                                'meal', JSONB_BUILD_OBJECT(
+//                                    'id', full_order_items.meal_id,
+//                                    'name', full_order_items.meal_name,
+//                                    'description', full_order_items.description,
+//                                    'rating', full_order_items.rating,
+//                                    'price', full_order_items.meal_price,
+//                                    'likes', full_order_items.likes,
+//                                    'cover_image', full_order_items.cover_image,
+//                                    'is_available', full_order_items.is_available,
+//                                    'kitchen_id', full_order_items.meal_kitchen_id,
+//                                    'created_at', full_order_items.meal_created_at,
+//                                    'updated_at', full_order_items.meal_updated_at
+//                                )
+//                            )
+//                        ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
+//                        '[]'::jsonb
+//                    ) AS items
+//             FROM orders
+//             LEFT JOIN (
+//                 SELECT order_items.id AS item_id,
+//                        order_items.order_id,
+//                        order_items.kitchen_id,
+//                        order_items.price,
+//                        order_items.status AS item_status,
+//                        order_items.created_at AS item_created_at,
+//                        order_items.updated_at AS item_updated_at,
+//                        order_items.owner_id,
+//                        meals.id AS meal_id,
+//                        meals.name AS meal_name,
+//                        meals.description,
+//                        meals.rating,
+//                        meals.price AS meal_price,
+//                        meals.likes,
+//                        meals.cover_image,
+//                        meals.is_available,
+//                        meals.kitchen_id AS meal_kitchen_id,
+//                        meals.created_at AS meal_created_at,
+//                        meals.updated_at AS meal_updated_at
+//                 FROM order_items
+//                 LEFT JOIN meals ON order_items.meal_id = meals.id
+//             ) AS full_order_items ON orders.id = full_order_items.order_id
+//             WHERE orders.id = $1 AND orders.owner_id = $2
+//             GROUP BY orders.id
+//         )
+//         SELECT * FROM order_data;
+//         "#,
+//         order_id,
+//         owner_id
+//     )
+//     .fetch_optional(&db.pool)
+//     .await
+//     .map_err(|err| {
+//         tracing::error!(
+//             "Error occurred while trying to fetch full order by id {} and owner id {}: {}",
+//             order_id,
+//             owner_id,
+//             err
+//         );
+//         Error::UnexpectedError
+//     })
+// }
+
+pub async fn find_order_item_by_id<'e, E: PgExecutor<'e>>(
+    e: E,
     id: String,
 ) -> Result<Option<OrderItem>, Error> {
-    sqlx::query_as!(
-        OrderItem,
-        "
-            SELECT * FROM order_items WHERE id = $1;
-        ",
-        id
-    )
-    .fetch_optional(&db.pool)
-    .await
-    .map_err(|err| {
-        tracing::error!(
-            "Error occurred while trying to fetch order item by id: {}",
-            err
-        );
-        Error::UnexpectedError
-    })
+    unimplemented!()
 }
+
+// pub async fn find_order_item_by_id(
+//     db: DatabaseConnection,
+//     id: String,
+// ) -> Result<Option<OrderItem>, Error> {
+//     sqlx::query_as!(
+//         OrderItem,
+//         "
+//             SELECT * FROM order_items WHERE id = $1;
+//         ",
+//         id
+//     )
+//     .fetch_optional(&db.pool)
+//     .await
+//     .map_err(|err| {
+//         tracing::error!(
+//             "Error occurred while trying to fetch order item by id: {}",
+//             err
+//         );
+//         Error::UnexpectedError
+//     })
+// }
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Filters {
@@ -673,7 +652,7 @@ pub async fn find_many(
                 WHERE
                     ($3::TEXT IS NULL OR orders.owner_id = $3)
                     AND (
-                        $4::TEXT IS NULL OR 
+                        $4::TEXT IS NULL OR
                         CASE
                             WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
                             WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
@@ -693,7 +672,7 @@ pub async fn find_many(
                 WHERE
                     ($3::TEXT IS NULL OR orders.owner_id = $3)
                     AND (
-                        $4::TEXT IS NULL OR 
+                        $4::TEXT IS NULL OR
                         CASE
                             WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
                             WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
@@ -703,7 +682,7 @@ pub async fn find_many(
                     AND ($5::TEXT IS NULL OR orders.payment_method = $5)
                     AND ($6::TEXT IS NULL OR order_items.kitchen_id = $6)
             )
-            SELECT 
+            SELECT
                 COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
                 JSONB_BUILD_OBJECT(
                     'total', (SELECT total_rows FROM total_count),
@@ -728,76 +707,197 @@ pub async fn find_many(
     })
 }
 
-pub async fn confirm_payment(db: DatabaseConnection, order_id: String) -> Result<bool, Error> {
-    sqlx::query!(
-        r#"
-        WITH updated_order AS (
-            UPDATE orders
-            SET status = 'AWAITING_ACKNOWLEDGEMENT'
-            WHERE id = $1
-              AND status = 'AWAITING_PAYMENT'
-            RETURNING id
-        ),
-        updated_order_items AS (
-            UPDATE order_items
-            SET status = 'AWAITING_ACKNOWLEDGEMENT'
-            WHERE order_id = (SELECT id FROM updated_order)
-            RETURNING id
-        )
-        SELECT EXISTS(SELECT 1 FROM updated_order);
-        "#,
-        order_id
-    )
-    .fetch_optional(&db.pool)
-    .await
-    .map(|opt| opt.is_some())
-    .map_err(|err| {
-        tracing::error!("Error confirming payment for order {}: {}", order_id, err);
-        Error::UnexpectedError
-    })
-}
+// pub async fn find_many(
+//     db: DatabaseConnection,
+//     pagination: Pagination,
+//     filters: Filters,
+// ) -> Result<Paginated<FullOrder>, Error> {
+//     sqlx::query_as!(
+//         DatabasePaginatedFullOrder,
+//         r#"
+//             WITH filtered_data AS (
+//                 SELECT orders.*,
+//                        COALESCE(
+//                            JSONB_AGG(
+//                                JSONB_BUILD_OBJECT(
+//                                    'id', full_order_items.item_id,
+//                                    'status', full_order_items.item_status,
+//                                    'price', full_order_items.price,
+//                                    'meal_id', full_order_items.meal_id,
+//                                    'order_id', full_order_items.order_id,
+//                                    'kitchen_id', full_order_items.kitchen_id,
+//                                    'owner_id', full_order_items.owner_id,
+//                                    'created_at', full_order_items.item_created_at,
+//                                    'updated_at', full_order_items.item_updated_at,
+//                                    'meal', JSONB_BUILD_OBJECT(
+//                                        'id', full_order_items.meal_id,
+//                                        'name', full_order_items.meal_name,
+//                                        'description', full_order_items.description,
+//                                        'rating', full_order_items.rating,
+//                                        'price', full_order_items.meal_price,
+//                                        'likes', full_order_items.likes,
+//                                        'cover_image', full_order_items.cover_image,
+//                                        'is_available', full_order_items.is_available,
+//                                        'kitchen_id', full_order_items.meal_kitchen_id,
+//                                        'created_at', full_order_items.meal_created_at,
+//                                        'updated_at', full_order_items.meal_updated_at
+//                                    )
+//                                )
+//                            ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
+//                            '[]'::jsonb
+//                        ) AS items
+//                 FROM orders
+//                 LEFT JOIN (
+//                     SELECT order_items.id AS item_id,
+//                            order_items.order_id,
+//                            order_items.kitchen_id,
+//                            order_items.price,
+//                            order_items.status AS item_status,
+//                            order_items.created_at AS item_created_at,
+//                            order_items.updated_at AS item_updated_at,
+//                            order_items.owner_id,
+//                            meals.id AS meal_id,
+//                            meals.name AS meal_name,
+//                            meals.description,
+//                            meals.rating,
+//                            meals.price AS meal_price,
+//                            meals.likes,
+//                            meals.cover_image,
+//                            meals.is_available,
+//                            meals.kitchen_id AS meal_kitchen_id,
+//                            meals.created_at AS meal_created_at,
+//                            meals.updated_at AS meal_updated_at
+//                     FROM order_items
+//                     LEFT JOIN meals ON order_items.meal_id = meals.id
+//                 ) AS full_order_items ON orders.id = full_order_items.order_id
+//                 WHERE
+//                     ($3::TEXT IS NULL OR orders.owner_id = $3)
+//                     AND (
+//                         $4::TEXT IS NULL OR
+//                         CASE
+//                             WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+//                             WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+//                             ELSE TRUE
+//                         END
+//                     )
+//                     AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+//                     AND ($6::TEXT IS NULL OR full_order_items.kitchen_id = $6)
+//                 GROUP BY orders.id
+//                 LIMIT $1
+//                 OFFSET $2
+//             ),
+//             total_count AS (
+//                 SELECT COUNT(DISTINCT orders.id) AS total_rows
+//                 FROM orders
+//                 LEFT JOIN order_items ON orders.id = order_items.order_id
+//                 WHERE
+//                     ($3::TEXT IS NULL OR orders.owner_id = $3)
+//                     AND (
+//                         $4::TEXT IS NULL OR
+//                         CASE
+//                             WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+//                             WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+//                             ELSE TRUE
+//                         END
+//                     )
+//                     AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+//                     AND ($6::TEXT IS NULL OR order_items.kitchen_id = $6)
+//             )
+//             SELECT
+//                 COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
+//                 JSONB_BUILD_OBJECT(
+//                     'total', (SELECT total_rows FROM total_count),
+//                     'per_page', $1,
+//                     'page', $2 / $1 + 1
+//                 ) AS meta
+//             FROM filtered_data;
+//         "#,
+//         pagination.per_page as i64,
+//         ((pagination.page - 1) * pagination.per_page) as i64,
+//         filters.owner_id,
+//         filters.status.map(|s| s.to_string()),
+//         filters.payment_method.map(|p| p.to_string()),
+//         filters.kitchen_id
+//     )
+//     .fetch_one(&db.pool)
+//     .await
+//     .map(DatabasePaginatedFullOrder::into)
+//     .map_err(|err| {
+//         tracing::error!("Error occurred while trying to fetch many orders: {}", err);
+//         Error::UnexpectedError
+//     })
+// }
 
-pub async fn update_order_item_status(
-    db: DatabaseConnection,
-    order_item_id: String,
-    new_status: OrderStatus,
-) -> Result<bool, Error> {
-    sqlx::query!(
-        r#"
-        WITH valid_transition AS (
-            SELECT CASE
-                WHEN order_items.status = 'AWAITING_ACKNOWLEDGEMENT' AND $2 = 'PREPARING' THEN TRUE
-                WHEN order_items.status = 'PREPARING' AND $2 = 'IN_TRANSIT' THEN TRUE
-                WHEN order_items.status = 'IN_TRANSIT' AND $2 = 'DELIVERED' THEN TRUE
-                ELSE FALSE
-            END AS is_valid
-            FROM order_items
-            WHERE id = $1
-        ),
-        updated_item AS (
-            UPDATE order_items
-            SET status = $2
-            WHERE id = $1
-              AND (SELECT is_valid FROM valid_transition)
-            RETURNING id
-        )
-        SELECT EXISTS(SELECT 1 FROM updated_item);
-        "#,
-        order_item_id,
-        new_status.to_string()
-    )
-    .fetch_optional(&db.pool)
-    .await
-    .map(|opt| opt.is_some())
-    .map_err(|err| {
-        tracing::error!(
-            "Error updating status for order item {}: {}",
-            order_item_id,
-            err
-        );
-        Error::UnexpectedError
-    })
-}
+// pub async fn confirm_payment(db: DatabaseConnection, order_id: String) -> Result<bool, Error> {
+//     sqlx::query!(
+//         r#"
+//         WITH updated_order AS (
+//             UPDATE orders
+//             SET status = 'AWAITING_ACKNOWLEDGEMENT'
+//             WHERE id = $1
+//               AND status = 'AWAITING_PAYMENT'
+//             RETURNING id
+//         ),
+//         updated_order_items AS (
+//             UPDATE order_items
+//             SET status = 'AWAITING_ACKNOWLEDGEMENT'
+//             WHERE order_id = (SELECT id FROM updated_order)
+//             RETURNING id
+//         )
+//         SELECT EXISTS(SELECT 1 FROM updated_order);
+//         "#,
+//         order_id
+//     )
+//     .fetch_optional(&db.pool)
+//     .await
+//     .map(|opt| opt.is_some())
+//     .map_err(|err| {
+//         tracing::error!("Error confirming payment for order {}: {}", order_id, err);
+//         Error::UnexpectedError
+//     })
+// }
+
+// pub async fn update_order_item_status(
+//     db: DatabaseConnection,
+//     order_item_id: String,
+//     new_status: OrderStatus,
+// ) -> Result<bool, Error> {
+//     sqlx::query!(
+//         r#"
+//         WITH valid_transition AS (
+//             SELECT CASE
+//                 WHEN order_items.status = 'AWAITING_ACKNOWLEDGEMENT' AND $2 = 'PREPARING' THEN TRUE
+//                 WHEN order_items.status = 'PREPARING' AND $2 = 'IN_TRANSIT' THEN TRUE
+//                 WHEN order_items.status = 'IN_TRANSIT' AND $2 = 'DELIVERED' THEN TRUE
+//                 ELSE FALSE
+//             END AS is_valid
+//             FROM order_items
+//             WHERE id = $1
+//         ),
+//         updated_item AS (
+//             UPDATE order_items
+//             SET status = $2
+//             WHERE id = $1
+//               AND (SELECT is_valid FROM valid_transition)
+//             RETURNING id
+//         )
+//         SELECT EXISTS(SELECT 1 FROM updated_item);
+//         "#,
+//         order_item_id,
+//         new_status.to_string()
+//     )
+//     .fetch_optional(&db.pool)
+//     .await
+//     .map(|opt| opt.is_some())
+//     .map_err(|err| {
+//         tracing::error!(
+//             "Error updating status for order item {}: {}",
+//             order_item_id,
+//             err
+//         );
+//         Error::UnexpectedError
+//     })
+// }
 
 #[derive(Serialize)]
 pub struct UpdateOrderPayload {
