@@ -1,88 +1,79 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
-    routing::{get, post, put},
+    response::IntoResponse,
+    routing::{delete, get, post, put},
     Json, Router,
 };
-use chrono::NaiveDateTime;
-use regex::Regex;
+use itertools::Itertools;
 use serde::Deserialize;
+use serde::Serialize;
 use serde_json::json;
-use std::str::FromStr;
-use tower::util::error::optional::None;
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 use crate::{
     api::auth::middleware::Auth,
     repository::{
         self,
-        cart::{CartItem, CartItems},
+        cart::{CartItem, CartItems, FullCartItem, UpdateCartPayload},
     },
     types::Context,
-    utils::{self, pagination::Pagination},
 };
 
-async fn create_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl IntoResponse {
-    match repository::cart::create(
-        ctx.db_conn.clone(),
-        repository::cart::CreateCartPayload {
-            owner_id: auth.user.id,
-        },
-    )
-    .await
-    {
-        Ok(cart) => (
-            StatusCode::CREATED,
-            Json(json!({ "message": "Cart created!", "id": cart.id })),
-        ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Cart creation failed"})),
-        ),
-    }
-}
-
-#[derive(Deserialize)]
-struct Filters {
-    status: Option<repository::cart::CartStatus>,
-}
-
-async fn get_carts(
-    State(ctx): State<Arc<Context>>,
-    auth: Auth,
-    pagination: Pagination,
-    Query(filters): Query<Filters>,
-) -> impl IntoResponse {
-    // TODO: probably a check to see if the user requesting for carts is the admin
-    match repository::cart::find_many(
-        ctx.db_conn.clone(),
-        pagination.clone(),
-        repository::cart::Filters {
-            owner_id: Some(auth.user.id),
-            status: filters.status,
-        },
-    )
-    .await
-    {
-        Ok(paginated_carts) => (StatusCode::OK, Json(json!(paginated_carts))),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch carts"})),
-        ),
-    }
-}
-
 async fn get_active_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl IntoResponse {
-    match repository::cart::find_active_full_cart_by_owner_id(
-        ctx.db_conn.clone(),
+    #[derive(Debug, Serialize)]
+    struct MealWithQuantity {
+        meal: repository::meal::Meal,
+        quantity: i32,
+    }
+
+    #[derive(Debug, Serialize)]
+    struct KitchenWithMeals {
+        kitchen: repository::kitchen::Kitchen,
+        meals: Vec<MealWithQuantity>,
+    }
+
+    let cart = repository::cart::find_active_full_cart_by_owner_id(
+        &ctx.db_conn.pool,
         auth.user.id.clone(),
     )
-    .await
-    {
-        Ok(Some(cart)) => (StatusCode::OK, Json(json!(cart))),
+    .await;
+
+    match cart {
+        Ok(Some(cart)) => {
+            let kitchen_id_to_kitchen_map = cart
+                .items
+                .0
+                .clone()
+                .into_iter()
+                .map(|item| item.kitchen.clone())
+                .unique_by(|kitchen| kitchen.id.clone())
+                .map(|kitchen| (kitchen.id.clone(), kitchen))
+                .collect::<HashMap<String, repository::kitchen::Kitchen>>();
+
+            let res = kitchen_id_to_kitchen_map
+                .into_iter()
+                .map(|(id, kitchen)| {
+                    let meals = cart
+                        .items
+                        .0
+                        .clone()
+                        .into_iter()
+                        .filter(|item| item.kitchen.id == id)
+                        .map(|item| MealWithQuantity {
+                            quantity: item.quantity,
+                            meal: item.meal,
+                        })
+                        .collect::<Vec<_>>();
+
+                    KitchenWithMeals { kitchen, meals }
+                })
+                .collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(json!(res)))
+        }
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "No active cart found" })),
@@ -92,37 +83,6 @@ async fn get_active_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl In
             Json(json!({ "error": "Failed to fetch active cart" })),
         ),
     }
-}
-
-async fn get_cart_by_id(
-    Path(id): Path<String>,
-    State(ctx): State<Arc<Context>>,
-    auth: Auth,
-) -> impl IntoResponse {
-    let cart = match repository::cart::find_full_cart_by_id(ctx.db_conn.clone(), id.clone()).await {
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Failed to find cart"})),
-            )
-        }
-        Ok(Some(cart)) => cart,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": "Cart not found"})),
-            )
-        }
-    };
-
-    if !repository::cart::is_owner_of_full_cart(auth.user.clone(), &cart) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(json!({"error": "You are not the owner of this cart"})),
-        );
-    }
-
-    (StatusCode::OK, Json(json!(cart)))
 }
 
 #[derive(Deserialize, Validate)]
@@ -137,7 +97,7 @@ async fn set_meal_in_active_cart(
     Json(payload): Json<SetMealInCartPayload>,
 ) -> impl IntoResponse {
     let cart = match repository::cart::find_active_cart_by_owner_id(
-        ctx.db_conn.clone(),
+        &ctx.db_conn.pool,
         auth.user.id.clone(),
     )
     .await
@@ -234,7 +194,7 @@ async fn remove_meal_from_active_cart(
     auth: Auth,
 ) -> impl IntoResponse {
     let cart = match repository::cart::find_active_cart_by_owner_id(
-        ctx.db_conn.clone(),
+        &ctx.db_conn.pool,
         auth.user.id.clone(),
     )
     .await
@@ -354,7 +314,7 @@ pub async fn checkout_active_cart(
     }
 
     let cart = match repository::cart::find_active_full_cart_by_owner_id(
-        ctx.db_conn.clone(),
+        &ctx.db_conn.pool,
         auth.user.id.clone(),
     )
     .await
@@ -440,7 +400,7 @@ pub async fn checkout_active_cart(
     };
 
     if let Err(err) = tx.commit().await {
-        log::error!("Failed to commit transaction: {}", err);
+        tracing::error!("Failed to commit transaction: {}", err);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to checkout cart" })),
@@ -453,14 +413,74 @@ pub async fn checkout_active_cart(
     )
 }
 
+async fn remove_all_meals_from_active_cart_by_kitchen_id(
+    State(ctx): State<Arc<Context>>,
+    Path(kitchen_id): Path<String>,
+    auth: Auth,
+) -> impl IntoResponse {
+    let cart = match repository::cart::find_active_full_cart_by_owner_id(
+        &ctx.db_conn.pool,
+        auth.user.id.clone(),
+    )
+    .await
+    {
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to find cart"})),
+            )
+        }
+        Ok(Some(cart)) => cart,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Cart not found"})),
+            )
+        }
+    };
+
+    let filtered_cart_items = cart
+        .items
+        .0
+        .into_iter()
+        .filter(|item| item.kitchen.id != kitchen_id)
+        .map(|item| CartItem {
+            meal_id: item.meal.id,
+            quantity: item.quantity,
+        })
+        .collect::<Vec<_>>();
+
+    match repository::cart::update_by_id(
+        &ctx.db_conn.pool,
+        cart.id,
+        UpdateCartPayload {
+            items: Some(CartItems(filtered_cart_items)),
+            status: None,
+        },
+    )
+    .await
+    {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Items removed from cart" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to remove items from cart"})),
+        ),
+    }
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
-        .route("/", get(get_carts))
-        .route("/active", get(get_active_cart))
-        .route("/:id", get(get_cart_by_id))
-        .route("/active/checkout", post(checkout_active_cart))
+        .route("/", get(get_active_cart))
+        .route("/checkout", post(checkout_active_cart))
         .route(
-            "/active/items/:meal_id",
+            "/items/:meal_id",
             put(set_meal_in_active_cart).delete(remove_meal_from_active_cart),
+        )
+        .route(
+            "/kitchens/:kitchen_id",
+            delete(remove_all_meals_from_active_cart_by_kitchen_id),
         )
 }

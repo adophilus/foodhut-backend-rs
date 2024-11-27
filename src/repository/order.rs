@@ -827,7 +827,7 @@ where
     .await
     {
         Err(e) => {
-            log::error!("Error occurred while trying to update order by id: {}", e);
+            tracing::error!("Error occurred while trying to update order by id: {}", e);
             return Err(Error::UnexpectedError);
         }
         _ => Ok(()),

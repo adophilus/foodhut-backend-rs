@@ -8,14 +8,9 @@ use std::{
 };
 use ulid::Ulid;
 
-use crate::{
-    define_paginated,
-    utils::{
-        database::DatabaseConnection,
-        pagination::{Paginated, Pagination},
-    },
-};
+use crate::{define_paginated, utils::database::DatabaseConnection};
 
+use super::kitchen::Kitchen;
 use super::meal::Meal;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -94,6 +89,7 @@ pub struct FullCartItem {
     pub meal_id: String,
     pub quantity: i32,
     pub meal: Meal,
+    pub kitchen: Kitchen,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -233,17 +229,20 @@ pub async fn find_full_cart_by_id(
     })
 }
 
-pub async fn find_active_cart_by_owner_id(
-    db: DatabaseConnection,
+pub async fn find_active_cart_by_owner_id<'e, E>(
+    e: E,
     owner_id: String,
-) -> Result<Option<Cart>, Error> {
+) -> Result<Option<Cart>, Error>
+where
+    E: PgExecutor<'e>,
+{
     match sqlx::query_as!(
         Cart,
         "SELECT * FROM carts WHERE owner_id = $1 AND status = $2",
         owner_id,
         CartStatus::NotCheckedOut.to_string(),
     )
-    .fetch_optional(&db.pool)
+    .fetch_optional(e)
     .await
     {
         Ok(maybe_cart) => Ok(maybe_cart),
@@ -258,10 +257,13 @@ pub async fn find_active_cart_by_owner_id(
     }
 }
 
-pub async fn find_active_full_cart_by_owner_id(
-    db: DatabaseConnection,
+pub async fn find_active_full_cart_by_owner_id<'e, E>(
+    e: E,
     owner_id: String,
-) -> Result<Option<FullCart>, Error> {
+) -> Result<Option<FullCart>, Error>
+where
+    E: PgExecutor<'e>,
+{
     sqlx::query_as!(
         FullCart,
         r#"
@@ -276,14 +278,16 @@ pub async fn find_active_full_cart_by_owner_id(
                     JSONB_AGG(
                         TO_JSONB(ROW_TO_JSON(cart_items)) || 
                         JSONB_BUILD_OBJECT(
-                            'meal', meals
+                            'meal', meals,
+                            'kitchen', kitchens
                         )
                     ) FILTER (WHERE cart_items.meal_id IS NOT NULL),
                     '[]'::jsonb
                 ) AS items
             FROM carts
-            LEFT JOIN LATERAL jsonb_to_recordset(carts.items::jsonb) AS cart_items(meal_id TEXT, quantity INT) ON true
+            LEFT JOIN LATERAL JSONB_TO_RECORDSET(carts.items::jsonb) AS cart_items(meal_id TEXT, quantity INT) ON true
             LEFT JOIN meals ON cart_items.meal_id = meals.id
+            LEFT JOIN kitchens ON meals.kitchen_id = meals.kitchen_id
             WHERE carts.owner_id = $1 AND carts.status = $2
             GROUP BY carts.id
         )
@@ -292,7 +296,7 @@ pub async fn find_active_full_cart_by_owner_id(
         owner_id,
         CartStatus::NotCheckedOut.to_string()
     )
-    .fetch_optional(&db.pool)
+    .fetch_optional(e)
     .await
     .map_err(|err| {
         tracing::error!(
@@ -300,89 +304,6 @@ pub async fn find_active_full_cart_by_owner_id(
             owner_id,
             err
         );
-        Error::UnexpectedError
-    })
-}
-
-#[derive(Deserialize)]
-pub struct Filters {
-    pub owner_id: Option<String>,
-    pub status: Option<CartStatus>,
-}
-
-pub async fn find_many(
-    db: DatabaseConnection,
-    pagination: Pagination,
-    filters: Filters,
-) -> Result<Paginated<FullCart>, Error> {
-    sqlx::query_as!(
-        DatabasePaginatedFullCart,
-        r#"
-            WITH filtered_data AS (
-                SELECT carts.id,
-                       carts.status,
-                       carts.owner_id,
-                       carts.created_at,
-                       carts.updated_at,
-                       COALESCE(
-                           JSONB_AGG(
-                               JSONB_BUILD_OBJECT(
-                                   'meal_id', cart_items.meal_id,
-                                   'quantity', cart_items.quantity,
-                                   'meal', JSONB_BUILD_OBJECT(
-                                       'id', meals.id,
-                                       'name', meals.name,
-                                       'description', meals.description,
-                                       'rating', meals.rating,
-                                       'original_price', meals.original_price,
-                                       'price', meals.price,
-                                       'likes', meals.likes,
-                                       'cover_image', meals.cover_image,
-                                       'is_available', meals.is_available,
-                                       'kitchen_id', meals.kitchen_id,
-                                       'created_at', meals.created_at,
-                                       'updated_at', meals.updated_at
-                                   )
-                               )
-                           ) FILTER (WHERE cart_items.meal_id IS NOT NULL),
-                           '[]'::jsonb
-                       ) AS items
-                FROM carts
-                LEFT JOIN LATERAL jsonb_to_recordset(carts.items::jsonb) AS cart_items(meal_id TEXT, quantity INT) ON true
-                LEFT JOIN meals ON cart_items.meal_id = meals.id
-                WHERE
-                    ($3::TEXT IS NULL OR carts.owner_id = $3)
-                    AND ($4::TEXT IS NULL OR carts.status = $4)
-                GROUP BY carts.id
-                LIMIT $1
-                OFFSET $2
-            ),
-            total_count AS (
-                SELECT COUNT(id) AS total_rows
-                FROM carts
-                WHERE
-                    ($3::TEXT IS NULL OR owner_id = $3)
-                    AND ($4::TEXT IS NULL OR status = $4)
-            )
-            SELECT 
-                COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
-                JSONB_BUILD_OBJECT(
-                    'total', (SELECT total_rows FROM total_count),
-                    'per_page', $1,
-                    'page', $2 / $1 + 1
-                ) AS meta
-            FROM filtered_data;
-        "#,
-        pagination.per_page as i64,
-        ((pagination.page - 1) * pagination.per_page) as i64,
-        filters.owner_id,
-        filters.status.map(|p| p.to_string())
-    )
-    .fetch_one(&db.pool)
-    .await
-    .map(DatabasePaginatedFullCart::into)
-    .map_err(|err| {
-        tracing::error!("Error occurred while trying to fetch many carts: {}", err);
         Error::UnexpectedError
     })
 }
@@ -417,7 +338,7 @@ where
     .await
     {
         Err(e) => {
-            log::error!(
+            tracing::error!(
                 "Error occurred while trying to update cart by id {}: {}",
                 id,
                 e
@@ -426,12 +347,4 @@ where
         }
         _ => Ok(()),
     }
-}
-
-pub fn is_owner(user: super::user::User, cart: &Cart) -> bool {
-    cart.owner_id == user.id
-}
-
-pub fn is_owner_of_full_cart(user: super::user::User, cart: &FullCart) -> bool {
-    cart.owner_id == user.id
 }

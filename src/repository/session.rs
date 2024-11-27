@@ -41,7 +41,7 @@ pub async fn create(
     {
         Ok(session) => Ok(session),
         Err(e) => {
-            log::error!(
+            tracing::error!(
                 "Error occurred while creating a new session for user with id {}: {}",
                 payload.user_id,
                 e
@@ -56,7 +56,7 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Ses
         .fetch_optional(&db.pool)
         .await
         .map_err(|err| {
-            log::error!(
+            tracing::error!(
                 "Error occurred while fetching session with id {}: {}",
                 id,
                 err
@@ -77,7 +77,7 @@ pub async fn find_by_access_token(
     .fetch_optional(&db.pool)
     .await
     .map_err(|err| {
-        log::error!(
+        tracing::error!(
             "Error occurred while fetching session with access_token {}: {}",
             access_token,
             err
@@ -98,7 +98,7 @@ pub async fn find_by_refresh_token(
     .fetch_optional(&db.pool)
     .await
     .map_err(|err| {
-        log::error!(
+        tracing::error!(
             "Error occurred while fetching session with refresh_token {}: {}",
             refresh_token,
             err

@@ -1,5 +1,5 @@
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
-use log::debug;
+use tracing::debug;
 use ulid::Ulid;
 
 use crate::utils::database::DatabaseConnection;
@@ -47,7 +47,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateOtpPayload) -> Result
     .fetch_one(&db.pool)
     .await
     .map_err(|e| {
-        log::error!("Error occurred while creating otp {}", e);
+        tracing::error!("Error occurred while creating otp {}", e);
         Error::UnexpectedError
     })
 }

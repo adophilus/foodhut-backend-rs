@@ -252,7 +252,7 @@ pub async fn update_by_id<'e, Executor: PgExecutor<'e>>(
         .await
         .map(|_|())
     .map_err(|err|{
-        log::error!("Error occurred while trying to update wallet by id: {}", err);
+        tracing::error!("Error occurred while trying to update wallet by id: {}", err);
         Error::UnexpectedError
     })
 }
@@ -278,7 +278,7 @@ pub async fn update_metatata_by_owner_id(
     .fetch_one(&db.pool)
     .await
     .map_err(|e| {
-        log::error!(
+        tracing::error!(
             "Error occurred while trying to update wallet metadata: {}",
             e
         );

@@ -21,6 +21,7 @@ google-fcm1 = "6.0.0"
 hex = "0.4.3"
 hmac = "0.12.1"
 hyper = "1.4.1"
+itertools = "0.13.0"
 lettre = { version = "0.11.7", features = [
     "tokio1",
     "builder",

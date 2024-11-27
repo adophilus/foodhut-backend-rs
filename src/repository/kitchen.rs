@@ -14,7 +14,7 @@ use crate::utils::{
     storage,
 };
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CoverImage(pub Option<storage::UploadedMedia>);
 
 impl From<Option<serde_json::Value>> for CoverImage {
@@ -27,7 +27,7 @@ impl From<Option<serde_json::Value>> for CoverImage {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Kitchen {
     pub id: String,
     pub name: String,

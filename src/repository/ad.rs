@@ -53,7 +53,7 @@ pub async fn create(db: DatabaseConnection, payload: CreateAdPayload) -> Result<
     {
         Ok(ad) => Ok(ad),
         Err(e) => {
-            log::error!("{}", e);
+            tracing::error!("{}", e);
             Err(Error::UnexpectedError)
         }
     }
@@ -66,7 +66,7 @@ pub async fn find_by_id(db: DatabaseConnection, id: String) -> Result<Option<Ad>
     {
         Ok(ad) => Ok(ad),
         Err(err) => {
-            log::error!("Error occurred while fetching ad with id {}: {}", id, err);
+            tracing::error!("Error occurred while fetching ad with id {}: {}", id, err);
             Err(Error::UnexpectedError)
         }
     }
@@ -188,7 +188,7 @@ pub async fn update_by_id(
     .await
     .map(|_| ())
     .map_err(|e| {
-        log::error!(
+        tracing::error!(
             "Error occurred while trying to update a ad by id {}: {}",
             id,
             e
