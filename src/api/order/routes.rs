@@ -108,139 +108,136 @@ pub struct UpdateOrderItemPayload {
     pub as_kitchen: Option<bool>, // Optional parameter to signify if the request is made as a kitchen
 }
 
-// async fn update_order_item_status(
-//     Path((order_id, order_item_id)): Path<(String, String)>,
-//     State(ctx): State<Arc<Context>>,
-//     auth: Auth,
-//     Json(payload): Json<UpdateOrderItemPayload>,
-// ) -> impl IntoResponse {
-//     // Fetch the current order item to determine its status
-//     let current_order_item =
-//         match repository::order::find_order_item_by_id(&ctx.db_conn.pool, order_item_id.clone())
-//             .await
-//         {
-//             Ok(Some(item)) => item,
-//             Ok(None) => {
-//                 return (
-//                     StatusCode::NOT_FOUND,
-//                     Json(json!({ "message": "Order item not found" })),
-//                 );
-//             }
-//             Err(_) => {
-//                 return (
-//                     StatusCode::INTERNAL_SERVER_ERROR,
-//                     Json(json!({ "message": "Failed to retrieve order item" })),
-//                 );
-//             }
-//         };
-//
-//     let as_kitchen = payload.as_kitchen.unwrap_or(false);
-//
-//     if as_kitchen {
-//         // Check if the user owns the kitchen
-//         match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id.clone()).await
-//         {
-//             Ok(Some(kitchen)) => {
-//                 // Ensure that the kitchen ID matches the order item's kitchen_id
-//                 if kitchen.id != current_order_item.kitchen_id {
-//                     return (
-//                         StatusCode::FORBIDDEN,
-//                         Json(json!({ "message": "Kitchen does not own this order item" })),
-//                     );
-//                 }
-//
-//                 // Ensure the kitchen is allowed to update the status (kitchen status transitions)
-//                 match (current_order_item.status, payload.status.clone()) {
-//                     (
-//                         repository::order::OrderStatus::AwaitingAcknowledgement,
-//                         repository::order::OrderStatus::Preparing,
-//                     )
-//                     | (
-//                         repository::order::OrderStatus::Preparing,
-//                         repository::order::OrderStatus::InTransit,
-//                     ) => {
-//                         // Update order item status as kitchen
-//                         if repository::order::update_order_item_status(
-//                             ctx.db_conn.clone(),
-//                             order_item_id.clone(),
-//                             payload.status.clone(),
-//                         )
-//                         .await
-//                         .unwrap_or(false)
-//                         {
-//                             return (
-//                                 StatusCode::OK,
-//                                 Json(
-//                                     json!({ "message": "Order item status updated successfully" }),
-//                                 ),
-//                             );
-//                         }
-//                     }
-//                     _ => {
-//                         return (
-//                             StatusCode::BAD_REQUEST,
-//                             Json(json!({ "message": "Invalid status transition for kitchen" })),
-//                         );
-//                     }
-//                 }
-//             }
-//             Ok(None) => {
-//                 return (
-//                     StatusCode::FORBIDDEN,
-//                     Json(json!({ "message": "User does not own a kitchen" })),
-//                 );
-//             }
-//             Err(_) => {
-//                 return (
-//                     StatusCode::INTERNAL_SERVER_ERROR,
-//                     Json(json!({ "message": "Failed to retrieve kitchen" })),
-//                 );
-//             }
-//         }
-//     } else {
-//         // For users (non-kitchen), ensure that the user owns the order item
-//         if current_order_item.owner_id != auth.user.id {
-//             return (
-//                 StatusCode::FORBIDDEN,
-//                 Json(json!({ "message": "User does not own this order item" })),
-//             );
-//         }
-//
-//         // For users, ensure valid transitions (user status transitions)
-//         match (current_order_item.status, payload.status.clone()) {
-//             (
-//                 repository::order::OrderStatus::InTransit,
-//                 repository::order::OrderStatus::Delivered,
-//             ) => {
-//                 // Update order item status as user
-//                 if repository::order::update_order_item_status(
-//                     ctx.db_conn.clone(),
-//                     order_item_id.clone(),
-//                     payload.status.clone(),
-//                 )
-//                 .await
-//                 .unwrap_or(false)
-//                 {
-//                     return (
-//                         StatusCode::OK,
-//                         Json(json!({ "message": "Order item status updated successfully" })),
-//                     );
-//                 }
-//             }
-//             _ => {
-//                 return (
-//                     StatusCode::BAD_REQUEST,
-//                     Json(json!({ "message": "Invalid status transition for user" })),
-//                 );
-//             }
-//         }
-//     }
-//
-//     (
-//         StatusCode::INTERNAL_SERVER_ERROR,
-//         Json(json!({ "message": "Failed to update order item status" })),
-//     )
-// }
+async fn update_order_item_status(
+    Path(order_id): Path<String>,
+    State(ctx): State<Arc<Context>>,
+    auth: Auth,
+    Json(payload): Json<UpdateOrderItemPayload>,
+) -> impl IntoResponse {
+    // Fetch the current order item to determine its status
+    let order = match repository::order::find_by_id(&ctx.db_conn.pool, order_id.clone()).await {
+        Ok(Some(order)) => order,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "message": "Order not found" })),
+            );
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "message": "Failed to retrieve order" })),
+            );
+        }
+    };
+
+    let as_kitchen = payload.as_kitchen.unwrap_or(false);
+
+    if as_kitchen {
+        // Check if the user owns the kitchen
+        match repository::kitchen::find_by_owner_id(ctx.db_conn.clone(), auth.user.id.clone()).await
+        {
+            Ok(Some(kitchen)) => {
+                // Ensure that the kitchen ID matches the order item's kitchen_id
+                if kitchen.id != order.kitchen_id {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({ "message": "Kitchen does not own this order" })),
+                    );
+                }
+
+                // Ensure the kitchen is allowed to update the status (kitchen status transitions)
+                match (order.status, payload.status.clone()) {
+                    (
+                        repository::order::OrderStatus::AwaitingAcknowledgement,
+                        repository::order::OrderStatus::Preparing,
+                    )
+                    | (
+                        repository::order::OrderStatus::Preparing,
+                        repository::order::OrderStatus::InTransit,
+                    ) => {
+                        // Update order item status as kitchen
+                        if repository::order::update_order_status(
+                            &ctx.db_conn.pool,
+                            order.id.clone(),
+                            payload.status.clone(),
+                        )
+                        .await
+                        .unwrap_or(false)
+                        {
+                            return (
+                                StatusCode::OK,
+                                Json(
+                                    json!({ "message": "Order item status updated successfully" }),
+                                ),
+                            );
+                        }
+                    }
+                    _ => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({ "message": "Invalid status transition for kitchen" })),
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "message": "User does not own a kitchen" })),
+                );
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "message": "Failed to retrieve kitchen" })),
+                );
+            }
+        }
+    } else {
+        // For users (non-kitchen), ensure that the user owns the order item
+        if order.owner_id != auth.user.id {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "message": "User does not own this order item" })),
+            );
+        }
+
+        // For users, ensure valid transitions (user status transitions)
+        match (order.status, payload.status.clone()) {
+            (
+                repository::order::OrderStatus::InTransit,
+                repository::order::OrderStatus::Delivered,
+            ) => {
+                // Update order item status as user
+                if repository::order::update_order_status(
+                    &ctx.db_conn.pool,
+                    order.id.clone(),
+                    payload.status.clone(),
+                )
+                .await
+                .unwrap_or(false)
+                {
+                    return (
+                        StatusCode::OK,
+                        Json(json!({ "message": "Order status updated successfully" })),
+                    );
+                }
+            }
+            _ => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "message": "Invalid status transition for user" })),
+                );
+            }
+        }
+    }
+
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({ "message": "Failed to update order status" })),
+    )
+}
 
 #[derive(Deserialize)]
 struct PayForOrderPayload {
@@ -330,9 +327,6 @@ pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", get(get_orders))
         .route("/:id", get(get_order_by_id))
-        // .route(
-        //     "/:order_id/items/:order_item_id/status",
-        //     put(update_order_item_status),
-        // )
+        .route("/:order_id/status", put(update_order_item_status))
         .route("/:id/pay", post(pay_for_order))
 }

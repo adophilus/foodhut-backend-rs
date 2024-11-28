@@ -986,6 +986,44 @@ pub async fn confirm_payment<'e, E: PgExecutor<'e>>(e: E, order_id: String) -> R
     })
 }
 
+pub async fn update_order_status<'e, E: PgExecutor<'e>>(
+    e: E,
+    order_id: String,
+    new_status: OrderStatus,
+) -> Result<bool, Error> {
+    sqlx::query!(
+        r#"
+        WITH valid_transition AS (
+            SELECT CASE
+                WHEN orders.status = 'AWAITING_ACKNOWLEDGEMENT' AND $2 = 'PREPARING' THEN TRUE
+                WHEN orders.status = 'PREPARING' AND $2 = 'IN_TRANSIT' THEN TRUE
+                WHEN orders.status = 'IN_TRANSIT' AND $2 = 'DELIVERED' THEN TRUE
+                ELSE FALSE
+            END AS is_valid
+            FROM orders
+            WHERE id = $1
+        ),
+        updated_order AS (
+            UPDATE orders
+            SET status = $2
+            WHERE id = $1
+              AND (SELECT is_valid FROM valid_transition)
+            RETURNING id
+        )
+        SELECT EXISTS(SELECT 1 FROM updated_order);
+        "#,
+        order_id,
+        new_status.to_string()
+    )
+    .fetch_optional(e)
+    .await
+    .map(|opt| opt.is_some())
+    .map_err(|err| {
+        tracing::error!("Error updating status for order {}: {}", order_id, err);
+        Error::UnexpectedError
+    })
+}
+
 // pub async fn update_order_item_status(
 //     db: DatabaseConnection,
 //     order_item_id: String,
