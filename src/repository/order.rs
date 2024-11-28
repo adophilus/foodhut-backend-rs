@@ -352,7 +352,116 @@ pub async fn find_full_order_by_id<'e, E: PgExecutor<'e>>(
     e: E,
     order_id: String,
 ) -> Result<Option<FullOrder>, Error> {
-    unimplemented!()
+    sqlx::query_as!(
+        FullOrder,
+        r#"
+        WITH parsed_order_items AS (
+            SELECT
+                orders.id AS order_id,
+                orders.status,
+                orders.payment_method,
+                orders.delivery_fee,
+                orders.service_fee,
+                orders.sub_total,
+                orders.total,
+                orders.delivery_address,
+                orders.delivery_date,
+                orders.dispatch_rider_note,
+                orders.kitchen_id,
+                orders.owner_id,
+                orders.created_at,
+                orders.updated_at,
+                json_array_elements(orders.items) AS item -- Expand JSON array into individual rows
+            FROM orders
+            WHERE
+                orders.id = $1 -- Filter only by order_id
+        ),
+        expanded_items AS (
+            SELECT
+                parsed_order_items.*,
+                (item->>'price')::NUMERIC AS item_price,
+                (item->>'quantity')::INT AS item_quantity,
+                item->>'meal_id' AS item_meal_id
+            FROM parsed_order_items
+        ),
+        joined_meals AS (
+            SELECT
+                expanded_items.*,
+                meals.id AS meal_id,
+                meals.name AS meal_name,
+                meals.description,
+                meals.rating,
+                meals.price AS meal_price,
+                meals.original_price, -- Include original_price
+                meals.likes,
+                meals.cover_image,
+                meals.is_available,
+                meals.kitchen_id AS meal_kitchen_id,
+                meals.created_at AS meal_created_at,
+                meals.updated_at AS meal_updated_at
+            FROM expanded_items
+            LEFT JOIN meals ON expanded_items.item_meal_id = meals.id
+        ),
+        grouped_orders AS (
+            SELECT
+                order_id as id,
+                status,
+                payment_method,
+                delivery_fee,
+                service_fee,
+                sub_total,
+                total,
+                delivery_address,
+                delivery_date,
+                dispatch_rider_note,
+                kitchen_id,
+                owner_id,
+                created_at,
+                updated_at,
+                COALESCE(
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'price', item_price,
+                            'quantity', item_quantity,
+                            'meal_id', item_meal_id,
+                            'meal', JSONB_BUILD_OBJECT(
+                                'id', meal_id,
+                                'name', meal_name,
+                                'description', description,
+                                'rating', rating,
+                                'original_price', original_price, -- Map original_price
+                                'price', meal_price,
+                                'likes', likes,
+                                'cover_image', cover_image,
+                                'is_available', is_available,
+                                'kitchen_id', meal_kitchen_id,
+                                'created_at', meal_created_at,
+                                'updated_at', meal_updated_at
+                            )
+                        )
+                    ),
+                    '[]'::JSONB
+                ) AS items
+            FROM joined_meals
+            GROUP BY
+                order_id, status, payment_method, delivery_fee, service_fee,
+                sub_total, total, delivery_address, delivery_date, dispatch_rider_note,
+                kitchen_id, owner_id, created_at, updated_at
+        )
+        SELECT * FROM grouped_orders;
+        "#,
+        order_id
+    )
+    .fetch_optional(e)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch full order by id {}: {}",
+            order_id,
+            err
+        );
+        Error::UnexpectedError
+    })
 }
 
 // pub async fn find_full_order_by_id(
@@ -457,12 +566,132 @@ pub async fn find_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
     })
 }
 
+// pub async fn find_full_order_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
+//     e: E,
+//     order_id: String,
+//     owner_id: String,
+// ) -> Result<Option<FullOrder>, Error> {
+//     unimplemented!()
+// }
+
 pub async fn find_full_order_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
     e: E,
     order_id: String,
     owner_id: String,
 ) -> Result<Option<FullOrder>, Error> {
-    unimplemented!()
+    sqlx::query_as!(
+        FullOrder,
+        r#"
+        WITH parsed_order_items AS (
+            SELECT
+                orders.id AS order_id,
+                orders.status,
+                orders.payment_method,
+                orders.delivery_fee,
+                orders.service_fee,
+                orders.sub_total,
+                orders.total,
+                orders.delivery_address,
+                orders.delivery_date,
+                orders.dispatch_rider_note,
+                orders.kitchen_id,
+                orders.owner_id,
+                orders.created_at,
+                orders.updated_at,
+                json_array_elements(orders.items) AS item -- Expand JSON array into individual rows
+            FROM orders
+            WHERE
+                orders.id = $1
+                AND orders.owner_id = $2
+        ),
+        expanded_items AS (
+            SELECT
+                parsed_order_items.*,
+                (item->>'price')::NUMERIC AS item_price,
+                (item->>'quantity')::INT AS item_quantity,
+                item->>'meal_id' AS item_meal_id
+            FROM parsed_order_items
+        ),
+        joined_meals AS (
+            SELECT
+                expanded_items.*,
+                meals.id AS meal_id,
+                meals.name AS meal_name,
+                meals.description,
+                meals.rating,
+                meals.price AS meal_price,
+                meals.original_price, -- Include original_price
+                meals.likes,
+                meals.cover_image,
+                meals.is_available,
+                meals.kitchen_id AS meal_kitchen_id,
+                meals.created_at AS meal_created_at,
+                meals.updated_at AS meal_updated_at
+            FROM expanded_items
+            LEFT JOIN meals ON expanded_items.item_meal_id = meals.id
+        ),
+        grouped_orders AS (
+            SELECT
+                order_id as id,
+                status,
+                payment_method,
+                delivery_fee,
+                service_fee,
+                sub_total,
+                total,
+                delivery_address,
+                delivery_date,
+                dispatch_rider_note,
+                kitchen_id,
+                owner_id,
+                created_at,
+                updated_at,
+                COALESCE(
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'price', item_price,
+                            'quantity', item_quantity,
+                            'meal_id', item_meal_id,
+                            'meal', JSONB_BUILD_OBJECT(
+                                'id', meal_id,
+                                'name', meal_name,
+                                'description', description,
+                                'rating', rating,
+                                'original_price', original_price, -- Map original_price
+                                'price', meal_price,
+                                'likes', likes,
+                                'cover_image', cover_image,
+                                'is_available', is_available,
+                                'kitchen_id', meal_kitchen_id,
+                                'created_at', meal_created_at,
+                                'updated_at', meal_updated_at
+                            )
+                        )
+                    ),
+                    '[]'::JSONB
+                ) AS items
+            FROM joined_meals
+            GROUP BY
+                order_id, status, payment_method, delivery_fee, service_fee,
+                sub_total, total, delivery_address, delivery_date, dispatch_rider_note,
+                kitchen_id, owner_id, created_at, updated_at
+        )
+        SELECT * FROM grouped_orders;
+        "#,
+        order_id,
+        owner_id
+    )
+    .fetch_optional(e)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch full order by id {} and owner id {}: {}",
+            order_id,
+            owner_id,
+            err
+        );
+        Error::UnexpectedError
+    })
 }
 
 // pub async fn find_full_order_by_id_and_owner_id(
@@ -586,110 +815,142 @@ pub struct Filters {
     pub kitchen_id: Option<String>,
 }
 
-pub async fn find_many(
-    db: DatabaseConnection,
+pub async fn find_many<'e, E: PgExecutor<'e>>(
+    e: E,
     pagination: Pagination,
     filters: Filters,
 ) -> Result<Paginated<FullOrder>, Error> {
     sqlx::query_as!(
         DatabasePaginatedFullOrder,
         r#"
-            WITH filtered_data AS (
-                SELECT orders.*,
-                       COALESCE(
-                           JSONB_AGG(
-                               JSONB_BUILD_OBJECT(
-                                   'id', full_order_items.item_id,
-                                   'status', full_order_items.item_status,
-                                   'price', full_order_items.price,
-                                   'meal_id', full_order_items.meal_id,
-                                   'order_id', full_order_items.order_id,
-                                   'kitchen_id', full_order_items.kitchen_id,
-                                   'owner_id', full_order_items.owner_id,
-                                   'created_at', full_order_items.item_created_at,
-                                   'updated_at', full_order_items.item_updated_at,
-                                   'meal', JSONB_BUILD_OBJECT(
-                                       'id', full_order_items.meal_id,
-                                       'name', full_order_items.meal_name,
-                                       'description', full_order_items.description,
-                                       'rating', full_order_items.rating,
-                                       'price', full_order_items.meal_price,
-                                       'likes', full_order_items.likes,
-                                       'cover_image', full_order_items.cover_image,
-                                       'is_available', full_order_items.is_available,
-                                       'kitchen_id', full_order_items.meal_kitchen_id,
-                                       'created_at', full_order_items.meal_created_at,
-                                       'updated_at', full_order_items.meal_updated_at
-                                   )
-                               )
-                           ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
-                           '[]'::jsonb
-                       ) AS items
-                FROM orders
-                LEFT JOIN (
-                    SELECT order_items.id AS item_id,
-                           order_items.order_id,
-                           order_items.kitchen_id,
-                           order_items.price,
-                           order_items.status AS item_status,
-                           order_items.created_at AS item_created_at,
-                           order_items.updated_at AS item_updated_at,
-                           order_items.owner_id,
-                           meals.id AS meal_id,
-                           meals.name AS meal_name,
-                           meals.description,
-                           meals.rating,
-                           meals.price AS meal_price,
-                           meals.likes,
-                           meals.cover_image,
-                           meals.is_available,
-                           meals.kitchen_id AS meal_kitchen_id,
-                           meals.created_at AS meal_created_at,
-                           meals.updated_at AS meal_updated_at
-                    FROM order_items
-                    LEFT JOIN meals ON order_items.meal_id = meals.id
-                ) AS full_order_items ON orders.id = full_order_items.order_id
-                WHERE
-                    ($3::TEXT IS NULL OR orders.owner_id = $3)
-                    AND (
-                        $4::TEXT IS NULL OR
-                        CASE
-                            WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
-                            WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
-                            ELSE TRUE
-                        END
-                    )
-                    AND ($5::TEXT IS NULL OR orders.payment_method = $5)
-                    AND ($6::TEXT IS NULL OR full_order_items.kitchen_id = $6)
-                GROUP BY orders.id
-                LIMIT $1
-                OFFSET $2
-            ),
-            total_count AS (
-                SELECT COUNT(DISTINCT orders.id) AS total_rows
-                FROM orders
-                LEFT JOIN order_items ON orders.id = order_items.order_id
-                WHERE
-                    ($3::TEXT IS NULL OR orders.owner_id = $3)
-                    AND (
-                        $4::TEXT IS NULL OR
-                        CASE
-                            WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
-                            WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
-                            ELSE TRUE
-                        END
-                    )
-                    AND ($5::TEXT IS NULL OR orders.payment_method = $5)
-                    AND ($6::TEXT IS NULL OR order_items.kitchen_id = $6)
-            )
+        WITH parsed_order_items AS (
             SELECT
-                COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
-                JSONB_BUILD_OBJECT(
-                    'total', (SELECT total_rows FROM total_count),
-                    'per_page', $1,
-                    'page', $2 / $1 + 1
-                ) AS meta
-            FROM filtered_data;
+                orders.id AS order_id,
+                orders.status,
+                orders.payment_method,
+                orders.delivery_fee,
+                orders.service_fee,
+                orders.sub_total,
+                orders.total,
+                orders.delivery_address,
+                orders.delivery_date,
+                orders.dispatch_rider_note,
+                orders.kitchen_id,
+                orders.owner_id,
+                orders.created_at,
+                orders.updated_at,
+                json_array_elements(orders.items) AS item -- Expand JSON array into individual rows
+            FROM orders
+            WHERE
+                ($3::TEXT IS NULL OR orders.owner_id = $3)
+                AND (
+                    $4::TEXT IS NULL OR
+                    CASE
+                        WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+                        ELSE TRUE
+                    END
+                )
+                AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
+            LIMIT $1 OFFSET $2
+        ),
+        expanded_items AS (
+            SELECT
+                parsed_order_items.*,
+                (item->>'price')::NUMERIC AS item_price,
+                (item->>'quantity')::INT AS item_quantity,
+                item->>'meal_id' AS item_meal_id
+            FROM parsed_order_items
+        ),
+        joined_meals AS (
+            SELECT
+                expanded_items.*,
+                meals.id AS meal_id,
+                meals.name AS meal_name,
+                meals.description,
+                meals.rating,
+                meals.price AS meal_price,
+                meals.original_price, -- Include original_price
+                meals.likes,
+                meals.cover_image,
+                meals.is_available,
+                meals.kitchen_id AS meal_kitchen_id,
+                meals.created_at AS meal_created_at,
+                meals.updated_at AS meal_updated_at
+            FROM expanded_items
+            LEFT JOIN meals ON expanded_items.item_meal_id = meals.id
+        ),
+        grouped_orders AS (
+            SELECT
+                order_id as id,
+                status,
+                payment_method,
+                delivery_fee,
+                service_fee,
+                sub_total,
+                total,
+                delivery_address,
+                delivery_date,
+                dispatch_rider_note,
+                kitchen_id,
+                owner_id,
+                created_at,
+                updated_at,
+                COALESCE(
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'price', item_price,
+                            'quantity', item_quantity,
+                            'meal_id', item_meal_id,
+                            'meal', JSONB_BUILD_OBJECT(
+                                'id', meal_id,
+                                'name', meal_name,
+                                'description', description,
+                                'rating', rating,
+                                'original_price', original_price, -- Map original_price
+                                'price', meal_price,
+                                'likes', likes,
+                                'cover_image', cover_image,
+                                'is_available', is_available,
+                                'kitchen_id', meal_kitchen_id,
+                                'created_at', meal_created_at,
+                                'updated_at', meal_updated_at
+                            )
+                        )
+                    ),
+                    '[]'::JSONB
+                ) AS items
+            FROM joined_meals
+            GROUP BY
+                order_id, status, payment_method, delivery_fee, service_fee,
+                sub_total, total, delivery_address, delivery_date, dispatch_rider_note,
+                kitchen_id, owner_id, created_at, updated_at
+        ),
+        total_count AS (
+            SELECT COUNT(*) AS total_rows
+            FROM orders
+            WHERE
+                ($3::TEXT IS NULL OR orders.owner_id = $3)
+                AND (
+                    $4::TEXT IS NULL OR
+                    CASE
+                        WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+                        ELSE TRUE
+                    END
+                )
+                AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
+        )
+        SELECT
+            COALESCE(JSONB_AGG(ROW_TO_JSON(grouped_orders)), '[]'::JSONB) AS items,
+            JSONB_BUILD_OBJECT(
+                'total', (SELECT total_rows FROM total_count),
+                'per_page', $1,
+                'page', $2 / $1 + 1
+            ) AS meta
+        FROM grouped_orders;
         "#,
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
@@ -698,7 +959,7 @@ pub async fn find_many(
         filters.payment_method.map(|p| p.to_string()),
         filters.kitchen_id
     )
-    .fetch_one(&db.pool)
+    .fetch_one(e)
     .await
     .map(DatabasePaginatedFullOrder::into)
     .map_err(|err| {
@@ -706,127 +967,6 @@ pub async fn find_many(
         Error::UnexpectedError
     })
 }
-
-// pub async fn find_many(
-//     db: DatabaseConnection,
-//     pagination: Pagination,
-//     filters: Filters,
-// ) -> Result<Paginated<FullOrder>, Error> {
-//     sqlx::query_as!(
-//         DatabasePaginatedFullOrder,
-//         r#"
-//             WITH filtered_data AS (
-//                 SELECT orders.*,
-//                        COALESCE(
-//                            JSONB_AGG(
-//                                JSONB_BUILD_OBJECT(
-//                                    'id', full_order_items.item_id,
-//                                    'status', full_order_items.item_status,
-//                                    'price', full_order_items.price,
-//                                    'meal_id', full_order_items.meal_id,
-//                                    'order_id', full_order_items.order_id,
-//                                    'kitchen_id', full_order_items.kitchen_id,
-//                                    'owner_id', full_order_items.owner_id,
-//                                    'created_at', full_order_items.item_created_at,
-//                                    'updated_at', full_order_items.item_updated_at,
-//                                    'meal', JSONB_BUILD_OBJECT(
-//                                        'id', full_order_items.meal_id,
-//                                        'name', full_order_items.meal_name,
-//                                        'description', full_order_items.description,
-//                                        'rating', full_order_items.rating,
-//                                        'price', full_order_items.meal_price,
-//                                        'likes', full_order_items.likes,
-//                                        'cover_image', full_order_items.cover_image,
-//                                        'is_available', full_order_items.is_available,
-//                                        'kitchen_id', full_order_items.meal_kitchen_id,
-//                                        'created_at', full_order_items.meal_created_at,
-//                                        'updated_at', full_order_items.meal_updated_at
-//                                    )
-//                                )
-//                            ) FILTER (WHERE full_order_items.item_id IS NOT NULL),
-//                            '[]'::jsonb
-//                        ) AS items
-//                 FROM orders
-//                 LEFT JOIN (
-//                     SELECT order_items.id AS item_id,
-//                            order_items.order_id,
-//                            order_items.kitchen_id,
-//                            order_items.price,
-//                            order_items.status AS item_status,
-//                            order_items.created_at AS item_created_at,
-//                            order_items.updated_at AS item_updated_at,
-//                            order_items.owner_id,
-//                            meals.id AS meal_id,
-//                            meals.name AS meal_name,
-//                            meals.description,
-//                            meals.rating,
-//                            meals.price AS meal_price,
-//                            meals.likes,
-//                            meals.cover_image,
-//                            meals.is_available,
-//                            meals.kitchen_id AS meal_kitchen_id,
-//                            meals.created_at AS meal_created_at,
-//                            meals.updated_at AS meal_updated_at
-//                     FROM order_items
-//                     LEFT JOIN meals ON order_items.meal_id = meals.id
-//                 ) AS full_order_items ON orders.id = full_order_items.order_id
-//                 WHERE
-//                     ($3::TEXT IS NULL OR orders.owner_id = $3)
-//                     AND (
-//                         $4::TEXT IS NULL OR
-//                         CASE
-//                             WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
-//                             WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
-//                             ELSE TRUE
-//                         END
-//                     )
-//                     AND ($5::TEXT IS NULL OR orders.payment_method = $5)
-//                     AND ($6::TEXT IS NULL OR full_order_items.kitchen_id = $6)
-//                 GROUP BY orders.id
-//                 LIMIT $1
-//                 OFFSET $2
-//             ),
-//             total_count AS (
-//                 SELECT COUNT(DISTINCT orders.id) AS total_rows
-//                 FROM orders
-//                 LEFT JOIN order_items ON orders.id = order_items.order_id
-//                 WHERE
-//                     ($3::TEXT IS NULL OR orders.owner_id = $3)
-//                     AND (
-//                         $4::TEXT IS NULL OR
-//                         CASE
-//                             WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
-//                             WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
-//                             ELSE TRUE
-//                         END
-//                     )
-//                     AND ($5::TEXT IS NULL OR orders.payment_method = $5)
-//                     AND ($6::TEXT IS NULL OR order_items.kitchen_id = $6)
-//             )
-//             SELECT
-//                 COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
-//                 JSONB_BUILD_OBJECT(
-//                     'total', (SELECT total_rows FROM total_count),
-//                     'per_page', $1,
-//                     'page', $2 / $1 + 1
-//                 ) AS meta
-//             FROM filtered_data;
-//         "#,
-//         pagination.per_page as i64,
-//         ((pagination.page - 1) * pagination.per_page) as i64,
-//         filters.owner_id,
-//         filters.status.map(|s| s.to_string()),
-//         filters.payment_method.map(|p| p.to_string()),
-//         filters.kitchen_id
-//     )
-//     .fetch_one(&db.pool)
-//     .await
-//     .map(DatabasePaginatedFullOrder::into)
-//     .map_err(|err| {
-//         tracing::error!("Error occurred while trying to fetch many orders: {}", err);
-//         Error::UnexpectedError
-//     })
-// }
 
 // pub async fn confirm_payment(db: DatabaseConnection, order_id: String) -> Result<bool, Error> {
 //     sqlx::query!(
