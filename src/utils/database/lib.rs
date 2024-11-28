@@ -54,7 +54,7 @@ pub mod pagination {
         fn from(option: Option<Value>) -> Self {
             match option {
                 Some(value) => serde_json::from_value(value).expect("Invalid meta found"),
-                None => unreachable!(),
+                None => unreachable!("Invalid meta found"),
             }
         }
     }
@@ -66,7 +66,7 @@ pub mod pagination {
         fn from(option: Option<Value>) -> Self {
             match option {
                 Some(value) => serde_json::from_value(value).expect("Invalid list found"),
-                None => unreachable!(),
+                None => unreachable!("Invalid list found"),
             }
         }
     }

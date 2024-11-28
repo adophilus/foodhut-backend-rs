@@ -182,7 +182,7 @@ impl From<Option<serde_json::Value>> for OrderItems {
         match v {
             Some(json) => serde_json::de::from_str::<_>(json.to_string().as_ref())
                 .expect("Invalid order items list"),
-            None => unreachable!(),
+            None => unreachable!("Invalid order iems list"),
         }
     }
 }
@@ -222,7 +222,7 @@ impl From<Option<serde_json::Value>> for FullOrderItems {
         match v {
             Some(json) => serde_json::de::from_str::<_>(json.to_string().as_ref())
                 .expect("Invalid full order items list"),
-            None => unreachable!(),
+            None => unreachable!("Invalid full order items list"),
         }
     }
 }

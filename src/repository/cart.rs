@@ -100,7 +100,7 @@ impl From<Option<serde_json::Value>> for FullCartItems {
         match v {
             Some(json) => serde_json::de::from_str::<_>(json.to_string().as_ref())
                 .expect("Invalid full cart items list"),
-            None => unreachable!(),
+            None => unreachable!("Invalid full cart items list"),
         }
     }
 }
