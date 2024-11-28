@@ -63,18 +63,17 @@ pub async fn initialize_payment_for_order(
     }
 }
 
-pub async fn confirm_payment_for_order(
+pub async fn confirm_payment_for_order<'e, E: PgExecutor<'e>>(
     ctx: Arc<Context>,
+    e: E,
     order: repository::order::Order,
 ) -> Result<(), Error> {
-    unimplemented!()
-
-    // if let Err(_) = repository::order::confirm_payment(ctx.db_conn.clone(), order.id.clone()).await
-    // {
-    //     return Err(Error::UnexpectedError);
-    // };
+    if let Err(_) = repository::order::confirm_payment(e, order.id.clone()).await
+    {
+        return Err(Error::UnexpectedError);
+    };
 
     // TODO: send notification to the end user
 
-    // Ok(())
+    Ok(())
 }

@@ -968,34 +968,23 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
     })
 }
 
-// pub async fn confirm_payment(db: DatabaseConnection, order_id: String) -> Result<bool, Error> {
-//     sqlx::query!(
-//         r#"
-//         WITH updated_order AS (
-//             UPDATE orders
-//             SET status = 'AWAITING_ACKNOWLEDGEMENT'
-//             WHERE id = $1
-//               AND status = 'AWAITING_PAYMENT'
-//             RETURNING id
-//         ),
-//         updated_order_items AS (
-//             UPDATE order_items
-//             SET status = 'AWAITING_ACKNOWLEDGEMENT'
-//             WHERE order_id = (SELECT id FROM updated_order)
-//             RETURNING id
-//         )
-//         SELECT EXISTS(SELECT 1 FROM updated_order);
-//         "#,
-//         order_id
-//     )
-//     .fetch_optional(&db.pool)
-//     .await
-//     .map(|opt| opt.is_some())
-//     .map_err(|err| {
-//         tracing::error!("Error confirming payment for order {}: {}", order_id, err);
-//         Error::UnexpectedError
-//     })
-// }
+pub async fn confirm_payment<'e, E: PgExecutor<'e>>(e: E, order_id: String) -> Result<bool, Error> {
+    sqlx::query!(
+        r#"
+        UPDATE orders SET status = 'AWAITING_ACKNOWLEDGEMENT'
+        WHERE id = $1
+          AND status = 'AWAITING_PAYMENT'
+        "#,
+        order_id
+    )
+    .fetch_optional(e)
+    .await
+    .map(|opt| opt.is_some())
+    .map_err(|err| {
+        tracing::error!("Error confirming payment for order {}: {}", order_id, err);
+        Error::UnexpectedError
+    })
+}
 
 // pub async fn update_order_item_status(
 //     db: DatabaseConnection,
