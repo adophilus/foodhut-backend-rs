@@ -1,9 +1,9 @@
 pub mod email;
-pub mod sms;
 pub mod push;
+pub mod sms;
 
 // use super::{email, push, sms};
-use crate::{repository, types::Context};
+use crate::{modules::user::repository::User, types::Context};
 use std::sync::Arc;
 
 pub enum Backend {
@@ -13,37 +13,38 @@ pub enum Backend {
 }
 
 pub mod types {
-    use super::repository;
+    use crate::modules::{order::repository::Order, user::repository::User};
+
 
     #[derive(Clone)]
     pub struct Registered {
-        pub user: repository::user::User,
+        pub user: User,
     }
 
     #[derive(Clone)]
     pub struct OrderPaid {
-        pub order: repository::order::Order,
+        pub order: Order,
     }
 
     #[derive(Clone)]
     pub struct VerificationOtpRequested {
-        pub user: repository::user::User,
+        pub user: User,
     }
 
     #[derive(Clone)]
     pub struct CustomerIdentificationFailed {
-        pub user: repository::user::User,
+        pub user: User,
         pub reason: String,
     }
 
     #[derive(Clone)]
     pub struct BankAccountCreationSuccessful {
-        pub user: repository::user::User,
+        pub user: User,
     }
 
     #[derive(Clone)]
     pub struct BankAccountCreationFailed {
-        pub user: repository::user::User,
+        pub user: User,
     }
 }
 
@@ -58,26 +59,26 @@ pub enum Notification {
 }
 
 impl Notification {
-    pub fn registered(user: repository::user::User) -> Self {
+    pub fn registered(user: User) -> Self {
         Notification::Registered(types::Registered { user })
     }
 
-    pub fn verification_otp_requested(user: repository::user::User) -> Self {
+    pub fn verification_otp_requested(user: User) -> Self {
         Notification::VerificationOtpRequested(types::VerificationOtpRequested { user })
     }
 
-    pub fn customer_identification_failed(user: repository::user::User, reason: String) -> Self {
+    pub fn customer_identification_failed(user: User, reason: String) -> Self {
         Notification::CustomerIdentificationFailed(types::CustomerIdentificationFailed {
             user,
             reason,
         })
     }
 
-    pub fn bank_account_creation_successful(user: repository::user::User) -> Self {
+    pub fn bank_account_creation_successful(user: User) -> Self {
         Notification::BankAccountCreationSuccessful(types::BankAccountCreationSuccessful { user })
     }
 
-    pub fn bank_account_creation_failed(user: repository::user::User) -> Self {
+    pub fn bank_account_creation_failed(user: User) -> Self {
         Notification::BankAccountCreationFailed(types::BankAccountCreationFailed { user })
     }
 }

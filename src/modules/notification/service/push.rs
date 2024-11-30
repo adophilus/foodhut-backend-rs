@@ -1,10 +1,10 @@
-use super::super::{Notification, Result};
-use crate::types;
-use oauth_fcm::{create_shared_token_manager, send_fcm_message, FcmNotification};
-use std::fs::File;
+use super::{Notification, Result};
+use crate::types::Context;
+// use oauth_fcm::{create_shared_token_manager, send_fcm_message, FcmNotification};
+// use std::fs::File;
 use std::sync::Arc;
 
-pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Result<()> {
+pub async fn send(_: Arc<Context>, _: Notification) -> Result<()> {
     Ok(())
     // match notification {
     //     Notification::BankAccountCreationFailed()
@@ -13,8 +13,8 @@ pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Resul
 
 #[cfg(test)]
 mod test {
-
-    use super::*;
+    use oauth_fcm::{create_shared_token_manager, send_fcm_message, FcmNotification};
+    use std::fs::File;
 
     #[tokio::test]
     async fn should_send_push_notification() {

@@ -1,7 +1,4 @@
-use super::super::{Error, Notification, Result};
-use crate::repository::user::User;
-use crate::types;
-use crate::utils::notification;
+use crate::{modules::user::repository::User, Context};
 use lettre::{
     message::header::ContentType,
     transport::smtp::authentication::{Credentials, Mechanism},
@@ -9,6 +6,8 @@ use lettre::{
 };
 use lettre::{AsyncTransport, Tokio1Executor};
 use std::sync::Arc;
+
+use super::{types, Error, Notification, Result};
 
 pub mod jobs {
     use crate::types::{Context, SchedulableJob};
@@ -125,11 +124,11 @@ pub mod jobs {
     }
 }
 
-pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Result<()> {
+pub async fn send(ctx: Arc<Context>, notification: Notification) -> Result<()> {
     match notification.clone() {
         Notification::Registered(n) => send_registered_email(ctx, n).await,
-        Notification::OrderPaid(n) => unimplemented!(),
-        Notification::VerificationOtpRequested(n) => Err(Error::InvalidNotification),
+        Notification::OrderPaid(_) => unimplemented!(),
+        Notification::VerificationOtpRequested(_) => Err(Error::InvalidNotification),
         Notification::CustomerIdentificationFailed(n) => {
             send_customer_identification_failed_email(ctx, n).await
         }
@@ -148,7 +147,7 @@ struct SendEmailPayload {
     subject: String,
 }
 
-async fn send_email(ctx: Arc<types::Context>, payload: SendEmailPayload) -> Result<()> {
+async fn send_email(ctx: Arc<Context>, payload: SendEmailPayload) -> Result<()> {
     let email = Message::builder()
         .from(
             format!(
@@ -186,19 +185,13 @@ async fn send_email(ctx: Arc<types::Context>, payload: SendEmailPayload) -> Resu
             ))
             .build();
 
-    match transport.send(email).await {
-        Ok(res) => Ok(()),
-        Err(err) => {
-            tracing::error!("Failed to send email: {}", err);
-            Err(Error::NotSent)
-        }
-    }
+    transport.send(email).await.map(|_| ()).map_err(|err| {
+        tracing::error!("Failed to send email: {}", err);
+        Error::NotSent
+    })
 }
 
-async fn send_registered_email(
-    ctx: Arc<types::Context>,
-    _notification: notification::types::Registered,
-) -> Result<()> {
+async fn send_registered_email(ctx: Arc<Context>, _notification: types::Registered) -> Result<()> {
     send_email(
         ctx,
         SendEmailPayload {
@@ -214,8 +207,8 @@ async fn send_registered_email(
 }
 
 async fn send_customer_identification_failed_email(
-    ctx: Arc<types::Context>,
-    _notification: notification::types::CustomerIdentificationFailed,
+    ctx: Arc<Context>,
+    _notification: types::CustomerIdentificationFailed,
 ) -> Result<()> {
     send_email(
         ctx,
@@ -232,8 +225,8 @@ async fn send_customer_identification_failed_email(
 }
 
 async fn send_bank_account_creation_failed_email(
-    ctx: Arc<types::Context>,
-    _notification: notification::types::BankAccountCreationFailed,
+    ctx: Arc<Context>,
+    _notification: types::BankAccountCreationFailed,
 ) -> Result<()> {
     send_email(
         ctx,
@@ -247,8 +240,8 @@ async fn send_bank_account_creation_failed_email(
 }
 
 async fn send_bank_account_creation_successful_email(
-    ctx: Arc<types::Context>,
-    _notification: notification::types::BankAccountCreationSuccessful,
+    ctx: Arc<Context>,
+    _notification: types::BankAccountCreationSuccessful,
 ) -> Result<()> {
     send_email(
         ctx,

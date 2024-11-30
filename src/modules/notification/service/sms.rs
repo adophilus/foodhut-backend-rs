@@ -1,7 +1,6 @@
-use super::super::{Error, Notification, Result};
-use crate::types::{self, AppEnvironment};
-use crate::utils::notification;
-use axum::http::{HeaderMap, HeaderValue};
+use super::{types, Error, Notification, Result};
+use crate::types::{AppEnvironment, Context};
+use axum::http::HeaderMap;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -18,7 +17,7 @@ pub struct Otp {
     pub pin_id: String,
 }
 
-pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Result<Otp> {
+pub async fn send(ctx: Arc<Context>, notification: Notification) -> Result<Otp> {
     match notification.clone() {
         Notification::Registered(_) => Err(Error::InvalidNotification),
         Notification::OrderPaid(_) => Err(Error::InvalidNotification),
@@ -30,8 +29,8 @@ pub async fn send(ctx: Arc<types::Context>, notification: Notification) -> Resul
 }
 
 async fn send_verification_otp(
-    ctx: Arc<types::Context>,
-    _notification: notification::types::VerificationOtpRequested,
+    ctx: Arc<Context>,
+    _notification: types::VerificationOtpRequested,
 ) -> Result<Otp> {
     let mut headers = HeaderMap::new();
     headers.insert(
