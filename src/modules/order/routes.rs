@@ -12,9 +12,9 @@ use serde_json::json;
 use validator::Validate;
 
 use crate::{
-    modules::{auth::middleware::Auth, kitchen, user},
+    modules::{auth::middleware::Auth, kitchen, payment, user},
     types::Context,
-    utils::{self, pagination::Pagination},
+    utils::pagination::Pagination,
 };
 
 use super::repository::{self, OrderSimpleStatus};
@@ -257,8 +257,8 @@ async fn pay_for_order(
     };
 
     let method = match payload.with {
-        repository::PaymentMethod::Online => utils::payment::PaymentMethod::Online,
-        repository::PaymentMethod::Wallet => utils::payment::PaymentMethod::Wallet,
+        repository::PaymentMethod::Online => payment::service::PaymentMethod::Online,
+        repository::PaymentMethod::Wallet => payment::service::PaymentMethod::Wallet,
     };
 
     let mut tx = match ctx.db_conn.pool.begin().await {
@@ -272,10 +272,10 @@ async fn pay_for_order(
         }
     };
 
-    let details = match utils::payment::initialize_payment_for_order(
+    let details = match payment::service::initialize_payment_for_order(
         ctx.clone(),
         &mut tx,
-        utils::payment::InitializePaymentForOrder {
+        payment::service::InitializePaymentForOrder {
             method,
             order,
             payer: auth.user.clone(),
@@ -284,7 +284,7 @@ async fn pay_for_order(
     .await
     {
         Ok(details) => details,
-        Err(utils::payment::Error::AlreadyPaid) => {
+        Err(payment::service::Error::AlreadyPaid) => {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({ "error": "Payment has already been made" })),

@@ -10,7 +10,7 @@ pub mod order;
 pub mod transaction;
 pub mod user;
 pub mod wallet;
-pub mod webhooks;
+pub mod payment;
 
 mod router;
 pub use router::get_router;

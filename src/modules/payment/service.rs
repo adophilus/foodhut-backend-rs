@@ -1,7 +1,7 @@
-use crate::repository;
-use crate::repository::{order::Order, user::User};
-use crate::types::Context;
-use crate::utils::{online, wallet};
+use crate::modules::{order, wallet};
+use crate::modules::order::repository::{Order, OrderStatus};
+use crate::{modules::user::repository::User, types::Context};
+use crate::utils::online;
 use serde::Serialize;
 use serde_json::json;
 use sqlx::{PgExecutor, Postgres, Transaction};
@@ -31,14 +31,14 @@ pub async fn initialize_payment_for_order(
     mut tx: &mut Transaction<'_, Postgres>,
     payload: InitializePaymentForOrder,
 ) -> Result<PaymentDetails, Error> {
-    if payload.order.status != repository::order::OrderStatus::AwaitingPayment {
+    if payload.order.status != OrderStatus::AwaitingPayment {
         return Err(Error::AlreadyPaid);
     }
 
     match payload.method {
-        PaymentMethod::Wallet => match wallet::initialize_payment_for_order(
+        PaymentMethod::Wallet => match wallet::service::initialize_payment_for_order(
             &mut tx,
-            wallet::InitializePaymentForOrder {
+            wallet::service::InitializePaymentForOrder {
                 order: payload.order,
                 payer: payload.payer,
             },
@@ -64,12 +64,11 @@ pub async fn initialize_payment_for_order(
 }
 
 pub async fn confirm_payment_for_order<'e, E: PgExecutor<'e>>(
-    ctx: Arc<Context>,
+    _: Arc<Context>,
     e: E,
-    order: repository::order::Order,
+    order: order::repository::Order,
 ) -> Result<(), Error> {
-    if let Err(_) = repository::order::confirm_payment(e, order.id.clone()).await
-    {
+    if let Err(_) = order::repository::confirm_payment(e, order.id.clone()).await {
         return Err(Error::UnexpectedError);
     };
 
