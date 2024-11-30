@@ -20,8 +20,8 @@ pub struct Otp {
 pub async fn send(ctx: Arc<Context>, notification: Notification) -> Result<Otp> {
     match notification.clone() {
         Notification::Registered(_) => Err(Error::InvalidNotification),
-        Notification::OrderPaid(_) => Err(Error::InvalidNotification),
-        Notification::CustomerIdentificationFailed(_) => Err(Error::InvalidNotification),
+        // Notification::OrderPaid(_) => Err(Error::InvalidNotification),
+        // Notification::CustomerIdentificationFailed(_) => Err(Error::InvalidNotification),
         Notification::VerificationOtpRequested(n) => send_verification_otp(ctx, n).await,
         Notification::BankAccountCreationSuccessful(_) => Err(Error::InvalidNotification),
         Notification::BankAccountCreationFailed(_) => Err(Error::InvalidNotification),

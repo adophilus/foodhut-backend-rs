@@ -13,18 +13,17 @@ pub enum Backend {
 }
 
 pub mod types {
-    use crate::modules::{order::repository::Order, user::repository::User};
-
+    use crate::modules::user::repository::User;
 
     #[derive(Clone)]
     pub struct Registered {
         pub user: User,
     }
 
-    #[derive(Clone)]
-    pub struct OrderPaid {
-        pub order: Order,
-    }
+    // #[derive(Clone)]
+    // pub struct OrderPaid {
+    //     pub order: Order,
+    // }
 
     #[derive(Clone)]
     pub struct VerificationOtpRequested {
@@ -48,12 +47,13 @@ pub mod types {
     }
 }
 
+// TODO: handle these notifications
 #[derive(Clone)]
 pub enum Notification {
     Registered(types::Registered),
-    OrderPaid(types::OrderPaid),
+    // OrderPaid(types::OrderPaid),
     VerificationOtpRequested(types::VerificationOtpRequested),
-    CustomerIdentificationFailed(types::CustomerIdentificationFailed),
+    // CustomerIdentificationFailed(types::CustomerIdentificationFailed),
     BankAccountCreationSuccessful(types::BankAccountCreationSuccessful),
     BankAccountCreationFailed(types::BankAccountCreationFailed),
 }
@@ -67,12 +67,12 @@ impl Notification {
         Notification::VerificationOtpRequested(types::VerificationOtpRequested { user })
     }
 
-    pub fn customer_identification_failed(user: User, reason: String) -> Self {
-        Notification::CustomerIdentificationFailed(types::CustomerIdentificationFailed {
-            user,
-            reason,
-        })
-    }
+    // pub fn customer_identification_failed(user: User, reason: String) -> Self {
+    //     Notification::CustomerIdentificationFailed(types::CustomerIdentificationFailed {
+    //         user,
+    //         reason,
+    //     })
+    // }
 
     pub fn bank_account_creation_successful(user: User) -> Self {
         Notification::BankAccountCreationSuccessful(types::BankAccountCreationSuccessful { user })
@@ -96,9 +96,6 @@ pub async fn send(ctx: Arc<Context>, notification: Notification, backend: Backen
     match backend {
         Backend::Email => email::send(ctx, notification).await,
         Backend::Push => push::send(ctx, notification).await,
-        Backend::Sms => {
-            sms::send(ctx, notification).await;
-            Ok(())
-        }
+        Backend::Sms => sms::send(ctx, notification).await.map(|_| ()),
     }
 }

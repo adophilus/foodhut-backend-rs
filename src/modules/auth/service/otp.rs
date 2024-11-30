@@ -55,7 +55,7 @@ struct VerificationEndpointPayload {
 
 fn generate_hash(purpose: &str, user: &User) -> String {
     let mut hasher = sha2::Sha256::new();
-    hasher.update(format!("{}-{}", purpose.clone(), user.id.clone()));
+    hasher.update(format!("{}-{}", purpose, user.id.clone()));
     let hash = hasher.finalize();
     let hash = base16ct::lower::encode_string(&hash);
     tracing::debug!("hash: {}", hash.clone());

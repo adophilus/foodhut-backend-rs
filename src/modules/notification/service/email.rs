@@ -124,14 +124,15 @@ pub mod job {
     }
 }
 
+// TODO: handle other notification types
 pub async fn send(ctx: Arc<Context>, notification: Notification) -> Result<()> {
     match notification.clone() {
         Notification::Registered(n) => send_registered_email(ctx, n).await,
-        Notification::OrderPaid(_) => unimplemented!(),
+        // Notification::OrderPaid(_) => unimplemented!(),
         Notification::VerificationOtpRequested(_) => Err(Error::InvalidNotification),
-        Notification::CustomerIdentificationFailed(n) => {
-            send_customer_identification_failed_email(ctx, n).await
-        }
+        // Notification::CustomerIdentificationFailed(n) => {
+        //     send_customer_identification_failed_email(ctx, n).await
+        // }
         Notification::BankAccountCreationFailed(n) => {
             send_bank_account_creation_failed_email(ctx, n).await
         }

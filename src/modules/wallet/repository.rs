@@ -8,8 +8,6 @@ use sqlx::{types::BigDecimal, PgExecutor};
 use std::convert::Into;
 use ulid::Ulid;
 
-use crate::utils::pagination::{Paginated, Pagination};
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PaystackBank {
     pub id: i32,
