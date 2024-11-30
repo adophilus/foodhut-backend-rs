@@ -1,6 +1,5 @@
-mod api;
+mod modules;
 mod jobs;
-mod repository;
 mod types;
 mod utils;
 
@@ -24,7 +23,7 @@ async fn main() {
     init_tracing();
 
     let app = Router::new()
-        .nest("/api", api::get_router())
+        .nest("/api", modules::get_router())
         .with_state(ctx.clone())
         .layer(Extension(ctx.clone()))
         .layer(DefaultBodyLimit::max(1024 * 1024 * 10))

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH delete_reaction AS (\n            DELETE FROM meal_user_reactions\n            WHERE meal_id = $1 AND user_id = $2\n            RETURNING 1\n        )\n        UPDATE meals\n        SET likes = likes - (SELECT COUNT(*) FROM delete_reaction),\n            updated_at = NOW()\n        WHERE id = $1;\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "258d47d4b0c1a009bf4ca20f33a2a0201361adf79224f7c9a4ef8802327654b4"
+}
