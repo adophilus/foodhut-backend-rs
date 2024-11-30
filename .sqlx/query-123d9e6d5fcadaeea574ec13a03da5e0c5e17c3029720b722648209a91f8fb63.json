@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM transactions WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "note",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "wallet_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 6,
+        "name": "direction",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "user_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "type",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "123d9e6d5fcadaeea574ec13a03da5e0c5e17c3029720b722648209a91f8fb63"
+}

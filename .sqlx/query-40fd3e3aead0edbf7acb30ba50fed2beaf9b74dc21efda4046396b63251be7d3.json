@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE sessions\n        SET\n            access_token = $1,\n            refresh_token = $2,\n            access_token_expires_at = $3,\n            refresh_token_expires_at = $4\n        WHERE\n            id = $5\n        RETURNING *\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "access_token_expires_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 3,
+        "name": "access_token",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "refresh_token",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "refresh_token_expires_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Timestamp",
+        "Timestamp",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "40fd3e3aead0edbf7acb30ba50fed2beaf9b74dc21efda4046396b63251be7d3"
+}

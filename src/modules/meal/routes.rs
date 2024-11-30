@@ -28,7 +28,7 @@ use tempfile::NamedTempFile;
 use crate::{types::Context, utils::pagination::Pagination};
 
 #[derive(Debug, Clone)]
-struct Price(BigDecimal);
+pub struct Price(BigDecimal);
 
 #[async_trait]
 impl TryFromField for Price {

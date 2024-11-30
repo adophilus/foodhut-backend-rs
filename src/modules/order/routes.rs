@@ -94,22 +94,17 @@ async fn get_order_by_id(
     }
 }
 
-#[derive(Deserialize, Validate)]
-pub struct UpdateOrderPayload {
-    pub status: repository::OrderStatus,
-}
-
 #[derive(Deserialize)]
-pub struct UpdateOrderItemPayload {
+pub struct UpdateOrderStatusPayload {
     pub status: repository::OrderStatus,
     pub as_kitchen: Option<bool>, // Optional parameter to signify if the request is made as a kitchen
 }
 
-async fn update_order_item_status(
+async fn update_order_status(
     Path(order_id): Path<String>,
     State(ctx): State<Arc<Context>>,
     auth: Auth,
-    Json(payload): Json<UpdateOrderItemPayload>,
+    Json(payload): Json<UpdateOrderStatusPayload>,
 ) -> impl IntoResponse {
     // Fetch the current order item to determine its status
     let order = match repository::find_by_id(&ctx.db_conn.pool, order_id.clone()).await {
@@ -317,6 +312,6 @@ pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/", get(get_orders))
         .route("/:id", get(get_order_by_id))
-        .route("/:order_id/status", put(update_order_item_status))
+        .route("/:order_id/status", put(update_order_status))
         .route("/:id/pay", post(pay_for_order))
 }

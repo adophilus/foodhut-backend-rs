@@ -1,0 +1,116 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO orders (\n            id,\n            status,\n            payment_method,\n            delivery_fee,\n            service_fee,\n            sub_total,\n            total,\n            delivery_address,\n            delivery_date,\n            dispatch_rider_note,\n            items,\n            kitchen_id,\n            owner_id\n        )\n        VALUES (\n            $1,\n            $2,\n            $3,\n            0,\n            0,\n            $4,\n            $5,\n            $6,\n            $7,\n            $8,\n            $9,\n            $10,\n            $11\n        )\n        RETURNING *\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "payment_method",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "delivery_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "service_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "sub_total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "delivery_address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "dispatch_rider_note",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 11,
+        "name": "owner_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 12,
+        "name": "delivery_date",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 13,
+        "name": "kitchen_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 14,
+        "name": "items",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Numeric",
+        "Numeric",
+        "Varchar",
+        "Timestamp",
+        "Varchar",
+        "Json",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "3559aa414762b64c32cff9cb06aca6f07c9f20c8873c83180f91b8c3c4e61c9b"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH insert_reaction AS (\n            INSERT INTO meal_user_reactions (id, reaction, user_id, meal_id)\n            VALUES ($1, $2, $3, $4)\n            ON CONFLICT (user_id, meal_id) DO NOTHING\n            RETURNING 1\n        )\n        UPDATE meals\n        SET likes = likes + (SELECT COUNT(*) FROM insert_reaction),\n            updated_at = NOW()\n        WHERE id = $4;\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7e267fdd0e291a75382b35426d94f864dc685e35d01d470f7cae2bac90c5801a"
+}

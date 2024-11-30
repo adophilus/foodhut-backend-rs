@@ -1,4 +1,3 @@
-use serde::{de::DeserializeOwned, Deserialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 
 #[derive(Clone)]

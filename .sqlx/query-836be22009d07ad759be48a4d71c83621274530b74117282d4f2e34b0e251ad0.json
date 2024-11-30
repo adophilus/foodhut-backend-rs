@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM users WHERE phone_number = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "phone_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "is_verified",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "first_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "last_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "profile_picture",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 7,
+        "name": "birthday",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 8,
+        "name": "referral_code",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 11,
+        "name": "has_kitchen",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "role",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "836be22009d07ad759be48a4d71c83621274530b74117282d4f2e34b0e251ad0"
+}

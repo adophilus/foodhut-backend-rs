@@ -102,7 +102,7 @@ pub struct WalletTransaction {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DbTransaction {
+pub struct DbTransaction {
     pub id: String,
     pub amount: BigDecimal,
     pub note: Option<String>,

@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH parsed_order_items AS (\n            SELECT\n                orders.id AS order_id,\n                orders.status,\n                orders.payment_method,\n                orders.delivery_fee,\n                orders.service_fee,\n                orders.sub_total,\n                orders.total,\n                orders.delivery_address,\n                orders.delivery_date,\n                orders.dispatch_rider_note,\n                orders.kitchen_id,\n                orders.owner_id,\n                orders.created_at,\n                orders.updated_at,\n                json_array_elements(orders.items) AS item -- Expand JSON array into individual rows\n            FROM orders\n            WHERE\n                ($3::TEXT IS NULL OR orders.owner_id = $3)\n                AND (\n                    $4::TEXT IS NULL OR\n                    CASE\n                        WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')\n                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')\n                        ELSE TRUE\n                    END\n                )\n                AND ($5::TEXT IS NULL OR orders.payment_method = $5)\n                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)\n            LIMIT $1 OFFSET $2\n        ),\n        expanded_items AS (\n            SELECT\n                parsed_order_items.*,\n                (item->>'price')::NUMERIC AS item_price,\n                (item->>'quantity')::INT AS item_quantity,\n                item->>'meal_id' AS item_meal_id\n            FROM parsed_order_items\n        ),\n        joined_meals AS (\n            SELECT\n                expanded_items.*,\n                meals.id AS meal_id,\n                meals.name AS meal_name,\n                meals.description,\n                meals.rating,\n                meals.price AS meal_price,\n                meals.original_price, -- Include original_price\n                meals.likes,\n                meals.cover_image,\n                meals.is_available,\n                meals.kitchen_id AS meal_kitchen_id,\n                meals.created_at AS meal_created_at,\n                meals.updated_at AS meal_updated_at\n            FROM expanded_items\n            LEFT JOIN meals ON expanded_items.item_meal_id = meals.id\n        ),\n        grouped_orders AS (\n            SELECT\n                order_id as id,\n                status,\n                payment_method,\n                delivery_fee,\n                service_fee,\n                sub_total,\n                total,\n                delivery_address,\n                delivery_date,\n                dispatch_rider_note,\n                kitchen_id,\n                owner_id,\n                created_at,\n                updated_at,\n                COALESCE(\n                    JSONB_AGG(\n                        JSONB_BUILD_OBJECT(\n                            'price', item_price,\n                            'quantity', item_quantity,\n                            'meal_id', item_meal_id,\n                            'meal', JSONB_BUILD_OBJECT(\n                                'id', meal_id,\n                                'name', meal_name,\n                                'description', description,\n                                'rating', rating,\n                                'original_price', original_price, -- Map original_price\n                                'price', meal_price,\n                                'likes', likes,\n                                'cover_image', cover_image,\n                                'is_available', is_available,\n                                'kitchen_id', meal_kitchen_id,\n                                'created_at', meal_created_at,\n                                'updated_at', meal_updated_at\n                            )\n                        )\n                    ),\n                    '[]'::JSONB\n                ) AS items\n            FROM joined_meals\n            GROUP BY\n                order_id, status, payment_method, delivery_fee, service_fee,\n                sub_total, total, delivery_address, delivery_date, dispatch_rider_note,\n                kitchen_id, owner_id, created_at, updated_at\n        ),\n        total_count AS (\n            SELECT COUNT(*) AS total_rows\n            FROM orders\n            WHERE\n                ($3::TEXT IS NULL OR orders.owner_id = $3)\n                AND (\n                    $4::TEXT IS NULL OR\n                    CASE\n                        WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')\n                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')\n                        ELSE TRUE\n                    END\n                )\n                AND ($5::TEXT IS NULL OR orders.payment_method = $5)\n                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)\n        )\n        SELECT\n            COALESCE(JSONB_AGG(ROW_TO_JSON(grouped_orders)), '[]'::JSONB) AS items,\n            JSONB_BUILD_OBJECT(\n                'total', (SELECT total_rows FROM total_count),\n                'per_page', $1,\n                'page', $2 / $1 + 1\n            ) AS meta\n        FROM grouped_orders;\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "items",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 1,
+        "name": "meta",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "dbd8bb69e8d6121a5a18d4f9c4446b6ecbf5d05859f92b67380cc8f45ff57ba2"
+}

@@ -51,20 +51,6 @@ pub async fn create<'e, E: PgExecutor<'e>>(
     }
 }
 
-pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Option<Session>, Error> {
-    sqlx::query_as!(Session, "SELECT * FROM sessions WHERE id = $1", id,)
-        .fetch_optional(e)
-        .await
-        .map_err(|err| {
-            tracing::error!(
-                "Error occurred while fetching session with id {}: {}",
-                id,
-                err
-            );
-            Error::UnexpectedError
-        })
-}
-
 pub async fn find_by_access_token<'e, E: PgExecutor<'e>>(
     e: E,
     access_token: String,

@@ -213,58 +213,6 @@ pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Optio
     }
 }
 
-pub async fn find_by_id_user<'e, E: PgExecutor<'e>>(
-    e: E,
-    id: String,
-    user_id: String,
-) -> Result<Option<KitchenUserLiked>, Error> {
-    match sqlx::query_as!(
-        KitchenUserLiked,
-        "
-            SELECT
-                id, 
-                name, 
-                address, 
-                type AS type_, 
-                phone_number, 
-                opening_time, 
-                closing_time, 
-                preparation_time, 
-                delivery_time, 
-                cover_image, 
-                rating, 
-                likes, 
-                CASE
-                    WHEN EXISTS (
-                        SELECT 1
-                        FROM kitchen_user_reactions
-                        WHERE kitchen_user_reactions.user_id = $2
-                    )
-                    THEN true
-                    ELSE false
-                END AS has_liked,
-                owner_id, 
-                created_at, 
-                updated_at
-            FROM kitchens WHERE id = $1
-        ",
-        id,
-        user_id
-    )
-    .fetch_optional(e)
-    .await
-    {
-        Ok(maybe_kitchen) => Ok(maybe_kitchen),
-        Err(err) => {
-            tracing::error!(
-                "Error occurred while trying to fetch many kitchens: {}",
-                err
-            );
-            Err(Error::UnexpectedError)
-        }
-    }
-}
-
 pub async fn find_by_owner_id<'e, E: PgExecutor<'e>>(
     e: E,
     owner_id: String,
@@ -386,54 +334,6 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
         Err(err) => {
             tracing::error!(
                 "Error occurred while trying to fetch many kitchens: {}",
-                err
-            );
-            Err(Error::UnexpectedError)
-        }
-    }
-}
-
-pub async fn find_many_by_type<'e, E: PgExecutor<'e>>(
-    e: E,
-    pagination: Pagination,
-    type_: String,
-) -> Result<Paginated<Kitchen>, Error> {
-    match sqlx::query_as!(
-        DatabaseCounted,
-        "
-            WITH filtered_data AS (
-                SELECT * FROM kitchens 
-                WHERE type = $3
-                LIMIT $1
-                OFFSET $2
-            ), 
-            total_count AS (
-                SELECT COUNT(id) AS total_rows
-                FROM kitchens
-                WHERE type = $3
-            )
-            SELECT JSONB_BUILD_OBJECT(
-                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
-                'total', (SELECT total_rows FROM total_count)
-            ) AS result
-            FROM filtered_data;
-        ",
-        pagination.per_page as i64,
-        ((pagination.page - 1) * pagination.per_page) as i64,
-        type_,
-    )
-    .fetch_one(e)
-    .await
-    {
-        Ok(counted) => Ok(Paginated::new(
-            counted.result.data,
-            counted.result.total,
-            pagination.page,
-            pagination.per_page,
-        )),
-        Err(err) => {
-            tracing::error!(
-                "Error occurred while trying to fetch many kitchens by type: {}",
                 err
             );
             Err(Error::UnexpectedError)

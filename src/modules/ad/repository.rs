@@ -68,40 +68,6 @@ pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Optio
 }
 
 #[derive(Deserialize)]
-struct DatabaseCountedResult {
-    data: Vec<Ad>,
-    total: u32,
-}
-
-impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
-    fn into(self) -> DatabaseCountedResult {
-        match self {
-            Some(json) => {
-                match serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref()) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        tracing::error!("{}", err);
-                        DatabaseCountedResult {
-                            data: vec![],
-                            total: 0,
-                        }
-                    }
-                }
-            }
-            None => DatabaseCountedResult {
-                data: vec![],
-                total: 0,
-            },
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct DatabaseCounted {
-    result: DatabaseCountedResult,
-}
-
-#[derive(Deserialize)]
 pub struct Filters {
     search: Option<String>,
 }

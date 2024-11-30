@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH valid_transition AS (\n            SELECT CASE\n                WHEN orders.status = 'AWAITING_ACKNOWLEDGEMENT' AND $2 = 'PREPARING' THEN TRUE\n                WHEN orders.status = 'PREPARING' AND $2 = 'IN_TRANSIT' THEN TRUE\n                WHEN orders.status = 'IN_TRANSIT' AND $2 = 'DELIVERED' THEN TRUE\n                ELSE FALSE\n            END AS is_valid\n            FROM orders\n            WHERE id = $1\n        ),\n        updated_order AS (\n            UPDATE orders\n            SET status = $2\n            WHERE id = $1\n              AND (SELECT is_valid FROM valid_transition)\n            RETURNING id\n        )\n        SELECT EXISTS(SELECT 1 FROM updated_order);\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "441dbed643cea2e15017fc448f4bde262a10ffc2081b55a21adfaa0d0dd79b1c"
+}

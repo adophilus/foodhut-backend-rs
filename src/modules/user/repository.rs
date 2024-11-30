@@ -241,31 +241,6 @@ pub async fn update_by_id<'e, E: PgExecutor<'e>>(
     .map(|_| {})
 }
 
-pub async fn set_role_by_id<'e, E: PgExecutor<'e>>(e: E, id: String, role: Role) -> Result<()> {
-    sqlx::query!(
-        "
-            UPDATE users SET
-                role = COALESCE($1, role),
-                updated_at = NOW()
-            WHERE
-                id = $2
-        ",
-        role.to_string(),
-        id,
-    )
-    .execute(e)
-    .await
-    .map_err(|err| {
-        tracing::error!(
-            "Error occurred while trying to set a user's role by id {}: {}",
-            id,
-            err
-        );
-        Error::UnexpectedError
-    })
-    .map(|_| {})
-}
-
 pub fn is_admin(user: &User) -> bool {
     return user.role == Role::Admin;
 }

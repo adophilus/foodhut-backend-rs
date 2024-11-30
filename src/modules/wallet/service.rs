@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::{
     modules::{
-        meal::repository::Meal, order::repository::Order, transaction, user::repository::User,
+        order::repository::Order, transaction, user::repository::User,
         wallet,
     },
     types::AppEnvironment,
@@ -277,11 +277,6 @@ pub struct RequestBankAccountCreationServiceResponse {
 //
 //     Ok(server_response.message)
 // }
-
-struct InitializePaymentForMeal {
-    payer: User,
-    meal: Meal,
-}
 
 pub struct InitializePaymentForOrder {
     pub order: Order,

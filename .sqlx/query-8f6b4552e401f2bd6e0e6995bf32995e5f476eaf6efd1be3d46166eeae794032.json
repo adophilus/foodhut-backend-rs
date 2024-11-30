@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO transactions (id, amount, type, note, wallet_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "note",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "wallet_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 6,
+        "name": "direction",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "user_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "type",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Numeric",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8f6b4552e401f2bd6e0e6995bf32995e5f476eaf6efd1be3d46166eeae794032"
+}

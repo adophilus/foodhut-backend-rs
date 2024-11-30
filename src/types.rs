@@ -44,7 +44,6 @@ pub struct StorageContext {
 #[derive(Clone)]
 pub struct PaymentContext {
     pub api_endpoint: String,
-    pub public_key: String,
     pub secret_key: String,
 }
 
@@ -107,7 +106,6 @@ pub struct StorageConfig {
 #[derive(Clone)]
 pub struct PaymentConfig {
     pub api_endpoint: String,
-    pub public_key: String,
     pub secret_key: String,
 }
 
@@ -182,11 +180,11 @@ impl apalis::prelude::Backend<apalis::prelude::Request<Job>> for JobStorage {
 
     type Layer = tower::ServiceBuilder<tower::layer::util::Identity>;
 
-    fn common_layer(&self, worker: apalis::prelude::WorkerId) -> Self::Layer {
+    fn common_layer(&self, _worker: apalis::prelude::WorkerId) -> Self::Layer {
         tower::ServiceBuilder::new()
     }
 
-    fn poll(self, worker: apalis::prelude::WorkerId) -> apalis::prelude::Poller<Self::Stream> {
+    fn poll(self, _worker: apalis::prelude::WorkerId) -> apalis::prelude::Poller<Self::Stream> {
         let stream = self
             .inner
             .map(|r| Ok(Some(apalis::prelude::Request::new(r))))
@@ -214,7 +212,7 @@ impl apalis::prelude::Storage for JobStorage {
         Ok(self.storage.len())
     }
 
-    async fn schedule(&mut self, job: Self::Job, on: i64) -> Result<Self::Identifier, Self::Error> {
+    async fn schedule(&mut self, _job: Self::Job, _on: i64) -> Result<Self::Identifier, Self::Error> {
         tracing::debug!("Job pushed into the schedule set");
         todo!()
     }
@@ -233,15 +231,15 @@ impl apalis::prelude::Storage for JobStorage {
         todo!()
     }
 
-    async fn update(&self, job: apalis::prelude::Request<Self::Job>) -> Result<(), Self::Error> {
+    async fn update(&self, _job: apalis::prelude::Request<Self::Job>) -> Result<(), Self::Error> {
         tracing::debug!("Updating job details");
         todo!()
     }
 
     async fn reschedule(
         &mut self,
-        job: apalis::prelude::Request<Self::Job>,
-        wait: Duration,
+        _job: apalis::prelude::Request<Self::Job>,
+        _wait: Duration,
     ) -> Result<(), Self::Error> {
         tracing::debug!("Rescheduling job");
         todo!()
@@ -293,8 +291,6 @@ impl Default for Config {
             env::var("CLOUDINARY_UPLOAD_PRESET").expect("CLOUDINARY_UPLOAD_PRESET not set");
         let payment_api_endpoint =
             env::var("PAYSTACK_API_ENDPOINT").expect("PAYSTACK_API_ENDPOINT not set");
-        let payment_public_key =
-            env::var("PAYSTACK_PUBLIC_KEY").expect("PAYSTACK_PUBLIC_KEY not set");
         let payment_secret_key =
             env::var("PAYSTACK_SECRET_KEY").expect("PAYSTACK_SECRET_KEY not set");
         let mail_access_token = env::var("MAIL_ACCESS_TOKEN").expect("MAIL_ACCESS_TOKEN not set");
@@ -330,7 +326,6 @@ impl Default for Config {
             },
             payment: PaymentConfig {
                 api_endpoint: payment_api_endpoint,
-                public_key: payment_public_key,
                 secret_key: payment_secret_key,
             },
             mail: MailConfig {
@@ -382,7 +377,6 @@ impl ToContext for Config {
             },
             payment: PaymentContext {
                 api_endpoint: self.payment.api_endpoint,
-                public_key: self.payment.public_key,
                 secret_key: self.payment.secret_key,
             },
             mail: MailContext {

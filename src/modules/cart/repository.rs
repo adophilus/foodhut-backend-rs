@@ -169,66 +169,6 @@ where
     })
 }
 
-pub async fn find_by_id<'e, Executor: PgExecutor<'e>>(
-    e: Executor,
-    id: String,
-) -> Result<Option<Cart>, Error> {
-    sqlx::query_as!(
-        Cart,
-        "
-            SELECT * FROM carts WHERE id = $1
-        ",
-        id
-    )
-    .fetch_optional(e)
-    .await
-    .map_err(|err| {
-        tracing::error!("Error occurred while trying to fetch many carts: {}", err);
-        Error::UnexpectedError
-    })
-}
-
-pub async fn find_full_cart_by_id<'e, E: PgExecutor<'e>>(
-    e: E,
-    id: String,
-) -> Result<Option<FullCart>, Error> {
-    sqlx::query_as!(
-        FullCart,
-        r#"
-        WITH cart_data AS (
-            SELECT 
-                carts.id,
-                carts.status,
-                carts.owner_id,
-                carts.created_at,
-                carts.updated_at,
-                COALESCE(
-                    JSONB_AGG(
-                        TO_JSONB(ROW_TO_JSON(cart_items)) || 
-                        JSONB_BUILD_OBJECT(
-                            'meal', meals
-                        )
-                    ) FILTER (WHERE cart_items.meal_id IS NOT NULL),
-                    '[]'::jsonb
-                ) AS items
-            FROM carts
-            LEFT JOIN LATERAL jsonb_to_recordset(carts.items::jsonb) AS cart_items(meal_id TEXT, quantity INT) ON true
-            LEFT JOIN meals ON cart_items.meal_id = meals.id
-            WHERE carts.id = $1
-            GROUP BY carts.id
-        )
-        SELECT * FROM cart_data;
-        "#,
-        id
-    )
-    .fetch_optional(e)
-    .await
-    .map_err(|err| {
-        tracing::error!("Error occurred while trying to fetch cart by id {}: {}", id, err);
-        Error::UnexpectedError
-    })
-}
-
 pub async fn find_active_cart_by_owner_id<'e, E: PgExecutor<'e>>(
     e: E,
     owner_id: String,

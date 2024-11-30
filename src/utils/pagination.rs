@@ -54,7 +54,7 @@ fn default_per_page() -> u32 {
 impl<S: Send + Sync> FromRequestParts<S> for Pagination {
     type Rejection = Response;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         match parts.extract::<Query<Pagination>>().await {
             Ok(Query(pagination)) => Ok(pagination),
             _ => Err((
