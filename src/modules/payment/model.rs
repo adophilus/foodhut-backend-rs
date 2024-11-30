@@ -1,8 +1,7 @@
 use bigdecimal::BigDecimal;
 use serde::Deserialize;
 use serde_aux::field_attributes::deserialize_string_from_number;
-
-use crate::utils;
+use super::service;
 
 #[derive(Deserialize)]
 pub struct CustomerIdentificationFailed {
@@ -57,7 +56,7 @@ pub enum Event {
     #[serde(rename = "charge.success")]
     TransactionSuccessful {
         amount: BigDecimal,
-        metadata: utils::online::Metadata,
+        metadata: service::online::Metadata,
     },
     // #[serde(rename = "customeridentification.success")]
     // CustomerIdentificationSuccessful(CustomerIdentificationSuccessful),

@@ -1,13 +1,12 @@
 use crate::types::StorageContext;
 use reqwest::{
     multipart::{Form, Part},
-    Body, Client, StatusCode, Url,
+    Client, StatusCode, Url,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::{path::Path, time::UNIX_EPOCH};
 use ulid::Ulid;
 
 #[derive(Debug)]

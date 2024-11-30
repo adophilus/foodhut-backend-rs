@@ -11,6 +11,7 @@ pub mod transaction;
 pub mod user;
 pub mod wallet;
 pub mod payment;
+pub mod storage;
 
 mod router;
 pub use router::get_router;

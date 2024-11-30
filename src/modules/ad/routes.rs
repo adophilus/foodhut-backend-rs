@@ -1,6 +1,11 @@
 use std::{io::Read, sync::Arc};
 
 use super::repository;
+use crate::{
+    modules::{auth::middleware::AdminAuth, storage},
+    types::Context,
+    utils::pagination::Pagination,
+};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -11,12 +16,6 @@ use axum::{
 use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
 use serde_json::json;
 use tempfile::NamedTempFile;
-
-use crate::{
-    modules::auth::middleware::AdminAuth,
-    types::Context,
-    utils::{self, pagination::Pagination},
-};
 
 #[derive(TryFromMultipart)]
 pub struct CreateAdPayload {
@@ -41,7 +40,7 @@ async fn create(
         );
     }
 
-    let banner_image = match utils::storage::upload_file(ctx.storage.clone(), buf).await {
+    let banner_image = match storage::upload_file(ctx.storage.clone(), buf).await {
         Ok(media) => media,
         Err(_) => {
             return (
@@ -145,21 +144,17 @@ async fn update_by_id(
                 );
             }
 
-            let media = match utils::storage::update_file(
-                ctx.storage.clone(),
-                ad.banner_image.clone(),
-                buf,
-            )
-            .await
-            {
-                Ok(media) => media,
-                Err(_) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({ "error": "Failed to upload image" })),
-                    );
-                }
-            };
+            let media =
+                match storage::update_file(ctx.storage.clone(), ad.banner_image.clone(), buf).await
+                {
+                    Ok(media) => media,
+                    Err(_) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": "Failed to upload image" })),
+                        );
+                    }
+                };
 
             Some(media)
         }
@@ -195,8 +190,7 @@ async fn delete_by_id(
 ) -> impl IntoResponse {
     match repository::find_by_id(&ctx.db_conn.pool, id.clone()).await {
         Ok(Some(ad)) => {
-            if let Err(_) =
-                utils::storage::delete_file(ctx.storage.clone(), ad.banner_image.clone()).await
+            if let Err(_) = storage::delete_file(ctx.storage.clone(), ad.banner_image.clone()).await
             {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,

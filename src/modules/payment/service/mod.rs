@@ -1,7 +1,8 @@
+pub mod online;
+
 use crate::modules::{order, wallet};
 use crate::modules::order::repository::{Order, OrderStatus};
 use crate::{modules::user::repository::User, types::Context};
-use crate::utils::online;
 use serde::Serialize;
 use serde_json::json;
 use sqlx::{PgExecutor, Postgres, Transaction};

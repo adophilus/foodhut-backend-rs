@@ -1,16 +1,15 @@
+use crate::modules::{ad, notification};
 use crate::types::{Context, Job, JobStorage, SchedulableJob};
-use crate::utils;
-use std::sync::Arc;
-
 use apalis::cron::CronStream;
 use apalis::layers::retry::{RetryLayer, RetryPolicy};
 use apalis::prelude::*;
 use apalis::utils::TokioExecutor;
+use std::sync::Arc;
 
 pub async fn monitor(ctx: Arc<Context>) -> apalis::prelude::Monitor<TokioExecutor> {
     let mut all_jobs: Vec<SchedulableJob> = vec![];
-    all_jobs.append(&mut utils::notification::email::jobs::list(ctx.clone()));
-    all_jobs.append(&mut utils::ads::jobs::list(ctx));
+    all_jobs.append(&mut notification::service::email::job::list(ctx.clone()));
+    all_jobs.append(&mut ad::job::list(ctx));
 
     let storage = JobStorage::new();
     let mut monitor = apalis::prelude::Monitor::<TokioExecutor>::new();
@@ -22,7 +21,7 @@ pub async fn monitor(ctx: Arc<Context>) -> apalis::prelude::Monitor<TokioExecuto
             .with_storage(storage.clone())
             .stream(CronStream::new(job.schedule).into_stream())
             .layer(RetryLayer::new(RetryPolicy::retries(3)))
-            .build_fn(move |j: Job| {
+            .build_fn(move |_: Job| {
                 let job_clone = job.job.clone();
                 async move { (job_clone)().await }
             });

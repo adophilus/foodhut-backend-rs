@@ -15,9 +15,8 @@ use std::sync::Arc;
 use tempfile::NamedTempFile;
 
 use crate::{
-    modules::auth::middleware::Auth,
-    types::Context,
-    utils::{database::DatabaseConnection, storage},
+    modules::{auth::middleware::Auth, storage},
+    types::{database::DatabaseConnection, Context},
 };
 
 async fn get_user_by_profile(auth: Auth) -> impl IntoResponse {

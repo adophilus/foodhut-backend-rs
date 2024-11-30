@@ -18,7 +18,7 @@ use tempfile::NamedTempFile;
 use validator::{Validate, ValidationError};
 
 use crate::{
-    modules::auth::middleware::Auth,
+    modules::{auth::middleware::Auth, storage},
     types::Context,
     utils::{self, pagination::Pagination},
 };
@@ -417,10 +417,8 @@ async fn set_kitchen_cover_image(
     };
 
     let profile_picture = match kitchen.cover_image.0 {
-        Some(cover_image) => {
-            utils::storage::update_file(ctx.storage.clone(), cover_image, buf).await
-        }
-        None => utils::storage::upload_file(ctx.storage.clone(), buf).await,
+        Some(cover_image) => storage::update_file(ctx.storage.clone(), cover_image, buf).await,
+        None => storage::upload_file(ctx.storage.clone(), buf).await,
     };
 
     let cover_image = match profile_picture {

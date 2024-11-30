@@ -5,11 +5,10 @@ use axum::{async_trait, Json};
 use axum::{extract::Extension, http, http::request::Parts, response::Response};
 use serde::Serialize;
 use serde_json::json;
-
+use super::service;
 use crate::modules::user;
 use crate::modules::user::repository::User;
 use crate::types::Context;
-use crate::utils;
 use axum::RequestPartsExt;
 use std::sync::Arc;
 
@@ -28,7 +27,7 @@ fn get_session_id_from_header(header: String) -> Result<String, Error> {
 
 async fn get_user_from_header(ctx: Arc<Context>, header: String) -> Result<User, Error> {
     let session_id = get_session_id_from_header(header)?;
-    let session = utils::auth::verify_access_token(ctx.clone(), session_id)
+    let session = service::auth::verify_access_token(ctx.clone(), session_id)
         .await
         .map_err(|_| Error::InvalidSession)?;
     user::repository::find_by_id(&ctx.db_conn.pool, session.user_id)

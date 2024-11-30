@@ -10,7 +10,7 @@ use crate::{types, utils};
 pub async fn successful_transaction(
     ctx: Arc<types::Context>,
     amount: BigDecimal,
-    metadata: utils::online::Metadata,
+    metadata: service::online::Metadata,
 ) -> impl IntoResponse {
     let mut tx = match ctx.db_conn.pool.begin().await {
         Ok(tx) => tx,

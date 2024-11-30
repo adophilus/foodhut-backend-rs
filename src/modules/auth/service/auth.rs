@@ -1,12 +1,8 @@
-use axum::{http::StatusCode, Json};
 use chrono::Utc;
-use serde_json::json;
 use ulid::Ulid;
 
-use crate::{
-    repository::{self, session::Session},
-    types,
-};
+use super::super::repository;
+use crate::{modules::auth::repository::session::Session, types::Context};
 use std::sync::Arc;
 
 pub enum Error {
@@ -17,11 +13,11 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub async fn create_session(ctx: Arc<types::Context>, user_id: String) -> Result<Session> {
+pub async fn create_session(ctx: Arc<Context>, user_id: String) -> Result<Session> {
     let access_token = Ulid::new().to_string();
     let refresh_token = Ulid::new().to_string();
     repository::session::create(
-        ctx.db_conn.clone(),
+        &ctx.db_conn.pool,
         repository::session::SessionCreationPayload {
             user_id,
             access_token,
@@ -33,7 +29,7 @@ pub async fn create_session(ctx: Arc<types::Context>, user_id: String) -> Result
 }
 
 pub async fn regenerate_tokens_for_session(
-    ctx: Arc<types::Context>,
+    ctx: Arc<Context>,
     refresh_token: String,
 ) -> Result<Session> {
     let session = verify_refresh_token(ctx.clone(), refresh_token)
@@ -45,7 +41,7 @@ pub async fn regenerate_tokens_for_session(
     let refresh_token = Ulid::new().to_string();
 
     repository::session::update_by_id(
-        ctx.db_conn.clone(),
+        &ctx.db_conn.pool,
         session.id,
         repository::session::UpdateSessionPayload {
             access_token,
@@ -56,11 +52,8 @@ pub async fn regenerate_tokens_for_session(
     .map_err(|_| Error::UnexpectedError)
 }
 
-pub async fn verify_access_token(
-    ctx: Arc<types::Context>,
-    access_token: String,
-) -> Result<Session> {
-    let session = repository::session::find_by_access_token(ctx.db_conn.clone(), access_token)
+pub async fn verify_access_token(ctx: Arc<Context>, access_token: String) -> Result<Session> {
+    let session = repository::session::find_by_access_token(&ctx.db_conn.pool, access_token)
         .await
         .map_err(|_| Error::UnexpectedError)?
         .ok_or(Error::InvalidSession)?;
@@ -72,11 +65,8 @@ pub async fn verify_access_token(
     Ok(session)
 }
 
-pub async fn verify_refresh_token(
-    ctx: Arc<types::Context>,
-    refresh_token: String,
-) -> Result<Session> {
-    let session = repository::session::find_by_refresh_token(ctx.db_conn.clone(), refresh_token)
+pub async fn verify_refresh_token(ctx: Arc<Context>, refresh_token: String) -> Result<Session> {
+    let session = repository::session::find_by_refresh_token(&ctx.db_conn.pool, refresh_token)
         .await
         .map_err(|_| Error::UnexpectedError)?
         .ok_or(Error::InvalidSession)?;

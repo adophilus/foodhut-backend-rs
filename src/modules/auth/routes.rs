@@ -248,15 +248,16 @@ async fn verify_otp(
                 .await
             {
                 Ok(_) => {
-                    let session = match utils::auth::create_session(ctx.clone(), user.id).await {
-                        Ok(session) => session,
-                        Err(_) => {
-                            return (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                Json(json!({ "error": "Failed to create session" })),
-                            )
-                        }
-                    };
+                    let session =
+                        match service::auth::create_session(ctx.clone(), user.id).await {
+                            Ok(session) => session,
+                            Err(_) => {
+                                return (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(json!({ "error": "Failed to create session" })),
+                                )
+                            }
+                        };
 
                     (
                         StatusCode::OK,
@@ -340,7 +341,7 @@ async fn refresh_tokens(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<RefreshTokensPayload>,
 ) -> impl IntoResponse {
-    match utils::auth::regenerate_tokens_for_session(ctx.clone(), payload.token).await {
+    match service::auth::regenerate_tokens_for_session(ctx.clone(), payload.token).await {
         Ok(session) => (
             StatusCode::OK,
             Json(json!({

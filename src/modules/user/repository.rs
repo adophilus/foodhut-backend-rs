@@ -5,7 +5,7 @@ use sqlx::PgExecutor;
 
 use ulid::Ulid;
 
-use crate::utils::storage::UploadedMedia;
+use crate::modules::storage::UploadedMedia;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProfilePicture(pub Option<UploadedMedia>);
@@ -167,7 +167,10 @@ pub async fn find_by_email_or_phone_number<'e, E: PgExecutor<'e>>(
     })
 }
 
-pub async fn verify_by_phone_number<'e, E: PgExecutor<'e>>(e: E, phone_number: String) -> Result<()> {
+pub async fn verify_by_phone_number<'e, E: PgExecutor<'e>>(
+    e: E,
+    phone_number: String,
+) -> Result<()> {
     sqlx::query!(
         "UPDATE users SET is_verified = true WHERE phone_number = $1",
         phone_number

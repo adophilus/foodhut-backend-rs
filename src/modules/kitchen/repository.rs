@@ -8,11 +8,8 @@ use std::convert::Into;
 use std::ops::{Deref, DerefMut};
 use ulid::Ulid;
 
-use crate::modules::user::repository::User;
-use crate::utils::{
-    pagination::{Paginated, Pagination},
-    storage,
-};
+use crate::modules::{storage, user::repository::User};
+use crate::utils::pagination::{Paginated, Pagination};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CoverImage(pub Option<storage::UploadedMedia>);

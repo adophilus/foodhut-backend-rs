@@ -1,19 +1,10 @@
 use bigdecimal::{BigDecimal, FromPrimitive};
-use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{
-    repository::{
-        meal::Meal,
-        order::{self, Order},
-        transaction,
-        user::User,
-    },
-    types::Context,
-    utils::database::DatabaseConnection,
-};
+use crate::{modules::{order::repository::Order, user::repository::User}, types::Context};
 use std::sync::Arc;
 
 pub enum Error {

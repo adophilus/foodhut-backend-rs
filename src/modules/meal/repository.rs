@@ -1,7 +1,9 @@
-use crate::modules::kitchen::{self, repository::Kitchen};
-use crate::modules::user::repository::User;
-use crate::utils::storage::UploadedMedia;
-use crate::{define_paginated, utils};
+use crate::define_paginated;
+use crate::modules::{
+    kitchen::{self, repository::Kitchen},
+    storage,
+    user::repository::User,
+};
 use bigdecimal::FromPrimitive;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
@@ -22,7 +24,7 @@ pub struct Meal {
     pub original_price: BigDecimal,
     pub price: BigDecimal,
     pub likes: i32,
-    pub cover_image: utils::storage::UploadedMedia,
+    pub cover_image: storage::UploadedMedia,
     pub is_available: bool,
     pub kitchen_id: String,
     pub created_at: NaiveDateTime,
@@ -38,7 +40,7 @@ pub struct MealWithCartStatus {
     pub original_price: BigDecimal,
     pub price: BigDecimal,
     pub likes: i32,
-    pub cover_image: utils::storage::UploadedMedia,
+    pub cover_image: storage::UploadedMedia,
     pub is_available: bool,
     pub in_cart: bool,
     pub kitchen_id: String,
@@ -74,7 +76,7 @@ pub struct CreateMealPayload {
     pub name: String,
     pub description: String,
     pub price: BigDecimal,
-    pub cover_image: utils::storage::UploadedMedia,
+    pub cover_image: storage::UploadedMedia,
     pub kitchen_id: String,
 }
 
@@ -218,7 +220,7 @@ pub struct UpdateMealPayload {
     pub description: Option<String>,
     pub rating: Option<BigDecimal>,
     pub price: Option<BigDecimal>,
-    pub cover_image: Option<UploadedMedia>,
+    pub cover_image: Option<storage::UploadedMedia>,
     pub is_available: Option<bool>,
     pub kitchen_id: Option<String>,
 }

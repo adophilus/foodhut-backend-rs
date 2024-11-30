@@ -1,18 +1,16 @@
 use crate::define_paginated;
+use crate::modules::storage;
+use crate::utils::pagination::{Paginated, Pagination};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgExecutor;
-use crate::utils::{
-    self,
-    pagination::{Paginated, Pagination},
-};
 use ulid::Ulid;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Ad {
     pub id: String,
-    pub banner_image: utils::storage::UploadedMedia,
+    pub banner_image: storage::UploadedMedia,
     pub link: String,
     pub duration: i32,
     pub created_at: NaiveDateTime,
@@ -22,7 +20,7 @@ pub struct Ad {
 define_paginated!(DatabasePaginatedAd, Ad);
 
 pub struct CreateAdPayload {
-    pub banner_image: utils::storage::UploadedMedia,
+    pub banner_image: storage::UploadedMedia,
     pub link: String,
     pub duration: i32,
 }
@@ -153,7 +151,7 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
 }
 
 pub struct UpdateAdPayload {
-    pub banner_image: Option<utils::storage::UploadedMedia>,
+    pub banner_image: Option<storage::UploadedMedia>,
     pub link: Option<String>,
     pub duration: Option<i32>,
 }

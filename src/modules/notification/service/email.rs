@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use super::{types, Error, Notification, Result};
 
-pub mod jobs {
+pub mod job {
     use crate::types::{Context, SchedulableJob};
     use hyper::StatusCode;
     use serde::{Deserialize, Serialize};

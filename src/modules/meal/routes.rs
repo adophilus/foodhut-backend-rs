@@ -5,7 +5,7 @@ use crate::{
     modules::{
         auth::middleware::Auth,
         cart::{self, repository::CreateCartPayload},
-        kitchen,
+        kitchen, storage,
     },
     utils::pagination,
 };
@@ -25,10 +25,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tempfile::NamedTempFile;
 
-use crate::{
-    types::Context,
-    utils::{self, pagination::Pagination},
-};
+use crate::{types::Context, utils::pagination::Pagination};
 
 #[derive(Debug, Clone)]
 struct Price(BigDecimal);
@@ -102,7 +99,7 @@ async fn create_meal(
         );
     }
 
-    let cover_image = match utils::storage::upload_file(ctx.storage.clone(), buf).await {
+    let cover_image = match storage::upload_file(ctx.storage.clone(), buf).await {
         Ok(media) => media,
         Err(_) => {
             return (
@@ -378,38 +375,36 @@ async fn update_meal_by_id(
         );
     }
 
-    let cover_image = match payload.cover_image {
-        Some(mut cover_image) => {
-            let mut buf: Vec<u8> = vec![];
+    let cover_image =
+        match payload.cover_image {
+            Some(mut cover_image) => {
+                let mut buf: Vec<u8> = vec![];
 
-            if let Err(err) = cover_image.contents.read_to_end(&mut buf) {
-                tracing::error!("Failed to read the uploaded file {:?}", err);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Failed to upload image" })),
-                );
-            }
-
-            let media = match utils::storage::update_file(
-                ctx.storage.clone(),
-                meal.cover_image.clone(),
-                buf,
-            )
-            .await
-            {
-                Ok(media) => media,
-                Err(_) => {
+                if let Err(err) = cover_image.contents.read_to_end(&mut buf) {
+                    tracing::error!("Failed to read the uploaded file {:?}", err);
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(json!({ "error": "Failed to upload image" })),
                     );
                 }
-            };
 
-            Some(media)
-        }
-        None => None,
-    };
+                let media =
+                    match storage::update_file(ctx.storage.clone(), meal.cover_image.clone(), buf)
+                        .await
+                    {
+                        Ok(media) => media,
+                        Err(_) => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({ "error": "Failed to upload image" })),
+                            );
+                        }
+                    };
+
+                Some(media)
+            }
+            None => None,
+        };
 
     match repository::update_by_id(
         &ctx.db_conn.pool,
@@ -471,7 +466,7 @@ async fn delete_meal_by_id(
             }
 
             if let Err(_) =
-                utils::storage::delete_file(ctx.storage.clone(), meal.cover_image.clone()).await
+                storage::delete_file(ctx.storage.clone(), meal.cover_image.clone()).await
             {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
