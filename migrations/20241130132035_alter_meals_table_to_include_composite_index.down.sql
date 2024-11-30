@@ -1,0 +1,2 @@
+ALTER TABLE meal_user_reactions
+DROP CONSTRAINT user_id_meal_id_unique;
