@@ -1,18 +1,18 @@
+use super::service;
 use bigdecimal::BigDecimal;
 use serde::Deserialize;
 use serde_aux::field_attributes::deserialize_string_from_number;
-use super::service;
 
-#[derive(Deserialize)]
-pub struct CustomerIdentificationFailed {
-    pub email: String,
-    pub reason: String,
-}
+// #[derive(Deserialize)]
+// pub struct CustomerIdentificationFailed {
+//     pub email: String,
+//     pub reason: String,
+// }
 
-#[derive(Deserialize)]
-pub struct CustomerIdentificationSuccessful {
-    pub email: String,
-}
+// #[derive(Deserialize)]
+// pub struct CustomerIdentificationSuccessful {
+//     pub email: String,
+// }
 
 #[derive(Deserialize)]
 pub struct DedicatedAccountAssignmentCustomer {

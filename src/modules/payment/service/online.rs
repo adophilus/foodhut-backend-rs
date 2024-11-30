@@ -4,7 +4,10 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{modules::{order::repository::Order, user::repository::User}, types::Context};
+use crate::{
+    modules::{order::repository::Order, user::repository::User},
+    types::Context,
+};
 use std::sync::Arc;
 
 pub enum Error {
@@ -103,6 +106,11 @@ async fn create_payment_link(
 
     let paystack_response = serde_json::de::from_str::<PaystackResponse>(data.as_str())
         .map_err(|_| Error::UnexpectedError)?;
+
+    if !paystack_response.status {
+        tracing::error!("Failed to create payment link: {}", data);
+        return Err(Error::UnexpectedError);
+    }
 
     Ok(paystack_response.data.authorization_url)
 }

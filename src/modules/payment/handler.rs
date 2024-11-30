@@ -5,7 +5,7 @@ use bigdecimal::{BigDecimal, FromPrimitive};
 use hyper::StatusCode;
 use std::sync::Arc;
 
-use crate::{types, utils};
+use crate::types;
 
 pub async fn successful_transaction(
     ctx: Arc<types::Context>,

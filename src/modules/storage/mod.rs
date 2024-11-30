@@ -18,7 +18,6 @@ pub enum Error {
 #[derive(Deserialize)]
 struct UploadResponse {
     secure_url: String,
-    signature: String,
     public_id: String,
 }
 
@@ -90,17 +89,16 @@ pub async fn upload_file(cfg: StorageContext, contents: Vec<u8>) -> Result<Uploa
         Error::UploadFailed
     })?;
 
-    match serde_json::de::from_str::<UploadResponse>(data.as_ref()) {
-        Ok(res) => Ok(UploadedMedia {
+    serde_json::de::from_str::<UploadResponse>(data.as_ref())
+        .map(|res| UploadedMedia {
             url: res.secure_url,
             public_id: res.public_id,
             timestamp,
-        }),
-        Err(err) => {
+        })
+        .map_err(|err| {
             tracing::error!("Failed to deserialize cloudinary response: {:?}", err);
-            Err(Error::UploadFailed)
-        }
-    }
+            Error::UploadFailed
+        })
 }
 
 pub async fn delete_file(cfg: StorageContext, media: UploadedMedia) -> Result<(), Error> {

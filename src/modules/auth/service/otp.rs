@@ -16,7 +16,6 @@ use std::sync::Arc;
 pub enum SendError {
     NotSent,
     NotExpired,
-    Expired,
 }
 
 pub enum VerificationError {
@@ -183,8 +182,6 @@ pub async fn verify(
         return Err(VerificationError::Expired);
     }
 
-    tracing::info!("otp has not expired");
-
     let res = hit_up_endpoint_and_parse(
         ctx.otp.verify_endpoint.clone(),
         json!({
@@ -206,7 +203,9 @@ pub async fn verify(
         return Err(VerificationError::InvalidOtp);
     }
 
-    repository::otp::delete_by_id(&ctx.db_conn.pool, existing_otp.id).await;
+    repository::otp::delete_by_id(&ctx.db_conn.pool, existing_otp.id)
+        .await
+        .ok();
 
     Ok(())
 }
