@@ -74,10 +74,7 @@ async fn get_active_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl In
 
             (StatusCode::OK, Json(json!(res)))
         }
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": "No active cart found" })),
-        ),
+        Ok(None) => (StatusCode::OK, Json(json!([]))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to fetch active cart" })),
