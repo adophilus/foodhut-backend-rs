@@ -5,6 +5,7 @@ use serde_json::json;
 use sqlx::types::BigDecimal;
 use sqlx::PgExecutor;
 use std::convert::Into;
+use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 use ulid::Ulid;
 
@@ -42,6 +43,18 @@ pub struct Kitchen {
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+}
+
+impl Hash for Kitchen {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+impl From<sqlx::types::Json<Kitchen>> for Kitchen {
+    fn from(value: sqlx::types::Json<Kitchen>) -> Self {
+        value.0
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
