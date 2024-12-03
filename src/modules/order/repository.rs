@@ -615,7 +615,7 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
                 )
                 AND ($5::TEXT IS NULL OR orders.payment_method = $5)
                 AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
-            LIMIT $1 OFFSET $2
+            LIMIT $2 OFFSET ($1 - 1) * $2
         ),
         order_with_item AS (
             SELECT
@@ -659,7 +659,7 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
                 order_with_item.delivery_date,
                 order_with_item.dispatch_rider_note,
                 order_with_item.kitchen_id,
-                order_with_item.kitchen AS "kitchen!: sqlx::types::Json<Kitchen>",
+                order_with_item.kitchen,
                 order_with_item.owner_id,
                 order_with_item.created_at,
                 order_with_item.updated_at,
@@ -702,9 +702,9 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
         SELECT
             JSON_AGG(query_result) AS items,
             JSONB_BUILD_OBJECT(
-                'total', total_rows,
-                'per_page', $1,
-                'page', $2 / $1 + 1
+                'page', $1,
+                'per_page', $2,
+                'total', total_rows
             ) AS meta
         FROM
             query_result,
@@ -712,8 +712,8 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
         GROUP BY
             total_count.total_rows
         "#,
-        pagination.per_page as i64,
-        ((pagination.page - 1) * pagination.per_page) as i64,
+        pagination.page as i32,
+        pagination.per_page as i32,
         filters.owner_id,
         filters.status.map(|s| s.to_string()),
         filters.payment_method.map(|p| p.to_string()),
