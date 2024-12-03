@@ -678,7 +678,7 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
     sqlx::query_as!(
         DatabasePaginatedFullOrder,
         r#"
-        WITH parsed_order_items AS (
+        WITH filtered_orders AS (
             SELECT
                 orders.id AS order_id,
                 orders.status,
@@ -694,7 +694,7 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
                 orders.owner_id,
                 orders.created_at,
                 orders.updated_at,
-                json_array_elements(orders.items) AS item -- Expand JSON array into individual rows
+                JSON_ARRAY_ELEMENTS(orders.items) AS items
             FROM orders
             WHERE
                 ($3::TEXT IS NULL OR orders.owner_id = $3)
@@ -712,11 +712,11 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
         ),
         expanded_items AS (
             SELECT
-                parsed_order_items.*,
-                (item->>'price')::NUMERIC AS item_price,
-                (item->>'quantity')::INT AS item_quantity,
-                item->>'meal_id' AS item_meal_id
-            FROM parsed_order_items
+                filtered_orders.*,
+                (items->>'price')::NUMERIC AS item_price,
+                (items->>'quantity')::INT AS item_quantity,
+                items->>'meal_id' AS item_meal_id
+            FROM filtered_orders
         ),
         joined_meals AS (
             SELECT
@@ -726,7 +726,7 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
                 meals.description,
                 meals.rating,
                 meals.price AS meal_price,
-                meals.original_price, -- Include original_price
+                meals.original_price,
                 meals.likes,
                 meals.cover_image,
                 meals.is_available,
