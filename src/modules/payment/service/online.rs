@@ -1,4 +1,4 @@
-use bigdecimal::{BigDecimal, FromPrimitive};
+use bigdecimal::BigDecimal;
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -47,7 +47,7 @@ async fn create_payment_link(
 
     let payload = json!({
         "email": payload.payer.email,
-        "amount": payload.order.total * BigDecimal::from_u8(100).expect("Invalid primitive value to convert from"),
+        "amount": payload.order.total * BigDecimal::from(100),
         "metadata": metadata,
     })
     .to_string();
