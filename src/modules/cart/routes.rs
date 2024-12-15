@@ -41,10 +41,9 @@ async fn get_active_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl In
         repository::find_active_full_cart_by_owner_id(&ctx.db_conn.pool, auth.user.id.clone())
             .await;
 
-    tracing::info!("Cart: {:?}", cart);
-
     match cart {
         Ok(Some(cart)) => {
+            tracing::info!("Cart items length: {:?}", cart.items.0.len());
             let kitchen_id_to_kitchen_map = cart
                 .items
                 .0
