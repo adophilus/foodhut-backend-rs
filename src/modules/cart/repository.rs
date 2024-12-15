@@ -198,31 +198,46 @@ pub async fn find_active_full_cart_by_owner_id<'e, E: PgExecutor<'e>>(
     sqlx::query_as!(
         FullCart,
         r#"
-        WITH cart_data AS (
-            SELECT 
-                carts.id,
-                carts.status,
-                carts.owner_id,
-                carts.created_at,
-                carts.updated_at,
-                COALESCE(
-                    JSONB_AGG(
-                        TO_JSONB(ROW_TO_JSON(cart_items)) || 
-                        JSONB_BUILD_OBJECT(
-                            'meal', meals,
-                            'kitchen', kitchens
-                        )
-                    ) FILTER (WHERE cart_items.meal_id IS NOT NULL),
-                    '[]'::jsonb
-                ) AS items
-            FROM carts
-            LEFT JOIN LATERAL JSONB_TO_RECORDSET(carts.items::jsonb) AS cart_items(meal_id TEXT, quantity INT) ON true
-            LEFT JOIN meals ON cart_items.meal_id = meals.id
-            LEFT JOIN kitchens ON meals.kitchen_id = meals.kitchen_id
-            WHERE carts.owner_id = $1 AND carts.status = $2
-            GROUP BY carts.id
+        WITH filtered_carts AS (
+            SELECT * FROM carts WHERE owner_id = $1 AND status = $2
+        ),
+        cart_line_items AS (
+            SELECT
+                x.*
+            FROM
+                filtered_carts,
+                JSONB_TO_RECORDSET(filtered_carts.items::JSONB) AS x(meal_id TEXT, quantity INTEGER)
+        ),
+        cart_items AS (
+            SELECT
+                cart_line_items.meal_id,
+                cart_line_items.quantity,
+                TO_JSONB(meals) AS meal,
+                TO_JSONB(kitchens) AS kitchen
+            FROM 
+                filtered_carts,
+                cart_line_items
+            INNER JOIN meals ON meals.id = cart_line_items.meal_id
+            INNER JOIN kitchens ON kitchens.id = meals.kitchen_id
         )
-        SELECT * FROM cart_data;
+        SELECT 
+            filtered_carts.id,
+            filtered_carts.status,
+            filtered_carts.owner_id,
+            filtered_carts.created_at,
+            filtered_carts.updated_at,
+            JSONB_AGG(
+                cart_items
+            ) AS items
+        FROM
+            filtered_carts,
+            cart_items
+        GROUP BY
+            filtered_carts.id,
+            filtered_carts.status,
+            filtered_carts.owner_id,
+            filtered_carts.created_at,
+            filtered_carts.updated_at
         "#,
         owner_id,
         CartStatus::NotCheckedOut.to_string()
