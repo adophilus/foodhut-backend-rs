@@ -210,6 +210,7 @@ pub struct UpdateKitchenPayload {
     pub closing_time: Option<String>,
     pub preparation_time: Option<String>,
     pub delivery_time: Option<String>,
+    pub is_available: Option<bool>,
 }
 
 async fn update_kitchen_by_profile(
@@ -261,7 +262,7 @@ async fn update_kitchen_by_id(
         }
     };
 
-    if repository::is_owner(auth.user, kitchen.clone()) {
+    if !repository::is_owner(&auth.user, &kitchen) {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({"error": "You are not the owner of this kitchen"})),
@@ -283,6 +284,7 @@ async fn update_kitchen_by_id(
             cover_image: None,
             rating: None,
             likes: None,
+            is_available: payload.is_available
         },
     )
     .await
@@ -399,7 +401,7 @@ async fn set_kitchen_cover_image(
     kitchen: repository::Kitchen,
     TypedMultipart(mut payload): TypedMultipart<SetKitchenCoverImage>,
 ) -> impl IntoResponse {
-    if !repository::is_owner(auth.user, kitchen.clone()) {
+    if !repository::is_owner(&auth.user, &kitchen) {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({ "error": "You are not the owner of this kitchen" })),
@@ -446,6 +448,7 @@ async fn set_kitchen_cover_image(
             cover_image: Some(cover_image),
             rating: None,
             likes: None,
+            is_available: None
         },
     )
     .await

@@ -40,6 +40,7 @@ pub struct Kitchen {
     pub cover_image: CoverImage,
     pub rating: BigDecimal,
     pub likes: i32,
+    pub is_available: bool,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -98,6 +99,7 @@ pub struct KitchenUserLiked {
     pub cover_image: CoverImage,
     pub rating: BigDecimal,
     pub likes: i32,
+    pub is_available: bool,
     pub has_liked: HasLiked,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
@@ -160,9 +162,10 @@ pub async fn create<'e, E: PgExecutor<'e>>(
             delivery_time,
             rating,
             likes,
+            is_available,
             owner_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     ",
         Ulid::new().to_string(),
         payload.name,
@@ -175,6 +178,7 @@ pub async fn create<'e, E: PgExecutor<'e>>(
         payload.delivery_time,
         BigDecimal::new(BigInt::new(Sign::Plus, vec![0]), 2),
         0,
+        true,
         payload.owner_id
     )
     .execute(e)
@@ -205,6 +209,7 @@ pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Optio
                 cover_image, 
                 rating, 
                 likes, 
+                is_available,
                 owner_id, 
                 created_at, 
                 updated_at
@@ -246,6 +251,7 @@ pub async fn find_by_owner_id<'e, E: PgExecutor<'e>>(
                 cover_image,
                 rating, 
                 likes, 
+                is_available,
                 owner_id, 
                 created_at, 
                 updated_at
@@ -367,6 +373,7 @@ pub struct UpdateKitchenPayload {
     pub cover_image: Option<storage::UploadedMedia>,
     pub rating: Option<BigDecimal>,
     pub likes: Option<i32>,
+    pub is_available: Option<bool>,
 }
 
 pub async fn update_by_id<'e, E: PgExecutor<'e>>(
@@ -391,9 +398,10 @@ pub async fn update_by_id<'e, E: PgExecutor<'e>>(
                 ),
                 rating = COALESCE($10, rating),
                 likes = COALESCE($11, likes),
+                is_available = COALESCE($12, is_available),
                 updated_at = NOW()
             WHERE
-                id = $12
+                id = $13
         ",
         payload.name,
         payload.address,
@@ -406,6 +414,7 @@ pub async fn update_by_id<'e, E: PgExecutor<'e>>(
         json!(payload.cover_image).to_string(),
         payload.rating,
         payload.likes,
+        payload.is_available,
         id,
     )
     .execute(e)
@@ -487,6 +496,6 @@ pub async fn unlike_by_id<'e, E: PgExecutor<'e>>(
     }
 }
 
-pub fn is_owner(user: User, kitchen: Kitchen) -> bool {
+pub fn is_owner(user: &User, kitchen: &Kitchen) -> bool {
     kitchen.owner_id == user.id
 }

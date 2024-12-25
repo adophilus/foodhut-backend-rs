@@ -348,6 +348,6 @@ pub async fn unlike_by_id<'e, E: PgExecutor<'e>>(
     })
 }
 
-pub fn is_owner(user: User, kitchen: Kitchen, meal: Meal) -> bool {
-    return kitchen::repository::is_owner(user, kitchen.clone()) || kitchen.id == meal.kitchen_id;
+pub fn is_owner(user: &User, kitchen: &Kitchen, meal: &Meal) -> bool {
+    return kitchen::repository::is_owner(&user, &kitchen) || kitchen.id == meal.kitchen_id;
 }

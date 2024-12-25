@@ -368,7 +368,7 @@ async fn update_meal_by_id(
         }
     };
 
-    if !repository::is_owner(auth.user.clone(), kitchen, meal.clone()) {
+    if !repository::is_owner(&auth.user, &kitchen, &meal) {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({"error": "You are not the owner of this meal"})),
@@ -458,7 +458,7 @@ async fn delete_meal_by_id(
                 );
             };
 
-            if !repository::is_owner(auth.user.clone(), kitchen, meal.clone()) {
+            if !repository::is_owner(&auth.user, &kitchen, &meal) {
                 return (
                     StatusCode::FORBIDDEN,
                     Json(json!({"error": "You are not the owner of this kitchen"})),

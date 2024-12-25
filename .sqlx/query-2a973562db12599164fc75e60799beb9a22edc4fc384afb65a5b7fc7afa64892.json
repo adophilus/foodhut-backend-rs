@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT \n                id, \n                name, \n                address, \n                type AS type_, \n                phone_number, \n                opening_time, \n                closing_time, \n                preparation_time, \n                delivery_time, \n                cover_image, \n                rating, \n                likes, \n                owner_id, \n                created_at, \n                updated_at\n            FROM kitchens WHERE id = $1\n        ",
+  "query": "\n            SELECT \n                id, \n                name, \n                address, \n                type AS type_, \n                phone_number, \n                opening_time, \n                closing_time, \n                preparation_time, \n                delivery_time, \n                cover_image,\n                rating, \n                likes, \n                is_available,\n                owner_id, \n                created_at, \n                updated_at\n            FROM kitchens WHERE owner_id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -65,16 +65,21 @@
       },
       {
         "ordinal": 12,
+        "name": "is_available",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
         "name": "owner_id",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "updated_at",
         "type_info": "Timestamp"
       }
@@ -99,8 +104,9 @@
       false,
       false,
       false,
+      false,
       true
     ]
   },
-  "hash": "9c8f07eb2e7e5d6c6daf5864f83ed7fff86d924d49af2fc2ba91c67ad8301f36"
+  "hash": "2a973562db12599164fc75e60799beb9a22edc4fc384afb65a5b7fc7afa64892"
 }
