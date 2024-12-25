@@ -18,7 +18,10 @@ use crate::{
     modules::{
         auth::middleware::Auth,
         kitchen::repository::Kitchen,
-        meal::{self, repository::Meal},
+        meal::{
+            self,
+            repository::{Meal, MealWithCartStatus},
+        },
         order,
     },
     types::Context,
@@ -27,7 +30,7 @@ use crate::{
 async fn get_active_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl IntoResponse {
     #[derive(Debug, Serialize)]
     struct MealWithQuantity {
-        meal: Meal,
+        meal: MealWithCartStatus,
         quantity: i32,
     }
 
@@ -67,7 +70,21 @@ async fn get_active_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl In
                         .filter(|item| item.kitchen.id == id)
                         .map(|item| MealWithQuantity {
                             quantity: item.quantity,
-                            meal: item.meal,
+                            meal: MealWithCartStatus {
+                                id: item.meal.id,
+                                name: item.meal.name,
+                                description: item.meal.description,
+                                rating: item.meal.rating,
+                                original_price: item.meal.original_price,
+                                price: item.meal.price,
+                                likes: item.meal.likes,
+                                cover_image: item.meal.cover_image,
+                                is_available: item.meal.is_available,
+                                kitchen_id: item.meal.kitchen_id,
+                                created_at: item.meal.created_at,
+                                updated_at: item.meal.updated_at,
+                                in_cart: true,
+                            },
                         })
                         .collect::<Vec<_>>();
 
