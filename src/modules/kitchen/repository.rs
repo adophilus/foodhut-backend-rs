@@ -347,27 +347,27 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
     match sqlx::query_as!(
         DatabaseCounted,
         "
-            WITH filtered_data AS (
-                SELECT *
-                FROM kitchens 
-                WHERE
-                    type = COALESCE($3, type)
-                    AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
-                LIMIT $1
-                OFFSET $2
-            ), 
-            total_count AS (
-                SELECT COUNT(id) AS total_rows
-                FROM kitchens
-                WHERE
-                    type = COALESCE($3, type)
-                    AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
-            )
-            SELECT JSONB_BUILD_OBJECT(
-                'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
-                'total', (SELECT total_rows FROM total_count)
-            ) AS result
-            FROM filtered_data;
+        WITH filtered_data AS (
+            SELECT *
+            FROM kitchens 
+            WHERE
+                type = COALESCE($3, type)
+                AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
+            LIMIT $1
+            OFFSET $2
+        ), 
+        total_count AS (
+            SELECT COUNT(id) AS total_rows
+            FROM kitchens
+            WHERE
+                type = COALESCE($3, type)
+                AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
+        )
+        SELECT JSONB_BUILD_OBJECT(
+            'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
+            'total', (SELECT total_rows FROM total_count)
+        ) AS result
+        FROM filtered_data;
         ",
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
@@ -391,6 +391,19 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
             Err(Error::UnexpectedError)
         }
     }
+}
+
+pub async fn find_many_cities<'e, E: PgExecutor<'e>>(e: E) -> Result<Vec<KitchenCity>, Error> {
+    sqlx::query_as!(KitchenCity, "SELECT * FROM kitchen_cities")
+        .fetch_all(e)
+        .await
+        .map_err(|err| {
+            tracing::error!(
+                "Error occurred while trying to fetch many kitchen cities: {}",
+                err
+            );
+            Error::UnexpectedError
+        })
 }
 
 #[derive(Serialize)]

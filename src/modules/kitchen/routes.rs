@@ -198,6 +198,19 @@ async fn fetch_kitchen_types() -> impl IntoResponse {
     Json(json!(KITCHEN_TYPES))
 }
 
+async fn fetch_kitchen_cities(
+    State(ctx): State<Arc<Context>>
+) -> impl IntoResponse {
+    match repository::find_many_cities(&ctx.db_conn.pool).await {
+        Ok(cities) => Json(json!(cities)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to fetch cities"})),
+        )
+            .into_response(),
+    }
+}
+
 #[derive(Deserialize, Validate)]
 pub struct UpdateKitchenPayload {
     pub name: Option<String>,
@@ -286,7 +299,7 @@ async fn update_kitchen_by_id(
             cover_image: None,
             rating: None,
             likes: None,
-            is_available: payload.is_available
+            is_available: payload.is_available,
         },
     )
     .await
@@ -450,7 +463,7 @@ async fn set_kitchen_cover_image(
             cover_image: Some(cover_image),
             rating: None,
             likes: None,
-            is_available: None
+            is_available: None,
         },
     )
     .await
@@ -501,5 +514,5 @@ pub fn get_router() -> Router<Arc<Context>> {
         .route("/:id/block", put(block_kitchen_by_id))
         .route("/:id/unblock", put(unblock_kitchen_by_id))
         .route("/types", get(fetch_kitchen_types))
-        .route("/cities", get(fetch_kitchen_types))
+        .route("/cities", get(fetch_kitchen_cities))
 }

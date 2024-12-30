@@ -26,7 +26,7 @@ pub async fn create<'e, E: PgExecutor<'e>>(
     e: E,
     payload: CreatePushTokenPayload,
 ) -> Result<PushToken, Error> {
-    match sqlx::query_as!(
+    sqlx::query_as!(
         PushToken,
         "
         INSERT INTO push_tokens (
@@ -43,14 +43,11 @@ pub async fn create<'e, E: PgExecutor<'e>>(
     )
     .fetch_one(e)
     .await
-    {
-        Ok(push_token) => Ok(push_token),
-        Err(err) => {
-            tracing::error!(
-                "Error occurred while trying to create a push token: {}",
-                err
-            );
-            Err(Error::UnexpectedError)
-        }
-    }
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to create a push token: {}",
+            err
+        );
+        Error::UnexpectedError
+    })
 }
