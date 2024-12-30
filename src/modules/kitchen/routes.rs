@@ -39,6 +39,7 @@ struct CreateKitchenPayload {
     pub closing_time: String,
     pub preparation_time: String,
     pub delivery_time: String,
+    pub city_id: String,
 }
 
 fn validate_kitchen_type(type_: &str) -> Result<(), ValidationError> {
@@ -109,6 +110,7 @@ async fn create_kitchen(
             closing_time: payload.closing_time,
             preparation_time: payload.preparation_time,
             delivery_time: payload.delivery_time,
+            city_id: payload.city_id,
             owner_id: auth.user.id.clone(),
         },
     )

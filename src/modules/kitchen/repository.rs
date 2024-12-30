@@ -26,6 +26,21 @@ impl From<Option<serde_json::Value>> for CoverImage {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct KitchenCity {
+    pub id: String,
+    pub name: String,
+    pub state: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+impl From<sqlx::types::Json<KitchenCity>> for KitchenCity {
+    fn from(value: sqlx::types::Json<KitchenCity>) -> Self {
+        value.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Kitchen {
     pub id: String,
     pub name: String,
@@ -40,6 +55,8 @@ pub struct Kitchen {
     pub cover_image: CoverImage,
     pub rating: BigDecimal,
     pub likes: i32,
+    pub city_id: String,
+    pub city: KitchenCity,
     pub is_available: bool,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
@@ -137,6 +154,7 @@ pub struct CreateKitchenPayload {
     pub closing_time: String,
     pub preparation_time: String,
     pub delivery_time: String,
+    pub city_id: String,
     pub owner_id: String,
 }
 
@@ -163,10 +181,11 @@ pub async fn create<'e, E: PgExecutor<'e>>(
             rating,
             likes,
             is_available,
+            city_id,
             owner_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-    ",
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ",
         Ulid::new().to_string(),
         payload.name,
         payload.address,
@@ -179,6 +198,7 @@ pub async fn create<'e, E: PgExecutor<'e>>(
         BigDecimal::new(BigInt::new(Sign::Plus, vec![0]), 2),
         0,
         true,
+        payload.city_id,
         payload.owner_id
     )
     .execute(e)
@@ -195,26 +215,33 @@ pub async fn create<'e, E: PgExecutor<'e>>(
 pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Option<Kitchen>, Error> {
     match sqlx::query_as!(
         Kitchen,
-        "
-            SELECT 
-                id, 
-                name, 
-                address, 
-                type AS type_, 
-                phone_number, 
-                opening_time, 
-                closing_time, 
-                preparation_time, 
-                delivery_time, 
-                cover_image, 
-                rating, 
-                likes, 
-                is_available,
-                owner_id, 
-                created_at, 
-                updated_at
-            FROM kitchens WHERE id = $1
-        ",
+        r#"
+        SELECT
+            kitchens.id, 
+            kitchens.name, 
+            kitchens.address, 
+            kitchens.type AS type_, 
+            kitchens.phone_number, 
+            kitchens.opening_time, 
+            kitchens.closing_time, 
+            kitchens.preparation_time, 
+            kitchens.delivery_time, 
+            kitchens.cover_image,
+            kitchens.rating, 
+            kitchens.likes, 
+            kitchens.is_available,
+            TO_JSONB(kitchen_cities) AS "city!: sqlx::types::Json<KitchenCity>",
+            kitchens.city_id, 
+            kitchens.owner_id, 
+            kitchens.created_at, 
+            kitchens.updated_at
+        FROM
+            kitchens,
+            kitchen_cities
+        WHERE
+            kitchens.id = $1 AND
+            kitchen_cities.id = kitchens.city_id
+        "#,
         id
     )
     .fetch_optional(e)
@@ -237,26 +264,32 @@ pub async fn find_by_owner_id<'e, E: PgExecutor<'e>>(
 ) -> Result<Option<Kitchen>, Error> {
     match sqlx::query_as!(
         Kitchen,
-        "
-            SELECT 
-                id, 
-                name, 
-                address, 
-                type AS type_, 
-                phone_number, 
-                opening_time, 
-                closing_time, 
-                preparation_time, 
-                delivery_time, 
-                cover_image,
-                rating, 
-                likes, 
-                is_available,
-                owner_id, 
-                created_at, 
-                updated_at
-            FROM kitchens WHERE owner_id = $1
-        ",
+        r#"
+        SELECT 
+            kitchens.id, 
+            kitchens.name, 
+            kitchens.address, 
+            kitchens.type AS type_, 
+            kitchens.phone_number, 
+            kitchens.opening_time, 
+            kitchens.closing_time, 
+            kitchens.preparation_time, 
+            kitchens.delivery_time, 
+            kitchens.cover_image,
+            kitchens.rating, 
+            kitchens.likes, 
+            kitchens.is_available,
+            TO_JSONB(kitchen_cities) AS "city!: sqlx::types::Json<KitchenCity>",
+            kitchens.city_id, 
+            kitchens.owner_id, 
+            kitchens.created_at, 
+            kitchens.updated_at
+        FROM
+            kitchens,
+            kitchen_cities
+        WHERE
+            kitchens.owner_id = $1
+        "#,
         owner_id
     )
     .fetch_optional(e)

@@ -68,6 +68,8 @@ impl From<String> for OrderStatus {
 
 #[derive(Clone, Debug, Deserialize)]
 pub enum OrderSimpleStatus {
+    #[serde(rename = "PENDING")]
+    Pending,
     #[serde(rename = "ONGOING")]
     Ongoing,
     #[serde(rename = "COMPLETED")]
@@ -77,6 +79,7 @@ pub enum OrderSimpleStatus {
 impl ToString for OrderSimpleStatus {
     fn to_string(&self) -> String {
         match self {
+            OrderSimpleStatus::Pending => String::from("PENDING"),
             OrderSimpleStatus::Ongoing => String::from("ONGOING"),
             OrderSimpleStatus::Completed => String::from("COMPLETED"),
         }
@@ -88,6 +91,7 @@ impl FromStr for OrderSimpleStatus {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "PENDING" => Ok(OrderSimpleStatus::Pending),
             "ONGOING" => Ok(OrderSimpleStatus::Ongoing),
             "COMPLETED" => Ok(OrderSimpleStatus::Completed),
             _ => Err(format!("'{}' is not a valid OrderSimpleStatus", s)),
@@ -568,17 +572,17 @@ pub async fn find_full_order_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct Filters {
+pub struct FindManyAsUserFilters {
     pub owner_id: Option<String>,
     pub status: Option<OrderSimpleStatus>,
     pub payment_method: Option<PaymentMethod>,
     pub kitchen_id: Option<String>,
 }
 
-pub async fn find_many<'e, E: PgExecutor<'e>>(
+pub async fn find_many_as_user<'e, E: PgExecutor<'e>>(
     e: E,
     pagination: Pagination,
-    filters: Filters,
+    filters: FindManyAsUserFilters,
 ) -> Result<Paginated<FullOrder>, Error> {
     sqlx::query_as!(
         DatabasePaginatedFullOrder,
@@ -727,6 +731,332 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
         Error::UnexpectedError
     })
 }
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FindManyAsKitchenFilters {
+    pub owner_id: Option<String>,
+    pub status: Option<OrderSimpleStatus>,
+    pub payment_method: Option<PaymentMethod>,
+    pub kitchen_id: Option<String>,
+}
+
+pub async fn find_many_as_kitchen<'e, E: PgExecutor<'e>>(
+    e: E,
+    pagination: Pagination,
+    filters: FindManyAsKitchenFilters,
+) -> Result<Paginated<FullOrder>, Error> {
+    sqlx::query_as!(
+        DatabasePaginatedFullOrder,
+        r#"
+        WITH filtered_orders AS (
+            SELECT
+                orders.id,
+                orders.status,
+                orders.payment_method,
+                orders.delivery_fee,
+                orders.service_fee,
+                orders.sub_total,
+                orders.total,
+                orders.delivery_address,
+                orders.delivery_date,
+                orders.dispatch_rider_note,
+                orders.kitchen_id,
+                orders.owner_id,
+                orders.created_at,
+                orders.updated_at,
+                json_item AS item
+            FROM
+                orders,
+                JSON_ARRAY_ELEMENTS(orders.items) AS json_item
+            WHERE
+                ($3::TEXT IS NULL OR orders.owner_id = $3)
+                AND (
+                    $4::TEXT IS NULL OR
+                    CASE
+                        WHEN $4 = 'PENDING' THEN orders.status IN ('AWAITING_ACKNOWLEDGEMENT')
+                        WHEN $4 = 'ONGOING' THEN orders.status IN ('PREPARING', 'IN_TRANSIT')
+                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+                        ELSE TRUE
+                    END
+                )
+                AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
+            LIMIT $2 OFFSET ($1 - 1) * $2
+        ),
+        order_with_item AS (
+            SELECT
+                filtered_orders.id,
+                filtered_orders.status,
+                filtered_orders.payment_method,
+                filtered_orders.delivery_fee,
+                filtered_orders.service_fee,
+                filtered_orders.sub_total,
+                filtered_orders.total,
+                filtered_orders.delivery_address,
+                filtered_orders.delivery_date,
+                filtered_orders.dispatch_rider_note,
+                filtered_orders.kitchen_id,
+                filtered_orders.owner_id,
+                filtered_orders.created_at,
+                filtered_orders.updated_at,
+                filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
+                    'meal', meals
+                ) AS item,
+                TO_JSONB(kitchens) AS kitchen
+            FROM
+                filtered_orders
+            LEFT JOIN
+                meals
+            ON meals.id = filtered_orders.item->>'meal_id'
+            LEFT JOIN
+                kitchens
+            ON kitchens.id = filtered_orders.kitchen_id
+        ),
+        query_result AS (
+            SELECT
+                order_with_item.id,
+                order_with_item.status,
+                order_with_item.payment_method,
+                order_with_item.delivery_fee,
+                order_with_item.service_fee,
+                order_with_item.sub_total,
+                order_with_item.total,
+                order_with_item.delivery_address,
+                order_with_item.delivery_date,
+                order_with_item.dispatch_rider_note,
+                order_with_item.kitchen_id,
+                order_with_item.kitchen,
+                order_with_item.owner_id,
+                order_with_item.created_at,
+                order_with_item.updated_at,
+                JSON_AGG(item) AS items
+            FROM
+                order_with_item
+            GROUP BY
+                order_with_item.id,
+                order_with_item.status,
+                order_with_item.payment_method,
+                order_with_item.delivery_fee,
+                order_with_item.service_fee,
+                order_with_item.sub_total,
+                order_with_item.total,
+                order_with_item.delivery_address,
+                order_with_item.delivery_date,
+                order_with_item.dispatch_rider_note,
+                order_with_item.kitchen_id,
+                order_with_item.kitchen,
+                order_with_item.owner_id,
+                order_with_item.created_at,
+                order_with_item.updated_at
+        ),
+        total_count AS (
+            SELECT COUNT(id) AS total_rows
+            FROM orders
+            WHERE
+                ($3::TEXT IS NULL OR orders.owner_id = $3)
+                AND (
+                    $4::TEXT IS NULL OR
+                    CASE
+                        WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+                        ELSE TRUE
+                    END
+                )
+                AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
+        )
+        SELECT
+            JSON_AGG(query_result) AS items,
+            JSONB_BUILD_OBJECT(
+                'page', $1,
+                'per_page', $2,
+                'total', total_rows
+            ) AS meta
+        FROM
+            query_result,
+            total_count
+        GROUP BY
+            total_count.total_rows
+        "#,
+        pagination.page as i32,
+        pagination.per_page as i32,
+        filters.owner_id,
+        filters.status.map(|s| s.to_string()),
+        filters.payment_method.map(|p| p.to_string()),
+        filters.kitchen_id
+    )
+    .fetch_one(e)
+    .await
+    .map(DatabasePaginatedFullOrder::into)
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch many orders: {}", err);
+        Error::UnexpectedError
+    })
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FindManyAsAdminFilters {
+    pub owner_id: Option<String>,
+    pub status: Option<OrderSimpleStatus>,
+    pub payment_method: Option<PaymentMethod>,
+    pub kitchen_id: Option<String>,
+}
+
+pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
+    e: E,
+    pagination: Pagination,
+    filters: FindManyAsAdminFilters,
+) -> Result<Paginated<FullOrder>, Error> {
+    sqlx::query_as!(
+        DatabasePaginatedFullOrder,
+        r#"
+        WITH filtered_orders AS (
+            SELECT
+                orders.id,
+                orders.status,
+                orders.payment_method,
+                orders.delivery_fee,
+                orders.service_fee,
+                orders.sub_total,
+                orders.total,
+                orders.delivery_address,
+                orders.delivery_date,
+                orders.dispatch_rider_note,
+                orders.kitchen_id,
+                orders.owner_id,
+                orders.created_at,
+                orders.updated_at,
+                json_item AS item
+            FROM
+                orders,
+                JSON_ARRAY_ELEMENTS(orders.items) AS json_item
+            WHERE
+                ($3::TEXT IS NULL OR orders.owner_id = $3)
+                AND (
+                    $4::TEXT IS NULL OR
+                    CASE
+                        WHEN $4 = 'PENDING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT')
+                        WHEN $4 = 'ONGOING' THEN orders.status IN ('PREPARING', 'IN_TRANSIT')
+                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+                        ELSE TRUE
+                    END
+                )
+                AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
+            LIMIT $2 OFFSET ($1 - 1) * $2
+        ),
+        order_with_item AS (
+            SELECT
+                filtered_orders.id,
+                filtered_orders.status,
+                filtered_orders.payment_method,
+                filtered_orders.delivery_fee,
+                filtered_orders.service_fee,
+                filtered_orders.sub_total,
+                filtered_orders.total,
+                filtered_orders.delivery_address,
+                filtered_orders.delivery_date,
+                filtered_orders.dispatch_rider_note,
+                filtered_orders.kitchen_id,
+                filtered_orders.owner_id,
+                filtered_orders.created_at,
+                filtered_orders.updated_at,
+                filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
+                    'meal', meals
+                ) AS item,
+                TO_JSONB(kitchens) AS kitchen
+            FROM
+                filtered_orders
+            LEFT JOIN
+                meals
+            ON meals.id = filtered_orders.item->>'meal_id'
+            LEFT JOIN
+                kitchens
+            ON kitchens.id = filtered_orders.kitchen_id
+        ),
+        query_result AS (
+            SELECT
+                order_with_item.id,
+                order_with_item.status,
+                order_with_item.payment_method,
+                order_with_item.delivery_fee,
+                order_with_item.service_fee,
+                order_with_item.sub_total,
+                order_with_item.total,
+                order_with_item.delivery_address,
+                order_with_item.delivery_date,
+                order_with_item.dispatch_rider_note,
+                order_with_item.kitchen_id,
+                order_with_item.kitchen,
+                order_with_item.owner_id,
+                order_with_item.created_at,
+                order_with_item.updated_at,
+                JSON_AGG(item) AS items
+            FROM
+                order_with_item
+            GROUP BY
+                order_with_item.id,
+                order_with_item.status,
+                order_with_item.payment_method,
+                order_with_item.delivery_fee,
+                order_with_item.service_fee,
+                order_with_item.sub_total,
+                order_with_item.total,
+                order_with_item.delivery_address,
+                order_with_item.delivery_date,
+                order_with_item.dispatch_rider_note,
+                order_with_item.kitchen_id,
+                order_with_item.kitchen,
+                order_with_item.owner_id,
+                order_with_item.created_at,
+                order_with_item.updated_at
+        ),
+        total_count AS (
+            SELECT COUNT(id) AS total_rows
+            FROM orders
+            WHERE
+                ($3::TEXT IS NULL OR orders.owner_id = $3)
+                AND (
+                    $4::TEXT IS NULL OR
+                    CASE
+                        WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+                        ELSE TRUE
+                    END
+                )
+                AND ($5::TEXT IS NULL OR orders.payment_method = $5)
+                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
+        )
+        SELECT
+            JSON_AGG(query_result) AS items,
+            JSONB_BUILD_OBJECT(
+                'page', $1,
+                'per_page', $2,
+                'total', total_rows
+            ) AS meta
+        FROM
+            query_result,
+            total_count
+        GROUP BY
+            total_count.total_rows
+        "#,
+        pagination.page as i32,
+        pagination.per_page as i32,
+        filters.owner_id,
+        filters.status.map(|s| s.to_string()),
+        filters.payment_method.map(|p| p.to_string()),
+        filters.kitchen_id
+    )
+    .fetch_one(e)
+    .await
+    .map(DatabasePaginatedFullOrder::into)
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch many orders: {}", err);
+        Error::UnexpectedError
+    })
+}
+
+
 
 pub async fn confirm_payment<'e, E: PgExecutor<'e>>(e: E, order_id: String) -> Result<bool, Error> {
     sqlx::query!(

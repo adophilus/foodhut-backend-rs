@@ -33,10 +33,10 @@ async fn get_orders(
 ) -> impl IntoResponse {
     let orders = match user::repository::is_admin(&auth.user) {
         true => {
-            repository::find_many(
+            repository::find_many_as_admin(
                 &ctx.db_conn.pool,
                 pagination.clone(),
-                repository::Filters {
+                repository::FindManyAsAdminFilters {
                     owner_id: None,
                     payment_method: None,
                     status: filters.status,
@@ -46,17 +46,31 @@ async fn get_orders(
             .await
         }
         false => {
-            repository::find_many(
-                &ctx.db_conn.pool,
-                pagination.clone(),
-                repository::Filters {
-                    owner_id: Some(auth.user.id.clone()),
-                    payment_method: None,
-                    status: filters.status,
-                    kitchen_id: filters.kitchen_id,
-                },
-            )
-            .await
+            if filters.kitchen_id.is_some() {
+                repository::find_many_as_kitchen(
+                    &ctx.db_conn.pool,
+                    pagination.clone(),
+                    repository::FindManyAsKitchenFilters {
+                        owner_id: Some(auth.user.id.clone()),
+                        payment_method: None,
+                        status: filters.status,
+                        kitchen_id: filters.kitchen_id,
+                    },
+                )
+                .await
+            } else {
+                repository::find_many_as_user(
+                    &ctx.db_conn.pool,
+                    pagination.clone(),
+                    repository::FindManyAsUserFilters {
+                        owner_id: Some(auth.user.id.clone()),
+                        payment_method: None,
+                        status: filters.status,
+                        kitchen_id: filters.kitchen_id,
+                    },
+                )
+                .await
+            }
         }
     };
 

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT \n                id, \n                name, \n                address, \n                type AS type_, \n                phone_number, \n                opening_time, \n                closing_time, \n                preparation_time, \n                delivery_time, \n                cover_image,\n                rating, \n                likes, \n                is_available,\n                owner_id, \n                created_at, \n                updated_at\n            FROM kitchens WHERE owner_id = $1\n        ",
+  "query": "\n        SELECT\n            kitchens.id, \n            kitchens.name, \n            kitchens.address, \n            kitchens.type AS type_, \n            kitchens.phone_number, \n            kitchens.opening_time, \n            kitchens.closing_time, \n            kitchens.preparation_time, \n            kitchens.delivery_time, \n            kitchens.cover_image,\n            kitchens.rating, \n            kitchens.likes, \n            kitchens.is_available,\n            TO_JSONB(kitchen_cities) AS \"city!: sqlx::types::Json<KitchenCity>\",\n            kitchens.city_id, \n            kitchens.owner_id, \n            kitchens.created_at, \n            kitchens.updated_at\n        FROM\n            kitchens,\n            kitchen_cities\n        WHERE\n            kitchens.id = $1 AND\n            kitchen_cities.id = kitchens.city_id\n        ",
   "describe": {
     "columns": [
       {
@@ -70,16 +70,26 @@
       },
       {
         "ordinal": 13,
+        "name": "city!: sqlx::types::Json<KitchenCity>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 14,
+        "name": "city_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 15,
         "name": "owner_id",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 14,
+        "ordinal": 16,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 15,
+        "ordinal": 17,
         "name": "updated_at",
         "type_info": "Timestamp"
       }
@@ -103,10 +113,12 @@
       false,
       false,
       false,
+      null,
+      false,
       false,
       false,
       true
     ]
   },
-  "hash": "2a973562db12599164fc75e60799beb9a22edc4fc384afb65a5b7fc7afa64892"
+  "hash": "f1b43475a6d3dfeeaec6838d42f9dd2cf0cdf79ebc29bee2f033db784179abba"
 }
