@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH filtered_orders AS (\n            SELECT\n                orders.id,\n                orders.status,\n                orders.payment_method,\n                orders.delivery_fee,\n                orders.service_fee,\n                orders.sub_total,\n                orders.total,\n                orders.delivery_address,\n                orders.delivery_date,\n                orders.dispatch_rider_note,\n                orders.kitchen_id,\n                orders.owner_id,\n                orders.created_at,\n                orders.updated_at,\n                json_item AS item\n            FROM\n                orders,\n                JSON_ARRAY_ELEMENTS(orders.items) AS json_item\n            WHERE\n                ($3::TEXT IS NULL OR orders.owner_id = $3)\n                AND (\n                    $4::TEXT IS NULL OR\n                    CASE\n                        WHEN $4 = 'PENDING' THEN orders.status IN ('AWAITING_ACKNOWLEDGEMENT')\n                        WHEN $4 = 'ONGOING' THEN orders.status IN ('PREPARING', 'IN_TRANSIT')\n                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')\n                        ELSE TRUE\n                    END\n                )\n                AND ($5::TEXT IS NULL OR orders.payment_method = $5)\n                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)\n            LIMIT $2 OFFSET ($1 - 1) * $2\n        ),\n        order_with_item AS (\n            SELECT\n                filtered_orders.id,\n                filtered_orders.status,\n                filtered_orders.payment_method,\n                filtered_orders.delivery_fee,\n                filtered_orders.service_fee,\n                filtered_orders.sub_total,\n                filtered_orders.total,\n                filtered_orders.delivery_address,\n                filtered_orders.delivery_date,\n                filtered_orders.dispatch_rider_note,\n                filtered_orders.kitchen_id,\n                filtered_orders.owner_id,\n                filtered_orders.created_at,\n                filtered_orders.updated_at,\n                filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(\n                    'meal', meals\n                ) AS item,\n                TO_JSONB(kitchens) AS kitchen\n            FROM\n                filtered_orders\n            LEFT JOIN\n                meals\n            ON meals.id = filtered_orders.item->>'meal_id'\n            LEFT JOIN\n                kitchens\n            ON kitchens.id = filtered_orders.kitchen_id\n        ),\n        query_result AS (\n            SELECT\n                order_with_item.id,\n                order_with_item.status,\n                order_with_item.payment_method,\n                order_with_item.delivery_fee,\n                order_with_item.service_fee,\n                order_with_item.sub_total,\n                order_with_item.total,\n                order_with_item.delivery_address,\n                order_with_item.delivery_date,\n                order_with_item.dispatch_rider_note,\n                order_with_item.kitchen_id,\n                order_with_item.kitchen,\n                order_with_item.owner_id,\n                order_with_item.created_at,\n                order_with_item.updated_at,\n                JSON_AGG(item) AS items\n            FROM\n                order_with_item\n            GROUP BY\n                order_with_item.id,\n                order_with_item.status,\n                order_with_item.payment_method,\n                order_with_item.delivery_fee,\n                order_with_item.service_fee,\n                order_with_item.sub_total,\n                order_with_item.total,\n                order_with_item.delivery_address,\n                order_with_item.delivery_date,\n                order_with_item.dispatch_rider_note,\n                order_with_item.kitchen_id,\n                order_with_item.kitchen,\n                order_with_item.owner_id,\n                order_with_item.created_at,\n                order_with_item.updated_at\n        ),\n        total_count AS (\n            SELECT COUNT(id) AS total_rows\n            FROM orders\n            WHERE\n                ($3::TEXT IS NULL OR orders.owner_id = $3)\n                AND (\n                    $4::TEXT IS NULL OR\n                    CASE\n                        WHEN $4 = 'PENDING' THEN orders.status IN ('AWAITING_ACKNOWLEDGEMENT')\n                        WHEN $4 = 'ONGOING' THEN orders.status IN ('PREPARING', 'IN_TRANSIT')\n                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')\n                        ELSE TRUE\n                    END\n                )\n                AND ($5::TEXT IS NULL OR orders.payment_method = $5)\n                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)\n        )\n        SELECT\n            JSON_AGG(query_result) AS items,\n            JSONB_BUILD_OBJECT(\n                'page', $1,\n                'per_page', $2,\n                'total', total_rows\n            ) AS meta\n        FROM\n            query_result,\n            total_count\n        GROUP BY\n            total_count.total_rows\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "items",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 1,
+        "name": "meta",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "b157f2449422cdcc46656a26d20024992da7939c7428f9eccf69aa15371a854d"
+}

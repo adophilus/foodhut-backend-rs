@@ -501,4 +501,5 @@ pub fn get_router() -> Router<Arc<Context>> {
         .route("/:id/block", put(block_kitchen_by_id))
         .route("/:id/unblock", put(unblock_kitchen_by_id))
         .route("/types", get(fetch_kitchen_types))
+        .route("/cities", get(fetch_kitchen_types))
 }

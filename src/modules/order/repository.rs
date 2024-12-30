@@ -857,7 +857,8 @@ pub async fn find_many_as_kitchen<'e, E: PgExecutor<'e>>(
                 AND (
                     $4::TEXT IS NULL OR
                     CASE
-                        WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+                        WHEN $4 = 'PENDING' THEN orders.status IN ('AWAITING_ACKNOWLEDGEMENT')
+                        WHEN $4 = 'ONGOING' THEN orders.status IN ('PREPARING', 'IN_TRANSIT')
                         WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
                         ELSE TRUE
                     END
@@ -1019,7 +1020,8 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 AND (
                     $4::TEXT IS NULL OR
                     CASE
-                        WHEN $4 = 'ONGOING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT', 'PREPARING', 'IN_TRANSIT')
+                        WHEN $4 = 'PENDING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT')
+                        WHEN $4 = 'ONGOING' THEN orders.status IN ('PREPARING', 'IN_TRANSIT')
                         WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
                         ELSE TRUE
                     END
