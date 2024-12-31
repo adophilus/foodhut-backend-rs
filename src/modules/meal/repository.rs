@@ -159,10 +159,14 @@ where
         DatabasePaginatedMeal,
         r#"
         WITH filtered_data AS (
-            SELECT meals.*
-            FROM meals
-            LEFT JOIN meal_user_reactions 
-            ON meals.id = meal_user_reactions.meal_id
+            SELECT
+                meals.*
+            FROM
+                meals
+            LEFT JOIN
+                meal_user_reactions 
+            ON
+                meals.id = meal_user_reactions.meal_id
             AND (
                 $5::TEXT IS NOT NULL AND 
                 meal_user_reactions.user_id = $5 AND 
@@ -176,8 +180,10 @@ where
             OFFSET $2
         ),
         total_count AS (
-            SELECT COUNT(meals.id) AS total_rows
-            FROM meals
+            SELECT
+                COUNT(meals.id) AS total_rows
+            FROM
+                meals
             LEFT JOIN meal_user_reactions 
             ON meals.id = meal_user_reactions.meal_id
             AND (

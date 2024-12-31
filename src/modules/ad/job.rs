@@ -5,7 +5,7 @@ use std::sync::Arc;
 use super::repository;
 
 async fn clean_ads_job(ctx: Arc<Context>) -> Result<(), apalis::prelude::Error> {
-    tracing::info!("Cleaning up ads");
+    tracing::debug!("Cleaning up ads");
 
     let _ = repository::delete_expired(&ctx.db_conn.pool).await;
 

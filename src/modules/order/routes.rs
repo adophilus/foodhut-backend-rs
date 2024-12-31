@@ -33,6 +33,7 @@ async fn get_orders(
 ) -> impl IntoResponse {
     let orders = match user::repository::is_admin(&auth.user) {
         true => {
+            tracing::warn!("Admin fetching orders");
             repository::find_many_as_admin(
                 &ctx.db_conn.pool,
                 pagination.clone(),
@@ -47,6 +48,7 @@ async fn get_orders(
         }
         false => {
             if filters.kitchen_id.is_some() {
+                tracing::warn!("Kitchen fetching orders");
                 repository::find_many_as_kitchen(
                     &ctx.db_conn.pool,
                     pagination.clone(),
@@ -59,6 +61,7 @@ async fn get_orders(
                 )
                 .await
             } else {
+                tracing::warn!("User fetching orders");
                 repository::find_many_as_user(
                     &ctx.db_conn.pool,
                     pagination.clone(),

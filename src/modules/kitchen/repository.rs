@@ -1,3 +1,4 @@
+use crate::define_paginated;
 use chrono::NaiveDateTime;
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
@@ -45,8 +46,7 @@ pub struct Kitchen {
     pub id: String,
     pub name: String,
     pub address: String,
-    #[serde(rename = "type")]
-    pub type_: String,
+    pub r#type: String,
     pub phone_number: String,
     pub opening_time: String,
     pub closing_time: String,
@@ -62,6 +62,8 @@ pub struct Kitchen {
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
+
+define_paginated!(DatabasePaginatedKitchen, Kitchen);
 
 impl Hash for Kitchen {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -106,8 +108,7 @@ pub struct KitchenUserLiked {
     pub id: String,
     pub name: String,
     pub address: String,
-    #[serde(rename = "type")]
-    pub type_: String,
+    pub r#type: String,
     pub phone_number: String,
     pub opening_time: String,
     pub closing_time: String,
@@ -149,7 +150,7 @@ pub struct CreateKitchenPayload {
     pub name: String,
     pub address: String,
     pub phone_number: String,
-    pub type_: String,
+    pub r#type: String,
     pub opening_time: String,
     pub closing_time: String,
     pub preparation_time: String,
@@ -189,7 +190,7 @@ pub async fn create<'e, E: PgExecutor<'e>>(
         Ulid::new().to_string(),
         payload.name,
         payload.address,
-        payload.type_,
+        payload.r#type,
         payload.phone_number,
         payload.opening_time,
         payload.closing_time,
@@ -217,30 +218,15 @@ pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Optio
         Kitchen,
         r#"
         SELECT
-            kitchens.id, 
-            kitchens.name, 
-            kitchens.address, 
-            kitchens.type AS type_, 
-            kitchens.phone_number, 
-            kitchens.opening_time, 
-            kitchens.closing_time, 
-            kitchens.preparation_time, 
-            kitchens.delivery_time, 
-            kitchens.cover_image,
-            kitchens.rating, 
-            kitchens.likes, 
-            kitchens.is_available,
-            TO_JSONB(kitchen_cities) AS "city!: sqlx::types::Json<KitchenCity>",
-            kitchens.city_id, 
-            kitchens.owner_id, 
-            kitchens.created_at, 
-            kitchens.updated_at
+            kitchens.*,
+            TO_JSONB(kitchen_cities) AS "city!: sqlx::types::Json<KitchenCity>"
         FROM
             kitchens,
             kitchen_cities
         WHERE
-            kitchens.id = $1 AND
-            kitchen_cities.id = kitchens.city_id
+            kitchens.id = $1
+            AND kitchen_cities.id = kitchens.city_id
+            AND kitchens.city_id = kitchen_cities.id
         "#,
         id
     )
@@ -266,29 +252,14 @@ pub async fn find_by_owner_id<'e, E: PgExecutor<'e>>(
         Kitchen,
         r#"
         SELECT 
-            kitchens.id, 
-            kitchens.name, 
-            kitchens.address, 
-            kitchens.type AS type_, 
-            kitchens.phone_number, 
-            kitchens.opening_time, 
-            kitchens.closing_time, 
-            kitchens.preparation_time, 
-            kitchens.delivery_time, 
-            kitchens.cover_image,
-            kitchens.rating, 
-            kitchens.likes, 
-            kitchens.is_available,
-            TO_JSONB(kitchen_cities) AS "city!: sqlx::types::Json<KitchenCity>",
-            kitchens.city_id, 
-            kitchens.owner_id, 
-            kitchens.created_at, 
-            kitchens.updated_at
+            kitchens.*,
+            TO_JSONB(kitchen_cities) AS "city!: sqlx::types::Json<KitchenCity>"
         FROM
             kitchens,
             kitchen_cities
         WHERE
             kitchens.owner_id = $1
+            AND kitchens.city_id = kitchen_cities.id
         "#,
         owner_id
     )
@@ -307,35 +278,8 @@ pub async fn find_by_owner_id<'e, E: PgExecutor<'e>>(
 }
 
 #[derive(Deserialize)]
-struct DatabaseCountedResult {
-    data: Vec<Kitchen>,
-    total: u32,
-}
-
-impl Into<DatabaseCountedResult> for Option<serde_json::Value> {
-    fn into(self) -> DatabaseCountedResult {
-        match self {
-            Some(json) => {
-                serde_json::de::from_str::<DatabaseCountedResult>(json.to_string().as_ref())
-                    .unwrap()
-            }
-            None => DatabaseCountedResult {
-                data: vec![],
-                total: 0,
-            },
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct DatabaseCounted {
-    result: DatabaseCountedResult,
-}
-
-#[derive(Deserialize)]
 pub struct FindManyFilters {
-    #[serde(rename = "type")]
-    type_: Option<String>,
+    r#type: Option<String>,
     search: Option<String>,
 }
 
@@ -344,53 +288,60 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
     pagination: Pagination,
     filters: FindManyFilters,
 ) -> Result<Paginated<Kitchen>, Error> {
-    match sqlx::query_as!(
-        DatabaseCounted,
-        "
+    sqlx::query_as!(
+        DatabasePaginatedKitchen,
+        r#"
         WITH filtered_data AS (
-            SELECT *
-            FROM kitchens 
+            SELECT
+                kitchens.*,
+                TO_JSONB(kitchen_cities) AS city
+            FROM
+                kitchens,
+                kitchen_cities
             WHERE
-                type = COALESCE($3, type)
-                AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
+                kitchens.type = COALESCE($3, kitchens.type)
+                AND kitchens.name ILIKE CONCAT('%', COALESCE($4, kitchens.name), '%')
+                AND kitchens.city_id = kitchen_cities.id
             LIMIT $1
             OFFSET $2
-        ), 
+        ),
         total_count AS (
-            SELECT COUNT(id) AS total_rows
-            FROM kitchens
-            WHERE
-                type = COALESCE($3, type)
-                AND name ILIKE CONCAT('%', COALESCE($4, name), '%')
+        SELECT
+            COUNT(kitchens.id) AS total_rows
+        FROM
+            kitchens
+        WHERE
+            kitchens.type = COALESCE(NULL, kitchens.type)
+            AND kitchens.name ILIKE CONCAT('%', COALESCE(NULL, kitchens.name), '%')
         )
-        SELECT JSONB_BUILD_OBJECT(
-            'data', COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb),
-            'total', (SELECT total_rows FROM total_count)
-        ) AS result
-        FROM filtered_data;
-        ",
+        SELECT
+        JSONB_AGG(ROW_TO_JSON(filtered_data)) AS items,
+        JSONB_BUILD_OBJECT(
+            'total', total_count.total_rows,
+            'per_page', $1,
+            'page', $2 / $1 + 1
+        ) AS meta
+        FROM
+            filtered_data,
+            total_count
+        GROUP BY
+            total_count.total_rows;
+        "#,
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
-        filters.type_,
+        filters.r#type,
         filters.search,
     )
     .fetch_one(e)
     .await
-    {
-        Ok(counted) => Ok(Paginated::new(
-            counted.result.data,
-            counted.result.total,
-            pagination.page,
-            pagination.per_page,
-        )),
-        Err(err) => {
-            tracing::error!(
-                "Error occurred while trying to fetch many kitchens: {}",
-                err
-            );
-            Err(Error::UnexpectedError)
-        }
-    }
+    .map(DatabasePaginatedKitchen::into)
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch many kitchens: {}",
+            err
+        );
+        Error::UnexpectedError
+    })
 }
 
 pub async fn find_many_cities<'e, E: PgExecutor<'e>>(e: E) -> Result<Vec<KitchenCity>, Error> {
@@ -411,7 +362,7 @@ pub struct UpdateKitchenPayload {
     pub name: Option<String>,
     pub address: Option<String>,
     pub phone_number: Option<String>,
-    pub type_: Option<String>,
+    pub r#type: Option<String>,
     pub opening_time: Option<String>,
     pub closing_time: Option<String>,
     pub preparation_time: Option<String>,
@@ -451,7 +402,7 @@ pub async fn update_by_id<'e, E: PgExecutor<'e>>(
         ",
         payload.name,
         payload.address,
-        payload.type_,
+        payload.r#type,
         payload.phone_number,
         payload.opening_time,
         payload.closing_time,

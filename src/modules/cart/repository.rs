@@ -213,12 +213,13 @@ pub async fn find_active_full_cart_by_owner_id<'e, E: PgExecutor<'e>>(
                 cart_line_items.meal_id,
                 cart_line_items.quantity,
                 TO_JSONB(meals) AS meal,
-                TO_JSONB(kitchens) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
             FROM 
                 filtered_carts,
                 cart_line_items
             INNER JOIN meals ON meals.id = cart_line_items.meal_id
             INNER JOIN kitchens ON kitchens.id = meals.kitchen_id
+            INNER JOIN kitchen_cities ON kitchen_cities.id = kitchens.city_id
         )
         SELECT 
             filtered_carts.id,

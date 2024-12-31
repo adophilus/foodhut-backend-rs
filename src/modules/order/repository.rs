@@ -398,15 +398,18 @@ pub async fn find_full_order_by_id<'e, E: PgExecutor<'e>>(
                 filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
-                TO_JSONB(kitchens) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
             FROM
                 filtered_orders
-            LEFT JOIN
+            INNER JOIN
                 meals
             ON meals.id = filtered_orders.item->>'meal_id'
-            LEFT JOIN
+            INNER JOIN
                 kitchens
             ON kitchens.id = filtered_orders.kitchen_id
+            INNER JOIN
+                kitchen_cities
+            ON kitchen_cities.id = kitchens.city_id
         )
         SELECT
             order_with_item.id,
@@ -509,15 +512,18 @@ pub async fn find_full_order_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
                 filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
-                TO_JSONB(kitchens) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
             FROM
                 filtered_orders
-            LEFT JOIN
+            INNER JOIN
                 meals
             ON meals.id = filtered_orders.item->>'meal_id'
-            LEFT JOIN
+            INNER JOIN
                 kitchens
             ON kitchens.id = filtered_orders.kitchen_id
+            INNER JOIN
+                kitchen_cities
+            ON kitchen_cities.id = kitchens.city_id
         )
         SELECT
             order_with_item.id,
@@ -640,15 +646,18 @@ pub async fn find_many_as_user<'e, E: PgExecutor<'e>>(
                 filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
-                TO_JSONB(kitchens) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
             FROM
                 filtered_orders
-            LEFT JOIN
+            INNER JOIN
                 meals
             ON meals.id = filtered_orders.item->>'meal_id'
-            LEFT JOIN
+            INNER JOIN
                 kitchens
             ON kitchens.id = filtered_orders.kitchen_id
+            INNER JOIN
+                kitchen_cities
+            ON kitchen_cities.id = kitchens.city_id
         ),
         query_result AS (
             SELECT
@@ -704,17 +713,15 @@ pub async fn find_many_as_user<'e, E: PgExecutor<'e>>(
                 AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
         )
         SELECT
-            JSON_AGG(query_result) AS items,
+            COALESCE(JSONB_AGG(query_result), '[]'::JSONB) AS items,
             JSONB_BUILD_OBJECT(
                 'page', $1,
                 'per_page', $2,
-                'total', total_rows
+                'total', (SELECT total_rows FROM total_count)
             ) AS meta
         FROM
             query_result,
             total_count
-        GROUP BY
-            total_count.total_rows
         "#,
         pagination.page as i32,
         pagination.per_page as i32,
@@ -802,15 +809,18 @@ pub async fn find_many_as_kitchen<'e, E: PgExecutor<'e>>(
                 filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
-                TO_JSONB(kitchens) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
             FROM
                 filtered_orders
-            LEFT JOIN
+            INNER JOIN
                 meals
             ON meals.id = filtered_orders.item->>'meal_id'
-            LEFT JOIN
+            INNER JOIN
                 kitchens
             ON kitchens.id = filtered_orders.kitchen_id
+            INNER JOIN
+                kitchen_cities
+            ON kitchen_cities.id = kitchens.city_id
         ),
         query_result AS (
             SELECT
@@ -867,17 +877,15 @@ pub async fn find_many_as_kitchen<'e, E: PgExecutor<'e>>(
                 AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
         )
         SELECT
-            JSON_AGG(query_result) AS items,
+            COALESCE(JSONB_AGG(query_result), '[]'::JSONB) AS items,
             JSONB_BUILD_OBJECT(
                 'page', $1,
                 'per_page', $2,
-                'total', total_rows
+                'total', (SELECT total_rows FROM total_count)
             ) AS meta
         FROM
             query_result,
             total_count
-        GROUP BY
-            total_count.total_rows
         "#,
         pagination.page as i32,
         pagination.per_page as i32,
@@ -965,15 +973,18 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
-                TO_JSONB(kitchens) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
             FROM
                 filtered_orders
-            LEFT JOIN
+            INNER JOIN
                 meals
             ON meals.id = filtered_orders.item->>'meal_id'
-            LEFT JOIN
+            INNER JOIN
                 kitchens
             ON kitchens.id = filtered_orders.kitchen_id
+            INNER JOIN
+                kitchen_cities
+            ON kitchen_cities.id = kitchens.city_id
         ),
         query_result AS (
             SELECT
@@ -1030,17 +1041,15 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
         )
         SELECT
-            JSON_AGG(query_result) AS items,
+            COALESCE(JSONB_AGG(query_result), '[]'::JSONB) AS items,
             JSONB_BUILD_OBJECT(
                 'page', $1,
                 'per_page', $2,
-                'total', total_rows
+                'total', (SELECT total_rows FROM total_count)
             ) AS meta
         FROM
             query_result,
             total_count
-        GROUP BY
-            total_count.total_rows
         "#,
         pagination.page as i32,
         pagination.per_page as i32,
