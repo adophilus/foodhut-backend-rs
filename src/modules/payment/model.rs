@@ -40,6 +40,12 @@ pub struct DedicatedAccountAssignmentDedicatedAccount {
 }
 
 #[derive(Deserialize)]
+pub struct TransactionSuccessful {
+    pub amount: BigDecimal,
+    pub metadata: service::online::Metadata,
+}
+
+#[derive(Deserialize)]
 pub struct DedicatedAccountAssignmentSuccessful {
     pub customer: DedicatedAccountAssignmentCustomer,
     pub dedicated_account: DedicatedAccountAssignmentDedicatedAccount,
@@ -54,10 +60,7 @@ pub struct DedicatedAccountAssignmentFailed {
 #[serde(tag = "event", content = "data")]
 pub enum Event {
     #[serde(rename = "charge.success")]
-    TransactionSuccessful {
-        amount: BigDecimal,
-        metadata: service::online::Metadata,
-    },
+    TransactionSuccessful(TransactionSuccessful),
     // #[serde(rename = "customeridentification.success")]
     // CustomerIdentificationSuccessful(CustomerIdentificationSuccessful),
     // #[serde(rename = "customeridentification.failed")]

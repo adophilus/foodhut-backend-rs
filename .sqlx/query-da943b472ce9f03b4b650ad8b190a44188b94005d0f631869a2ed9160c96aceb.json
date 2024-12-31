@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE wallets SET\n                balance = CASE WHEN $1 = $2 THEN balance + $3::numeric ELSE balance - $3::numeric END\n        WHERE\n            owner_id = $4\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Numeric",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "da943b472ce9f03b4b650ad8b190a44188b94005d0f631869a2ed9160c96aceb"
+}

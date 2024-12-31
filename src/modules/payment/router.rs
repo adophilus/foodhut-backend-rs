@@ -1,5 +1,6 @@
 use super::handler;
 use super::model;
+use super::service;
 use crate::types::Context;
 use axum::{
     extract::{Request, State},
@@ -62,11 +63,18 @@ async fn handle_webhook(State(ctx): State<Arc<Context>>, req: Request) -> Respon
     };
 
     match payload {
-        model::Event::TransactionSuccessful { amount, metadata } => {
-            handler::successful_transaction(ctx.clone(), amount, metadata)
-                .await
-                .into_response()
-        }
+        model::Event::TransactionSuccessful(payload) => match payload.metadata {
+            service::online::Metadata::Order(metadata) => {
+                handler::successful_order_payment(ctx.clone(), payload.amount, metadata)
+                    .await
+                    .into_response()
+            }
+            service::online::Metadata::Topup(metadata) => {
+                handler::successful_topup(ctx.clone(), payload.amount, metadata)
+                    .await
+                    .into_response()
+            }
+        },
         // model::Event::CustomerIdentificationFailed(payload) => {
         //     handler::customer_identification_failed(ctx.clone(), payload)
         //         .await

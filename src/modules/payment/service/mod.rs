@@ -49,9 +49,9 @@ pub async fn initialize_payment_for_order(
             Ok(_) => Ok(PaymentDetails(json!({ "message": "Payment successful" }))),
             Err(_) => Err(Error::UnexpectedError),
         },
-        PaymentMethod::Online => match online::initialize_payment_for_order(
+        PaymentMethod::Online => match online::initialize_invoice_for_order(
             ctx,
-            online::InitializePaymentForOrder {
+            online::InitializeInvoiceForOrder {
                 order: payload.order,
                 payer: payload.payer,
             },

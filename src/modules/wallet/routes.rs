@@ -8,6 +8,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use bigdecimal::BigDecimal;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -82,9 +83,37 @@ async fn get_wallet_by_id(
     }
 }
 
+#[derive(Deserialize)]
+struct CreateTopupInvoicePayload {
+    amount: BigDecimal,
+}
+
+async fn create_topup_invoice(
+    State(ctx): State<Arc<Context>>,
+    auth: Auth,
+    Json(payload): Json<CreateTopupInvoicePayload>,
+) -> impl IntoResponse {
+    match service::create_topup_invoice(
+        ctx.clone(),
+        service::CreateTopupInvoicePayload {
+            amount: payload.amount,
+            user: auth.user,
+        },
+    )
+    .await
+    {
+        Ok(url) => (StatusCode::OK, Json(json!({ "url": url }))),
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to create topup invoice" })),
+        ),
+    }
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/bank-account", post(create_bank_account))
         .route("/profile", get(get_wallet_by_profile))
         .route("/:id", get(get_wallet_by_id))
+        .route("/top-up", post(create_topup_invoice))
 }

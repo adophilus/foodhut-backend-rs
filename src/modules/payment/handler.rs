@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 use crate::types;
 
-pub async fn successful_transaction(
+pub async fn successful_order_payment(
     ctx: Arc<types::Context>,
     amount: BigDecimal,
-    metadata: service::online::Metadata,
+    metadata: service::online::OrderInvoiceMetadata,
 ) -> impl IntoResponse {
     let mut tx = match ctx.db_conn.pool.begin().await {
         Ok(tx) => tx,
@@ -27,9 +27,7 @@ pub async fn successful_transaction(
         return StatusCode::OK.into_response();
     }
 
-    if amount / BigDecimal::from_u8(100).expect("Invalid primitive value to convert from")
-        < order.total
-    {
+    if amount / BigDecimal::from(100) < order.total {
         return StatusCode::BAD_REQUEST.into_response();
     }
 
@@ -60,6 +58,61 @@ pub async fn successful_transaction(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
     tracing::info!("Transaction successful for order {}", order.id.clone());
+
+    match tx.commit().await {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => {
+            tracing::error!("Failed to commit transaction: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+pub async fn successful_topup(
+    ctx: Arc<types::Context>,
+    amount: BigDecimal,
+    metadata: service::online::TopupMetadata,
+) -> impl IntoResponse {
+    let mut tx = match ctx.db_conn.pool.begin().await {
+        Ok(tx) => tx,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let topup_amount = amount / BigDecimal::from(100);
+
+    if let Err(_) = wallet::repository::update_by_owner_id(
+        &mut *tx,
+        metadata.user_id.clone(),
+        wallet::repository::UpdateByOwnerIdPayload {
+            operation: wallet::repository::UpdateOperation::Credit,
+            amount: topup_amount.clone(),
+        },
+    )
+    .await
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
+    if let Err(_) = transaction::repository::create(
+        &mut *tx,
+        transaction::repository::CreatePayload::Online(
+            transaction::repository::CreateOnlineTransactionPayload {
+                amount: topup_amount,
+                direction: transaction::repository::TransactionDirection::Incoming,
+                note: Some("Topup".to_string()),
+                user_id: metadata.user_id.clone(),
+            },
+        ),
+    )
+    .await
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    tracing::debug!(
+        "Topup Transaction successful for {}",
+        metadata.user_id.clone()
+    );
 
     match tx.commit().await {
         Ok(_) => StatusCode::OK.into_response(),

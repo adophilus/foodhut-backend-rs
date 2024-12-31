@@ -1,4 +1,5 @@
 use axum::http::HeaderMap;
+use bigdecimal::BigDecimal;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_string_from_number;
@@ -7,10 +8,7 @@ use sqlx::{Postgres, Transaction};
 use std::sync::Arc;
 
 use crate::{
-    modules::{
-        order::repository::Order, transaction, user::repository::User,
-        wallet,
-    },
+    modules::{order::repository::Order, payment, transaction, user::repository::User, wallet},
     types::AppEnvironment,
     Context,
 };
@@ -301,8 +299,8 @@ pub async fn initialize_payment_for_order(
     if let Err(_) = wallet::repository::update_by_id(
         &mut **tx,
         wallet.id.clone(),
-        wallet::repository::UpdateWalletPayload {
-            operation: wallet::repository::UpdateWalletOperation::Debit,
+        wallet::repository::UpdateByIdPayload {
+            operation: wallet::repository::UpdateOperation::Debit,
             amount: payload.order.total.clone(),
         },
     )
@@ -314,8 +312,8 @@ pub async fn initialize_payment_for_order(
     wallet::repository::update_by_id(
         &mut **tx,
         wallet.id.clone(),
-        wallet::repository::UpdateWalletPayload {
-            operation: wallet::repository::UpdateWalletOperation::Debit,
+        wallet::repository::UpdateByIdPayload {
+            operation: wallet::repository::UpdateOperation::Debit,
             amount: payload.order.total.clone(),
         },
     )
@@ -337,4 +335,24 @@ pub async fn initialize_payment_for_order(
     .map_err(|_| Error::UnexpectedError)?;
 
     Ok(())
+}
+
+pub struct CreateTopupInvoicePayload {
+    pub user: User,
+    pub amount: BigDecimal,
+}
+
+pub async fn create_topup_invoice(
+    ctx: Arc<Context>,
+    payload: CreateTopupInvoicePayload,
+) -> Result<String> {
+    payment::service::online::create_topup_invoice(
+        ctx,
+        payment::service::online::CreateTopupInvoicePayload {
+            user: payload.user.clone(),
+            amount: payload.amount.clone(),
+        },
+    )
+    .await
+    .map_err(|_| Error::UnexpectedError)
 }

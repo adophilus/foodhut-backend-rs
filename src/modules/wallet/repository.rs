@@ -127,32 +127,32 @@ pub async fn find_by_owner_id<'e, Executor: PgExecutor<'e>>(
 }
 
 #[derive(Serialize)]
-pub enum UpdateWalletOperation {
+pub enum UpdateOperation {
     #[serde(rename = "CREDIT")]
     Credit,
     #[serde(rename = "DEBIT")]
     Debit,
 }
 
-impl ToString for UpdateWalletOperation {
+impl ToString for UpdateOperation {
     fn to_string(&self) -> String {
         match *self {
-            UpdateWalletOperation::Credit => String::from("CREDIT"),
-            UpdateWalletOperation::Debit => String::from("DEBIT"),
+            UpdateOperation::Credit => String::from("CREDIT"),
+            UpdateOperation::Debit => String::from("DEBIT"),
         }
     }
 }
 
 #[derive(Serialize)]
-pub struct UpdateWalletPayload {
-    pub operation: UpdateWalletOperation,
+pub struct UpdateByIdPayload {
+    pub operation: UpdateOperation,
     pub amount: BigDecimal,
 }
 
 pub async fn update_by_id<'e, Executor: PgExecutor<'e>>(
     e: Executor,
     id: String,
-    payload: UpdateWalletPayload,
+    payload: UpdateByIdPayload,
 ) -> Result<(), Error> {
     // TODO: checks need to be made so that the user's balance cannot be negative
 
@@ -164,9 +164,41 @@ pub async fn update_by_id<'e, Executor: PgExecutor<'e>>(
             id = $4
         ",
         payload.operation.to_string(),
-        UpdateWalletOperation::Credit.to_string(),
+        UpdateOperation::Credit.to_string(),
         payload.amount,
         id
+    )
+    .execute(e)
+        .await
+        .map(|_|())
+    .map_err(|err|{
+        tracing::error!("Error occurred while trying to update wallet by id: {}", err);
+        Error::UnexpectedError
+    })
+}
+
+#[derive(Serialize)]
+pub struct UpdateByOwnerIdPayload {
+    pub operation: UpdateOperation,
+    pub amount: BigDecimal,
+}
+
+pub async fn update_by_owner_id<'e, Executor: PgExecutor<'e>>(
+    e: Executor,
+    owner_id: String,
+    payload: UpdateByOwnerIdPayload,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        UPDATE wallets SET
+                balance = CASE WHEN $1 = $2 THEN balance + $3::numeric ELSE balance - $3::numeric END
+        WHERE
+            owner_id = $4
+        ",
+        payload.operation.to_string(),
+        UpdateOperation::Credit.to_string(),
+        payload.amount,
+        owner_id
     )
     .execute(e)
         .await
