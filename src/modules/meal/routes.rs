@@ -5,7 +5,7 @@ use crate::{
     modules::{
         auth::middleware::Auth,
         cart::{self, repository::CreateCartPayload},
-        kitchen, storage,
+        kitchen, storage, user,
     },
     utils::pagination,
 };
@@ -140,6 +140,7 @@ struct Filters {
     pub kitchen_id: Option<String>,
     pub search: Option<String>,
     pub is_liked: Option<bool>,
+    pub as_kitchen: Option<bool>,
 }
 
 async fn get_meals(
@@ -186,17 +187,45 @@ async fn get_meals(
         }
     };
 
-    match repository::find_many(
-        &ctx.db_conn.pool,
-        pagination.clone(),
-        repository::Filters {
-            kitchen_id: filters.kitchen_id,
-            search: filters.search,
-            is_liked_by,
-        },
-    )
-    .await
-    {
+    let meals_result = if user::repository::is_admin(&auth.user) {
+        repository::find_many_as_admin(
+            &ctx.db_conn.pool,
+            pagination.clone(),
+            repository::FindManyAsAdminFilters {
+                kitchen_id: filters.kitchen_id,
+                search: filters.search,
+                is_liked_by,
+            },
+        )
+        .await
+    }
+    else if filters.as_kitchen.is_some() {
+        repository::find_many_as_kitchen(
+            &ctx.db_conn.pool,
+            pagination.clone(),
+            repository::FindManyAsKitchenFilters {
+                kitchen_id: filters.kitchen_id,
+                search: filters.search,
+                is_liked_by,
+                owner_id: auth.user.id.clone()
+            },
+        )
+        .await
+    }
+    else {
+        repository::find_many_as_user(
+            &ctx.db_conn.pool,
+            pagination.clone(),
+            repository::FindManyAsUserFilters {
+                kitchen_id: filters.kitchen_id,
+                search: filters.search,
+                is_liked_by,
+            },
+        )
+        .await
+    };
+
+    match meals_result {
         Ok(paginated_meals) => {
             let augmented_meals = paginated_meals
                 .items

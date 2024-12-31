@@ -141,16 +141,16 @@ pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Optio
 }
 
 #[derive(Deserialize)]
-pub struct Filters {
+pub struct FindManyAsAdminFilters {
     pub kitchen_id: Option<String>,
     pub search: Option<String>,
     pub is_liked_by: Option<String>,
 }
 
-pub async fn find_many<'e, E>(
+pub async fn find_many_as_admin<'e, E>(
     e: E,
     pagination: Pagination,
-    filters: Filters,
+    filters: FindManyAsAdminFilters,
 ) -> Result<Paginated<Meal>, Error>
 where
     E: PgExecutor<'e>,
@@ -176,8 +176,7 @@ where
                 meals.kitchen_id = COALESCE($3, meals.kitchen_id)
                 AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
                 AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
-            LIMIT $1
-            OFFSET $2
+            LIMIT $2 OFFSET ($1 - 1) * $2
         ),
         total_count AS (
             SELECT
@@ -197,16 +196,182 @@ where
                 AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
         )
         SELECT 
-            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::jsonb) AS items,
+            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
             JSONB_BUILD_OBJECT(
-                'total', (SELECT total_rows FROM total_count),
-                'per_page', $1,
-                'page', $2 / $1 + 1
+                'page', $1,
+                'per_page', $2,
+                'total', (SELECT total_rows FROM total_count)
             ) AS meta
         FROM filtered_data;
         "#,
-        pagination.per_page as i64,
-        ((pagination.page - 1) * pagination.per_page) as i64,
+        pagination.page as i32,
+        pagination.per_page as i32,
+        filters.kitchen_id,
+        filters.search,
+        filters.is_liked_by,
+    )
+    .fetch_one(e)
+    .await
+    .map(DatabasePaginatedMeal::into)
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch many meals: {}", err);
+        Error::UnexpectedError
+    })
+}
+
+#[derive(Deserialize)]
+pub struct FindManyAsKitchenFilters {
+    pub kitchen_id: Option<String>,
+    pub search: Option<String>,
+    pub is_liked_by: Option<String>,
+    pub owner_id: String,
+}
+
+pub async fn find_many_as_kitchen<'e, E>(
+    e: E,
+    pagination: Pagination,
+    filters: FindManyAsKitchenFilters,
+) -> Result<Paginated<Meal>, Error>
+where
+    E: PgExecutor<'e>,
+{
+    sqlx::query_as!(
+        DatabasePaginatedMeal,
+        r#"
+        WITH filtered_data AS (
+            SELECT
+                meals.*
+            FROM
+                meals
+            LEFT JOIN
+                meal_user_reactions 
+            ON
+                meals.id = meal_user_reactions.meal_id
+            AND (
+                $5::TEXT IS NOT NULL AND 
+                meal_user_reactions.user_id = $5 AND 
+                meal_user_reactions.reaction = 'LIKE'
+            )
+            INNER JOIN kitchens ON meals.kitchen_id = kitchens.id
+            WHERE
+                meals.kitchen_id = COALESCE($3, meals.kitchen_id)
+                AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
+                AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
+                AND (meals.is_available = TRUE OR kitchens.owner_id = $6)
+            LIMIT $2 OFFSET ($1 - 1) * $2
+        ),
+        total_count AS (
+            SELECT
+                COUNT(meals.id) AS total_rows
+            FROM
+                meals
+            LEFT JOIN meal_user_reactions 
+            ON meals.id = meal_user_reactions.meal_id
+            AND (
+                $5::TEXT IS NOT NULL AND 
+                meal_user_reactions.user_id = $5 AND 
+                meal_user_reactions.reaction = 'LIKE'
+            )
+            INNER JOIN kitchens ON meals.kitchen_id = kitchens.id
+            WHERE
+                meals.kitchen_id = COALESCE($3, meals.kitchen_id)
+                AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
+                AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
+                AND (meals.is_available = TRUE OR kitchens.owner_id = $6)
+        )
+        SELECT 
+            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
+            JSONB_BUILD_OBJECT(
+                'page', $1,
+                'per_page', $2,
+                'total', (SELECT total_rows FROM total_count)
+            ) AS meta
+        FROM filtered_data;
+        "#,
+        pagination.page as i32,
+        pagination.per_page as i32,
+        filters.kitchen_id,
+        filters.search,
+        filters.is_liked_by,
+        filters.owner_id,
+    )
+    .fetch_one(e)
+    .await
+    .map(DatabasePaginatedMeal::into)
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch many meals: {}", err);
+        Error::UnexpectedError
+    })
+}
+
+#[derive(Deserialize)]
+pub struct FindManyAsUserFilters {
+    pub kitchen_id: Option<String>,
+    pub search: Option<String>,
+    pub is_liked_by: Option<String>,
+}
+
+pub async fn find_many_as_user<'e, E>(
+    e: E,
+    pagination: Pagination,
+    filters: FindManyAsUserFilters,
+) -> Result<Paginated<Meal>, Error>
+where
+    E: PgExecutor<'e>,
+{
+    sqlx::query_as!(
+        DatabasePaginatedMeal,
+        r#"
+        WITH filtered_data AS (
+            SELECT
+                meals.*
+            FROM
+                meals
+            LEFT JOIN
+                meal_user_reactions 
+            ON
+                meals.id = meal_user_reactions.meal_id
+            AND (
+                $5::TEXT IS NOT NULL AND 
+                meal_user_reactions.user_id = $5 AND 
+                meal_user_reactions.reaction = 'LIKE'
+            )
+            WHERE
+                meals.kitchen_id = COALESCE($3, meals.kitchen_id)
+                AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
+                AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
+                AND (meals.is_available = TRUE)
+            LIMIT $2 OFFSET ($1 - 1) * $2
+        ),
+        total_count AS (
+            SELECT
+                COUNT(meals.id) AS total_rows
+            FROM
+                meals
+            LEFT JOIN meal_user_reactions 
+            ON meals.id = meal_user_reactions.meal_id
+            AND (
+                $5::TEXT IS NOT NULL AND 
+                meal_user_reactions.user_id = $5 AND 
+                meal_user_reactions.reaction = 'LIKE'
+            )
+            WHERE
+                meals.kitchen_id = COALESCE($3, meals.kitchen_id)
+                AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
+                AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
+                AND (meals.is_available = TRUE)
+        )
+        SELECT 
+            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
+            JSONB_BUILD_OBJECT(
+                'page', $1,
+                'per_page', $2,
+                'total', (SELECT total_rows FROM total_count)
+            ) AS meta
+        FROM filtered_data;
+        "#,
+        pagination.page as i32,
+        pagination.per_page as i32,
         filters.kitchen_id,
         filters.search,
         filters.is_liked_by,
