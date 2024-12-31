@@ -283,7 +283,7 @@ pub struct FindManyFilters {
     search: Option<String>,
 }
 
-pub async fn find_many<'e, E: PgExecutor<'e>>(
+pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
     e: E,
     pagination: Pagination,
     filters: FindManyFilters,
@@ -317,15 +317,13 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
         SELECT
         JSONB_AGG(ROW_TO_JSON(filtered_data)) AS items,
         JSONB_BUILD_OBJECT(
-            'total', total_count.total_rows,
+            'total', (SELECT total_rows FROM total_count),
             'per_page', $1,
             'page', $2 / $1 + 1
         ) AS meta
         FROM
             filtered_data,
             total_count
-        GROUP BY
-            total_count.total_rows;
         "#,
         pagination.per_page as i64,
         ((pagination.page - 1) * pagination.per_page) as i64,
@@ -343,6 +341,68 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
         Error::UnexpectedError
     })
 }
+
+pub async fn find_many_as_user<'e, E: PgExecutor<'e>>(
+    e: E,
+    pagination: Pagination,
+    filters: FindManyFilters,
+) -> Result<Paginated<Kitchen>, Error> {
+    sqlx::query_as!(
+        DatabasePaginatedKitchen,
+        r#"
+        WITH filtered_data AS (
+            SELECT
+                kitchens.*,
+                TO_JSONB(kitchen_cities) AS city
+            FROM
+                kitchens,
+                kitchen_cities
+            WHERE
+                kitchens.type = COALESCE($3, kitchens.type)
+                AND kitchens.name ILIKE CONCAT('%', COALESCE($4, kitchens.name), '%')
+                AND kitchens.city_id = kitchen_cities.id
+                AND kitchens.is_available = TRUE
+            LIMIT $1
+            OFFSET $2
+        ),
+        total_count AS (
+        SELECT
+            COUNT(kitchens.id) AS total_rows
+        FROM
+            kitchens
+        WHERE
+            kitchens.type = COALESCE(NULL, kitchens.type)
+            AND kitchens.name ILIKE CONCAT('%', COALESCE(NULL, kitchens.name), '%')
+            AND kitchens.is_available = TRUE
+        )
+        SELECT
+        JSONB_AGG(ROW_TO_JSON(filtered_data)) AS items,
+        JSONB_BUILD_OBJECT(
+            'total', (SELECT total_rows FROM total_count),
+            'per_page', $1,
+            'page', $2 / $1 + 1
+        ) AS meta
+        FROM
+            filtered_data,
+            total_count
+        "#,
+        pagination.per_page as i64,
+        ((pagination.page - 1) * pagination.per_page) as i64,
+        filters.r#type,
+        filters.search,
+    )
+    .fetch_one(e)
+    .await
+    .map(DatabasePaginatedKitchen::into)
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch many kitchens: {}",
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
 
 pub async fn find_many_cities<'e, E: PgExecutor<'e>>(e: E) -> Result<Vec<KitchenCity>, Error> {
     sqlx::query_as!(KitchenCity, "SELECT * FROM kitchen_cities")

@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH filtered_data AS (\n            SELECT\n                kitchens.*,\n                TO_JSONB(kitchen_cities) AS city\n            FROM\n                kitchens,\n                kitchen_cities\n            WHERE\n                kitchens.type = COALESCE($3, kitchens.type)\n                AND kitchens.name ILIKE CONCAT('%', COALESCE($4, kitchens.name), '%')\n                AND kitchens.city_id = kitchen_cities.id\n                AND kitchens.is_available = TRUE\n            LIMIT $1\n            OFFSET $2\n        ),\n        total_count AS (\n        SELECT\n            COUNT(kitchens.id) AS total_rows\n        FROM\n            kitchens\n        WHERE\n            kitchens.type = COALESCE(NULL, kitchens.type)\n            AND kitchens.name ILIKE CONCAT('%', COALESCE(NULL, kitchens.name), '%')\n            AND kitchens.is_available = TRUE\n        )\n        SELECT\n        JSONB_AGG(ROW_TO_JSON(filtered_data)) AS items,\n        JSONB_BUILD_OBJECT(\n            'total', (SELECT total_rows FROM total_count),\n            'per_page', $1,\n            'page', $2 / $1 + 1\n        ) AS meta\n        FROM\n            filtered_data,\n            total_count\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "items",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 1,
+        "name": "meta",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "369cd8a1c714fac8657ca15cae48093889fa95e64eda75d0e1600d514638f914"
+}

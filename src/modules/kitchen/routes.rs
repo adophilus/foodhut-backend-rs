@@ -150,11 +150,18 @@ async fn create_kitchen(
 }
 
 async fn get_kitchens(
+    auth: Auth,
     State(ctx): State<Arc<Context>>,
     Query(filters): Query<repository::FindManyFilters>,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    match repository::find_many(&ctx.db_conn.pool, pagination.clone(), filters).await {
+    let kitchens_result = if user::repository::is_admin(&auth.user) {
+        repository::find_many_as_admin(&ctx.db_conn.pool, pagination.clone(), filters).await
+    } else {
+        repository::find_many_as_user(&ctx.db_conn.pool, pagination.clone(), filters).await
+    };
+
+    match kitchens_result {
         Ok(paginated_kitchens) => (StatusCode::OK, Json(json!(paginated_kitchens))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -198,9 +205,7 @@ async fn fetch_kitchen_types() -> impl IntoResponse {
     Json(json!(KITCHEN_TYPES))
 }
 
-async fn fetch_kitchen_cities(
-    State(ctx): State<Arc<Context>>
-) -> impl IntoResponse {
+async fn fetch_kitchen_cities(State(ctx): State<Arc<Context>>) -> impl IntoResponse {
     match repository::find_many_cities(&ctx.db_conn.pool).await {
         Ok(cities) => Json(json!(cities)).into_response(),
         Err(_) => (
