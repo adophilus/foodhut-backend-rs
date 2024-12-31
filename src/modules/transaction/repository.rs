@@ -245,8 +245,32 @@ pub async fn find_by_id<'e, E: PgExecutor<'e>>(
     })
 }
 
+pub async fn find_by_id_and_user_id<'e, E: PgExecutor<'e>>(
+    e: E,
+    id: String,
+    user_id: String,
+) -> Result<Option<Transaction>, Error> {
+    sqlx::query_as!(
+        DbTransaction,
+        "SELECT * FROM transactions WHERE id = $1 AND user_id = $2",
+        id,
+        user_id
+    )
+    .fetch_optional(e)
+    .await
+    .map(|db_transaction| db_transaction.map(Into::into))
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch transaction by id {}: {:?}",
+            id,
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
 #[derive(Deserialize)]
-pub struct Filters {
+pub struct FindManyFilters {
     pub user_id: Option<String>,
     pub before: Option<u64>,
     pub after: Option<u64>,
@@ -255,7 +279,7 @@ pub struct Filters {
 pub async fn find_many<'e, Executor: PgExecutor<'e>>(
     e: Executor,
     pagination: Pagination,
-    filters: Filters,
+    filters: FindManyFilters,
 ) -> Result<Paginated<Transaction>, Error> {
     sqlx::query_as!(
         DatabasePaginatedDbTransaction,
@@ -267,8 +291,9 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
                 ($3::TEXT IS NULL OR transactions.user_id = $3)
                 AND ($4::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) < $4)
                 AND ($5::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) > $5)
-            LIMIT $1
-            OFFSET $2
+            ORDER BY created_at DESC
+            LIMIT $2
+            OFFSET ($1 - 1) * $2
         ),
         total_count AS (
             SELECT COUNT(transactions.id) AS total_rows
@@ -281,14 +306,14 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
         SELECT 
             COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_transactions)), '[]'::jsonb) AS items,
             JSONB_BUILD_OBJECT(
-                'total', (SELECT total_rows FROM total_count),
-                'per_page', $1,
-                'page', $2 / $1 + 1
+                'page', $1,
+                'per_page', $2,
+                'total', (SELECT total_rows FROM total_count)
             ) AS meta
         FROM filtered_transactions;
     "#,
-        pagination.per_page as i64,
-        ((pagination.page - 1) * pagination.per_page) as i64,
+        pagination.page as i32,
+        pagination.per_page as i32,
         filters.user_id,
         filters.before.map(|before| before as i64),
         filters.after.map(|after| after as i64),

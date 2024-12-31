@@ -1,5 +1,12 @@
-use super::repository::{self, Filters};
-use crate::{modules::auth::middleware::AdminAuth, types::Context, utils::pagination::Pagination};
+use super::repository;
+use crate::{
+    modules::{
+        auth::middleware::{AdminAuth, Auth},
+        user,
+    },
+    types::Context,
+    utils::pagination::Pagination,
+};
 use axum::{
     extract::{Path, Query, State},
     response::IntoResponse,
@@ -7,15 +14,22 @@ use axum::{
     Json, Router,
 };
 use hyper::StatusCode;
+use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 
 async fn get_transaction_by_id(
     State(ctx): State<Arc<Context>>,
-    _: AdminAuth,
+    auth: Auth,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match repository::find_by_id(&ctx.db_conn.pool, id).await {
+    let transaction_result = if user::repository::is_admin(&auth.user) {
+        repository::find_by_id(&ctx.db_conn.pool, id).await
+    } else {
+        repository::find_by_id_and_user_id(&ctx.db_conn.pool, id, auth.user.id.clone()).await
+    };
+
+    match transaction_result {
         Ok(Some(tx)) => (StatusCode::OK, Json(json!(tx))),
         Ok(None) => (
             StatusCode::NOT_FOUND,
@@ -28,13 +42,44 @@ async fn get_transaction_by_id(
     }
 }
 
+#[derive(Deserialize)]
+struct GetTransactionFilters {
+    user_id: Option<String>,
+    before: Option<u64>,
+    after: Option<u64>,
+}
+
 async fn get_transactions(
     State(ctx): State<Arc<Context>>,
-    _: AdminAuth,
-    Query(filters): Query<Filters>,
+    auth: Auth,
+    Query(filters): Query<GetTransactionFilters>,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    match repository::find_many(&ctx.db_conn.pool, pagination, filters).await {
+    let transactions_result = if user::repository::is_admin(&auth.user) {
+        repository::find_many(
+            &ctx.db_conn.pool,
+            pagination,
+            repository::FindManyFilters {
+                user_id: filters.user_id,
+                before: filters.before,
+                after: filters.after,
+            },
+        )
+        .await
+    } else {
+        repository::find_many(
+            &ctx.db_conn.pool,
+            pagination,
+            repository::FindManyFilters {
+                user_id: Some(auth.user.id.clone()),
+                before: filters.before,
+                after: filters.after,
+            },
+        )
+        .await
+    };
+
+    match transactions_result {
         Ok(transactions) => (StatusCode::OK, Json(json!(transactions))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
