@@ -302,31 +302,31 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 kitchens.type = COALESCE($3, kitchens.type)
                 AND kitchens.name ILIKE CONCAT('%', COALESCE($4, kitchens.name), '%')
                 AND kitchens.city_id = kitchen_cities.id
-            LIMIT $1
-            OFFSET $2
+            LIMIT $2
+            OFFSET ($1 - 1) * $2
         ),
         total_count AS (
-        SELECT
-            COUNT(kitchens.id) AS total_rows
-        FROM
-            kitchens
-        WHERE
-            kitchens.type = COALESCE(NULL, kitchens.type)
-            AND kitchens.name ILIKE CONCAT('%', COALESCE(NULL, kitchens.name), '%')
+            SELECT
+                COUNT(kitchens.id) AS total_rows
+            FROM
+                kitchens
+            WHERE
+                kitchens.type = COALESCE($3, kitchens.type)
+                AND kitchens.name ILIKE CONCAT('%', COALESCE(NULL, kitchens.name), '%')
         )
         SELECT
-        JSONB_AGG(ROW_TO_JSON(filtered_data)) AS items,
-        JSONB_BUILD_OBJECT(
-            'total', (SELECT total_rows FROM total_count),
-            'per_page', $1,
-            'page', $2 / $1 + 1
-        ) AS meta
+            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
+            JSONB_BUILD_OBJECT(
+                'page', $1,
+                'per_page', $2,
+                'total', (SELECT total_rows FROM total_count)
+            ) AS meta
         FROM
             filtered_data,
             total_count
         "#,
-        pagination.per_page as i64,
-        ((pagination.page - 1) * pagination.per_page) as i64,
+        pagination.page as i32,
+        pagination.per_page as i32,
         filters.r#type,
         filters.search,
     )
@@ -362,32 +362,32 @@ pub async fn find_many_as_user<'e, E: PgExecutor<'e>>(
                 AND kitchens.name ILIKE CONCAT('%', COALESCE($4, kitchens.name), '%')
                 AND kitchens.city_id = kitchen_cities.id
                 AND kitchens.is_available = TRUE
-            LIMIT $1
-            OFFSET $2
+            LIMIT $2
+            OFFSET ($1 - 1) * $2
         ),
         total_count AS (
-        SELECT
-            COUNT(kitchens.id) AS total_rows
-        FROM
-            kitchens
-        WHERE
-            kitchens.type = COALESCE(NULL, kitchens.type)
-            AND kitchens.name ILIKE CONCAT('%', COALESCE(NULL, kitchens.name), '%')
-            AND kitchens.is_available = TRUE
+            SELECT
+                COUNT(kitchens.id) AS total_rows
+            FROM
+                kitchens
+            WHERE
+                kitchens.type = COALESCE($3, kitchens.type)
+                AND kitchens.name ILIKE CONCAT('%', COALESCE(NULL, kitchens.name), '%')
+                AND kitchens.is_available = TRUE
         )
         SELECT
-        JSONB_AGG(ROW_TO_JSON(filtered_data)) AS items,
-        JSONB_BUILD_OBJECT(
-            'total', (SELECT total_rows FROM total_count),
-            'per_page', $1,
-            'page', $2 / $1 + 1
-        ) AS meta
+            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
+            JSONB_BUILD_OBJECT(
+                'page', $1,
+                'per_page', $2,
+                'total', (SELECT total_rows FROM total_count)
+            ) AS meta
         FROM
             filtered_data,
             total_count
         "#,
-        pagination.per_page as i64,
-        ((pagination.page - 1) * pagination.per_page) as i64,
+        pagination.page as i32,
+        pagination.per_page as i32,
         filters.r#type,
         filters.search,
     )
