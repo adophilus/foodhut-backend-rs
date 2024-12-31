@@ -205,6 +205,37 @@ async fn fetch_kitchen_types() -> impl IntoResponse {
     Json(json!(KITCHEN_TYPES))
 }
 
+#[derive(Deserialize)]
+struct CreateKitchenCityPayload {
+    name: String,
+    state: String,
+}
+
+async fn create_kitchen_city(
+    _: Auth,
+    State(ctx): State<Arc<Context>>,
+    Json(payload): Json<CreateKitchenCityPayload>,
+) -> impl IntoResponse {
+    match repository::create_kitchen_city(
+        &ctx.db_conn.pool,
+        repository::CreateKitchenCityPayload {
+            name: payload.name,
+            state: payload.state,
+        },
+    )
+    .await
+    {
+        Ok(_) => (
+            StatusCode::CREATED,
+            Json(json!({ "message": "City created" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to create city" })),
+        ),
+    }
+}
+
 async fn fetch_kitchen_cities(State(ctx): State<Arc<Context>>) -> impl IntoResponse {
     match repository::find_many_cities(&ctx.db_conn.pool).await {
         Ok(cities) => Json(json!(cities)).into_response(),
@@ -519,5 +550,8 @@ pub fn get_router() -> Router<Arc<Context>> {
         .route("/:id/block", put(block_kitchen_by_id))
         .route("/:id/unblock", put(unblock_kitchen_by_id))
         .route("/types", get(fetch_kitchen_types))
-        .route("/cities", get(fetch_kitchen_cities))
+        .route(
+            "/cities",
+            post(create_kitchen_city).get(fetch_kitchen_cities),
+        )
 }

@@ -403,7 +403,6 @@ pub async fn find_many_as_user<'e, E: PgExecutor<'e>>(
     })
 }
 
-
 pub async fn find_many_cities<'e, E: PgExecutor<'e>>(e: E) -> Result<Vec<KitchenCity>, Error> {
     sqlx::query_as!(KitchenCity, "SELECT * FROM kitchen_cities")
         .fetch_all(e)
@@ -551,6 +550,35 @@ pub async fn unlike_by_id<'e, E: PgExecutor<'e>>(
             Err(Error::UnexpectedError)
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CreateKitchenCityPayload {
+    pub name: String,
+    pub state: String,
+}
+
+pub async fn create_kitchen_city<'e, E: PgExecutor<'e>>(
+    e: E,
+    payload: CreateKitchenCityPayload,
+) -> Result<KitchenCity, Error> {
+    sqlx::query_as!(
+        KitchenCity,
+        r#"
+        INSERT INTO kitchen_cities (id, name, state)
+        VALUES ($1, $2, $3)
+        RETURNING *
+        "#,
+        Ulid::new().to_string(),
+        payload.name,
+        payload.state
+    )
+    .fetch_one(e)
+    .await
+    .map_err(|err| {
+        tracing::error!("Failed to create kitchen city: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 pub fn is_owner(user: &User, kitchen: &Kitchen) -> bool {
