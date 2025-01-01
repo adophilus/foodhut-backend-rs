@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            wallets.*\n        FROM\n            wallets,\n            kitchens,\n            users\n        WHERE\n            kitchens.id = $1\n            AND users.id = kitchens.owner_id\n            AND wallets.owner_id = users.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "balance",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "metadata",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 3,
+        "name": "owner_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "7b012b13c52be0a19d52452a8db2a300bddbc02f31c508b5f8b3e9f565c83bd8"
+}

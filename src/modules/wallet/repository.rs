@@ -126,6 +126,38 @@ pub async fn find_by_owner_id<'e, Executor: PgExecutor<'e>>(
     })
 }
 
+pub async fn find_by_kitchen_id<'e, Executor: PgExecutor<'e>>(
+    e: Executor,
+    kitchen_id: String,
+) -> Result<Option<Wallet>, Error> {
+    sqlx::query_as!(
+        Wallet,
+        "
+        SELECT
+            wallets.*
+        FROM
+            wallets,
+            kitchens,
+            users
+        WHERE
+            kitchens.id = $1
+            AND users.id = kitchens.owner_id
+            AND wallets.owner_id = users.id
+        ",
+        kitchen_id
+    )
+    .fetch_optional(e)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch a wallet by kitchen_id {}: {}",
+            kitchen_id,
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
 #[derive(Serialize)]
 pub enum UpdateOperation {
     #[serde(rename = "CREDIT")]

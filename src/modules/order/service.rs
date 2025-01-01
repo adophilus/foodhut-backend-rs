@@ -36,7 +36,7 @@ pub async fn mark_order_as_delivered(
         _ => Err(Error::UnexpectedError)?,
     };
 
-    let wallet = match wallet::repository::find_by_owner_id(
+    let wallet = match wallet::repository::find_by_kitchen_id(
         &mut *tx,
         payload.order.kitchen_id.clone(),
     )
