@@ -43,9 +43,6 @@ struct SendEmailPayload {
 }
 
 async fn send_email(ctx: Arc<Context>, payload: SendEmailPayload) -> Result<()> {
-    tracing::warn!("{}", ctx.mail.user.clone());
-    tracing::warn!("{}", ctx.mail.password.clone());
-
     let email = Message::builder()
         .from(
             format!("{} <{}>", ctx.mail.sender.clone(), ctx.mail.user.clone())
