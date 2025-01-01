@@ -63,7 +63,6 @@ async fn send_email(ctx: Arc<Context>, payload: SendEmailPayload) -> Result<()> 
         .unwrap();
 
     let transport: AsyncSmtpTransport<Tokio1Executor> =
-        // AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
         AsyncSmtpTransport::<Tokio1Executor>::relay("foodhut.co")
             .unwrap()
             .authentication(vec![Mechanism::Plain])
