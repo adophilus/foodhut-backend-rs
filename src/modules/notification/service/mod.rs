@@ -83,6 +83,7 @@ impl Notification {
     }
 }
 
+#[derive(Debug)]
 pub enum Error {
     NotSent,
     InvalidNotification,

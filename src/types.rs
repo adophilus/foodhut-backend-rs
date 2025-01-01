@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use uri_parser::parse_uri;
+use urlencoding::decode;
 
 #[derive(Clone)]
 pub enum AppEnvironment {
@@ -49,11 +51,10 @@ pub struct PaymentContext {
 
 #[derive(Clone)]
 pub struct MailContext {
-    pub access_token: Arc<Mutex<String>>,
-    pub refresh_token: String,
-    pub refresh_endpoint: String,
-    pub sender_name: String,
-    pub sender_email: String,
+    pub host: String,
+    pub sender: String,
+    pub user: String,
+    pub password: String,
 }
 
 #[derive(Clone)]
@@ -111,11 +112,8 @@ pub struct PaymentConfig {
 
 #[derive(Clone)]
 pub struct MailConfig {
-    pub access_token: String,
-    pub refresh_token: String,
-    pub refresh_endpoint: String,
-    pub sender_name: String,
-    pub sender_email: String,
+    pub sender: String,
+    pub uri: String,
 }
 
 #[derive(Clone)]
@@ -212,7 +210,11 @@ impl apalis::prelude::Storage for JobStorage {
         Ok(self.storage.len())
     }
 
-    async fn schedule(&mut self, _job: Self::Job, _on: i64) -> Result<Self::Identifier, Self::Error> {
+    async fn schedule(
+        &mut self,
+        _job: Self::Job,
+        _on: i64,
+    ) -> Result<Self::Identifier, Self::Error> {
         tracing::debug!("Job pushed into the schedule set");
         todo!()
     }
@@ -293,13 +295,8 @@ impl Default for Config {
             env::var("PAYSTACK_API_ENDPOINT").expect("PAYSTACK_API_ENDPOINT not set");
         let payment_secret_key =
             env::var("PAYSTACK_SECRET_KEY").expect("PAYSTACK_SECRET_KEY not set");
-        let mail_access_token = env::var("MAIL_ACCESS_TOKEN").expect("MAIL_ACCESS_TOKEN not set");
-        let mail_refresh_token =
-            env::var("MAIL_REFRESH_TOKEN").expect("MAIL_REFRESH_TOKEN not set");
-        let mail_refresh_endpoint =
-            env::var("MAIL_REFRESH_ENDPOINT").expect("MAIL_REFRESH_ENDPOINT not set");
-        let mail_sender_name = env::var("MAIL_SENDER_NAME").expect("MAIL_SENDER_NAME not set");
-        let mail_sender_email = env::var("MAIL_SENDER_EMAIL").expect("MAIL_SENDER_EMAIL not set");
+        let mail_sender = env::var("MAIL_SENDER").expect("MAIL_SENDER not set");
+        let mail_uri = env::var("MAIL_URI").expect("MAIL_URI not set");
         let otp_api_key = env::var("OTP_API_KEY").expect("OTP_API_KEY not set");
         let otp_app_id = env::var("OTP_APP_ID").expect("OTP_APP_ID not set");
         let otp_send_endpoint = env::var("OTP_SEND_ENDPOINT").expect("OTP_SEND_ENDPOINT not set");
@@ -329,11 +326,8 @@ impl Default for Config {
                 secret_key: payment_secret_key,
             },
             mail: MailConfig {
-                access_token: mail_access_token,
-                refresh_token: mail_refresh_token,
-                refresh_endpoint: mail_refresh_endpoint,
-                sender_name: mail_sender_name,
-                sender_email: mail_sender_email,
+                sender: mail_sender,
+                uri: mail_uri,
             },
             otp: OtpConfig {
                 api_key: otp_api_key,
@@ -360,6 +354,16 @@ impl ToContext for Config {
         let db_conn = database::connect(self.database.url.as_str()).await;
         database::migrate(db_conn.clone()).await;
 
+        let parsed_mail_uri = parse_uri(&self.mail.uri).expect("Invalid mail uri");
+        let mail_host = parsed_mail_uri.host.expect("Invalid mail host").to_string();
+        let mail_user = parsed_mail_uri.user.expect("Invalid mail user");
+        let mail_password = decode(mail_user.password.expect("Invalid mail password"))
+            .expect("Invalid mail password")
+            .to_string();
+        let mail_user = decode(mail_user.name)
+            .expect("Invalid mail user")
+            .to_string();
+
         Context {
             app: AppContext {
                 host: self.app.host,
@@ -380,11 +384,10 @@ impl ToContext for Config {
                 secret_key: self.payment.secret_key,
             },
             mail: MailContext {
-                access_token: Arc::new(Mutex::new(self.mail.access_token)),
-                refresh_token: self.mail.refresh_token,
-                refresh_endpoint: self.mail.refresh_endpoint,
-                sender_name: self.mail.sender_name,
-                sender_email: self.mail.sender_email,
+                sender: self.mail.sender,
+                user: mail_user,
+                password: mail_password,
+                host: mail_host,
             },
             otp: OtpContext {
                 api_key: self.otp.api_key,
