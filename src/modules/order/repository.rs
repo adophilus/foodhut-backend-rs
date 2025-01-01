@@ -1,3 +1,4 @@
+use crate::modules::user::repository::User;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -1068,8 +1069,6 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
     })
 }
 
-
-
 pub async fn confirm_payment<'e, E: PgExecutor<'e>>(e: E, order_id: String) -> Result<bool, Error> {
     sqlx::query!(
         r#"
@@ -1167,3 +1166,7 @@ pub async fn update_order_status<'e, E: PgExecutor<'e>>(
 //         Error::UnexpectedError
 //     })
 // }
+
+pub fn is_owner(order: &Order, user: &User) -> bool {
+    order.owner_id == user.id
+}

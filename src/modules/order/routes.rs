@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::service;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -120,7 +121,7 @@ async fn update_order_status(
     auth: Auth,
     Json(payload): Json<UpdateOrderStatusPayload>,
 ) -> impl IntoResponse {
-    // Fetch the current order item to determine its status
+    // Fetch the current order to determine its status
     let order = match repository::find_by_id(&ctx.db_conn.pool, order_id.clone()).await {
         Ok(Some(order)) => order,
         Ok(None) => {
@@ -159,20 +160,23 @@ async fn update_order_status(
                     )
                     | (repository::OrderStatus::Preparing, repository::OrderStatus::InTransit) => {
                         // Update order item status as kitchen
-                        if repository::update_order_status(
+                        match repository::update_order_status(
                             &ctx.db_conn.pool,
                             order.id.clone(),
                             payload.status.clone(),
                         )
                         .await
-                        .unwrap_or(false)
                         {
-                            return (
+                            Ok(true) => (
                                 StatusCode::OK,
                                 Json(
                                     json!({ "message": "Order item status updated successfully" }),
                                 ),
-                            );
+                            ),
+                            _ => (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({ "message": "Failed to update order status" })),
+                            ),
                         }
                     }
                     _ => {
@@ -197,8 +201,8 @@ async fn update_order_status(
             }
         }
     } else {
-        // For users (non-kitchen), ensure that the user owns the order item
-        if order.owner_id != auth.user.id {
+        // For users (non-kitchen), ensure that the user owns the order
+        if !repository::is_owner(&order, &auth.user) {
             return (
                 StatusCode::FORBIDDEN,
                 Json(json!({ "message": "User does not own this order item" })),
@@ -206,36 +210,31 @@ async fn update_order_status(
         }
 
         // For users, ensure valid transitions (user status transitions)
-        match (order.status, payload.status.clone()) {
+        match (order.status.clone(), payload.status.clone()) {
             (repository::OrderStatus::InTransit, repository::OrderStatus::Delivered) => {
-                // Update order item status as user
-                if repository::update_order_status(
-                    &ctx.db_conn.pool,
-                    order.id.clone(),
-                    payload.status.clone(),
+                // Update order status as user
+                match service::mark_order_as_delivered(
+                    ctx,
+                    service::MarkOrderAsDeliveredPayload { order },
                 )
                 .await
-                .unwrap_or(false)
                 {
-                    return (
+                    Ok(_) => (
                         StatusCode::OK,
                         Json(json!({ "message": "Order status updated successfully" })),
-                    );
+                    ),
+                    _ => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "message": "Failed to update order status" })),
+                    ),
                 }
             }
-            _ => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({ "message": "Invalid status transition for user" })),
-                );
-            }
+            _ => (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "message": "Invalid status transition for user" })),
+            ),
         }
     }
-
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(json!({ "message": "Failed to update order status" })),
-    )
 }
 
 #[derive(Deserialize)]
