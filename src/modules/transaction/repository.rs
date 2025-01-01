@@ -147,8 +147,9 @@ pub struct CreateOnlineTransactionPayload {
 pub struct CreateWalletTransactionPayload {
     pub amount: BigDecimal,
     pub direction: TransactionDirection,
-    pub wallet_id: String,
     pub note: Option<String>,
+    pub wallet_id: String,
+    pub user_id: String,
 }
 
 #[derive(Debug)]
@@ -174,8 +175,11 @@ async fn create_online_transaction<'e, E: PgExecutor<'e>>(
     sqlx::query_as!(
         DbTransaction,
         "
-        INSERT INTO transactions (id, amount, direction, type, note, user_id)
-        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+        INSERT INTO transactions
+            (id, amount, direction, type, note, user_id)
+        VALUES
+            ($1, $2, $3, $4, $5, $6)
+    RETURNING *
         ",
         Ulid::new().to_string(),
         payload.amount,
@@ -203,17 +207,25 @@ async fn create_wallet_transaction<'e, E: PgExecutor<'e>>(
 ) -> Result<Transaction, Error> {
     sqlx::query_as!(
         DbTransaction,
-        "INSERT INTO transactions (id, amount, type, note, wallet_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        "
+        INSERT INTO transactions
+            (id, amount, direction, type, note, wallet_id, user_id)
+        VALUES
+            ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+        ",
         Ulid::new().to_string(),
         payload.amount,
         payload.direction.to_string(),
+        TransactionType::Wallet.to_string(),
         payload.note,
-        payload.wallet_id
+        payload.wallet_id,
+        payload.user_id
     )
     .fetch_one(e)
     .await
     .map(Into::into)
-    .map_err(|err|{
+    .map_err(|err| {
         tracing::error!(
             "Error occurred while trying to create transaction {:?}: {}",
             payload,

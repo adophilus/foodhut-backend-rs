@@ -110,10 +110,47 @@ async fn create_topup_invoice(
     }
 }
 
+#[derive(Deserialize)]
+struct WithdrawFundsPayload {
+    account_number: String,
+    bank_code: String,
+    account_name: String,
+    amount: BigDecimal,
+}
+
+async fn withdraw_funds(
+    auth: Auth,
+    State(ctx): State<Arc<Context>>,
+    Json(payload): Json<WithdrawFundsPayload>,
+) -> impl IntoResponse {
+    match service::withdraw_funds(
+        ctx.clone(),
+        service::WithdrawFundsPayload {
+            account_number: payload.account_number,
+            bank_code: payload.bank_code,
+            account_name: payload.account_name,
+            amount: payload.amount,
+            user: auth.user,
+        },
+    )
+    .await
+    {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Withdrawal request placed" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to request withdrawal" })),
+        ),
+    }
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/bank-account", post(create_bank_account))
         .route("/profile", get(get_wallet_by_profile))
         .route("/:id", get(get_wallet_by_id))
         .route("/top-up", post(create_topup_invoice))
+        .route("/withdraw", post(withdraw_funds))
 }

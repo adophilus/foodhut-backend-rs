@@ -1,3 +1,4 @@
+use super::repository;
 use axum::http::HeaderMap;
 use bigdecimal::BigDecimal;
 use hyper::StatusCode;
@@ -328,6 +329,7 @@ pub async fn initialize_payment_for_order(
                 direction: transaction::repository::TransactionDirection::Outgoing,
                 note: Some(format!("Paid for order {}", payload.order.id.clone())),
                 wallet_id: wallet.id.clone(),
+                user_id: payload.payer.id.clone(),
             },
         ),
     )
@@ -355,4 +357,90 @@ pub async fn create_topup_invoice(
     )
     .await
     .map_err(|_| Error::UnexpectedError)
+}
+
+pub struct WithdrawFundsPayload {
+    pub account_number: String,
+    pub bank_code: String,
+    pub account_name: String,
+    pub amount: BigDecimal,
+    pub user: User,
+}
+
+pub enum WithdrawFundsError {
+    InsufficientBalance,
+    UnexpectedError,
+}
+
+pub async fn withdraw_funds(
+    ctx: Arc<Context>,
+    payload: WithdrawFundsPayload,
+) -> std::result::Result<(), WithdrawFundsError> {
+    let mut tx = ctx
+        .db_conn
+        .pool
+        .begin()
+        .await
+        .map_err(|_| WithdrawFundsError::UnexpectedError)?;
+
+    let maybe_wallet = repository::find_by_owner_id(&mut *tx, payload.user.id.clone())
+        .await
+        .map_err(|_| WithdrawFundsError::UnexpectedError)?;
+
+    let wallet = match maybe_wallet {
+        Some(wallet) => wallet,
+        None => return Err(WithdrawFundsError::UnexpectedError),
+    };
+
+    if wallet.balance < payload.amount {
+        return Err(WithdrawFundsError::InsufficientBalance);
+    }
+
+    payment::service::online::withdraw_funds(
+        ctx.clone(),
+        payment::service::online::WithdrawFundsPayload {
+            account_name: payload.account_name.clone(),
+            account_number: payload.account_number.clone(),
+            amount: payload.amount.clone(),
+            bank_code: payload.bank_code.clone(),
+            user: payload.user.clone(),
+        },
+    )
+    .await
+    .map_err(|_| WithdrawFundsError::UnexpectedError)?;
+
+    transaction::repository::create(
+        &mut *tx,
+        transaction::repository::CreatePayload::Wallet(
+            transaction::repository::CreateWalletTransactionPayload {
+                amount: payload.amount.clone(),
+                direction: transaction::repository::TransactionDirection::Outgoing,
+                note: Some(format!(
+                    "Withdrawal to {} {}",
+                    payload.account_name, payload.account_number
+                )),
+                wallet_id: wallet.id.clone(),
+                user_id: payload.user.id.clone(),
+            },
+        ),
+    )
+    .await
+    .map_err(|_| WithdrawFundsError::UnexpectedError)?;
+
+    repository::update_by_id(
+        &mut *tx,
+        wallet.id.clone(),
+        repository::UpdateByIdPayload {
+            operation: repository::UpdateOperation::Debit,
+            amount: payload.amount.clone(),
+        },
+    )
+    .await
+    .map_err(|_| WithdrawFundsError::UnexpectedError)?;
+
+    tx.commit()
+        .await
+        .map_err(|_| WithdrawFundsError::UnexpectedError)?;
+
+    Ok(())
 }
