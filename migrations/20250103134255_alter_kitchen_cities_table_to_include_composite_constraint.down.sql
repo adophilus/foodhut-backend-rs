@@ -1,0 +1,1 @@
+DROP INDEX name_state_unique_caseinsensitive_idx;
