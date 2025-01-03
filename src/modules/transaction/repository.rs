@@ -179,7 +179,7 @@ async fn create_online_transaction<'e, E: PgExecutor<'e>>(
             (id, amount, direction, type, note, user_id)
         VALUES
             ($1, $2, $3, $4, $5, $6)
-    RETURNING *
+        RETURNING *
         ",
         Ulid::new().to_string(),
         payload.amount,

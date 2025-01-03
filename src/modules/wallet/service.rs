@@ -1,4 +1,4 @@
-use super::repository;
+use super::repository::{self, Wallet};
 use axum::http::HeaderMap;
 use bigdecimal::BigDecimal;
 use hyper::StatusCode;
@@ -283,44 +283,42 @@ pub struct InitializePaymentForOrder {
 }
 
 pub async fn initialize_payment_for_order(
+    ctx: Arc<Context>,
     tx: &mut Transaction<'_, Postgres>,
     payload: InitializePaymentForOrder,
 ) -> Result<()> {
-    let wallet =
-        match wallet::repository::find_by_owner_id(&mut **tx, payload.payer.id.clone()).await {
-            Ok(Some(wallet)) => wallet,
-            Ok(None) => return Err(Error::WalletNotFound),
-            Err(_) => return Err(Error::UnexpectedError),
-        };
+    let wallet = wallet::repository::find_by_owner_id(&mut **tx, payload.payer.id.clone())
+        .await
+        .map_err(|_| Error::UnexpectedError)?
+        .ok_or(Error::WalletNotFound)?;
 
     if wallet.balance < payload.order.total {
         return Err(Error::InsufficientFunds);
     }
 
-    if let Err(_) = wallet::repository::update_by_id(
-        &mut **tx,
-        wallet.id.clone(),
-        wallet::repository::UpdateByIdPayload {
-            operation: wallet::repository::UpdateOperation::Debit,
-            amount: payload.order.total.clone(),
-        },
-    )
-    .await
-    {
-        return Err(Error::UnexpectedError);
-    };
-
-    wallet::repository::update_by_id(
-        &mut **tx,
-        wallet.id.clone(),
-        wallet::repository::UpdateByIdPayload {
-            operation: wallet::repository::UpdateOperation::Debit,
-            amount: payload.order.total.clone(),
+    payment::service::confirm_payment_for_order(
+        ctx,
+        tx,
+        payment::service::ConfirmPaymentForOrderPayload {
+            payment_method: payment::service::PaymentMethod::Wallet,
+            order: payload.order,
         },
     )
     .await
     .map_err(|_| Error::UnexpectedError)?;
 
+    Ok(())
+}
+
+pub struct ConfirmPaymentForOrderPayload {
+    pub order: Order,
+    pub wallet: Wallet,
+}
+
+pub async fn confirm_payment(
+    tx: &mut Transaction<'_, Postgres>,
+    payload: ConfirmPaymentForOrderPayload,
+) -> Result<()> {
     transaction::repository::create(
         &mut **tx,
         transaction::repository::CreatePayload::Wallet(
@@ -328,15 +326,24 @@ pub async fn initialize_payment_for_order(
                 amount: payload.order.total.clone(),
                 direction: transaction::repository::TransactionDirection::Outgoing,
                 note: Some(format!("Paid for order {}", payload.order.id.clone())),
-                wallet_id: wallet.id.clone(),
-                user_id: payload.payer.id.clone(),
+                wallet_id: payload.wallet.id.clone(),
+                user_id: payload.wallet.owner_id.clone(),
             },
         ),
     )
     .await
     .map_err(|_| Error::UnexpectedError)?;
 
-    Ok(())
+    repository::update_by_id(
+        &mut **tx,
+        payload.wallet.id.clone(),
+        repository::UpdateByIdPayload {
+            operation: repository::UpdateOperation::Debit,
+            amount: payload.order.total.clone(),
+        },
+    )
+    .await
+    .map_err(|_| Error::UnexpectedError)
 }
 
 pub struct CreateTopupInvoicePayload {

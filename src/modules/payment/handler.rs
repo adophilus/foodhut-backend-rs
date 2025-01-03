@@ -37,24 +37,16 @@ pub async fn successful_order_payment(
     //     Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     // };
 
-    if let Err(_) = transaction::repository::create(
-        &mut *tx,
-        transaction::repository::CreatePayload::Online(
-            transaction::repository::CreateOnlineTransactionPayload {
-                amount: order.total.clone(),
-                direction: transaction::repository::TransactionDirection::Outgoing,
-                note: Some(format!("Paid for order {}", order.id.clone())),
-                user_id: order.owner_id.clone(),
-            },
-        ),
+    if let Err(_) = service::confirm_payment_for_order(
+        ctx.clone(),
+        &mut tx,
+        service::ConfirmPaymentForOrderPayload {
+            order: order.clone(),
+            payment_method: service::PaymentMethod::Online,
+        },
     )
     .await
     {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-    tracing::info!("Transaction successful for order {}", order.id.clone());
-
-    if let Err(_) = service::confirm_payment_for_order(ctx.clone(), &mut *tx, order.clone()).await {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
     tracing::info!("Transaction successful for order {}", order.id.clone());

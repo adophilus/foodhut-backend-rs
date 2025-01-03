@@ -264,60 +264,28 @@ async fn pay_for_order(
         }
     };
 
-    let method = match payload.with {
-        repository::PaymentMethod::Online => payment::service::PaymentMethod::Online,
-        repository::PaymentMethod::Wallet => payment::service::PaymentMethod::Wallet,
-    };
-
-    let mut tx = match ctx.db_conn.pool.begin().await {
-        Ok(tx) => tx,
-        Err(err) => {
-            tracing::error!("{}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Failed to start transaction" })),
-            );
-        }
-    };
-
-    let details = match payment::service::initialize_payment_for_order(
+    match service::pay_for_order(
         ctx.clone(),
-        &mut tx,
-        payment::service::InitializePaymentForOrder {
-            method,
+        service::PayForOrderPayload {
+            payment_method: payload.with,
             order,
-            payer: auth.user.clone(),
+            payer: auth.user,
         },
     )
     .await
     {
-        Ok(details) => details,
-        Err(payment::service::Error::AlreadyPaid) => {
+        Ok(details) => (StatusCode::OK, Json(json!(details))),
+        Err(service::PayForOrderError::AlreadyPaid) => {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({ "error": "Payment has already been made" })),
             )
         }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Payment failed!" })),
-            )
-        }
-    };
-
-    match tx.commit().await {
-        Ok(_) => (),
-        Err(err) => {
-            tracing::error!("{}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Sorry an error occurred" })),
-            );
-        }
-    };
-
-    (StatusCode::OK, Json(json!(details)))
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Payment failed!" })),
+        ),
+    }
 }
 
 pub fn get_router() -> Router<Arc<Context>> {

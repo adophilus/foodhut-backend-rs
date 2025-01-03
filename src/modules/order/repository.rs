@@ -1,4 +1,4 @@
-use crate::modules::user::repository::User;
+use crate::modules::{payment, user::repository::User};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -140,6 +140,15 @@ impl From<String> for PaymentMethod {
     fn from(s: String) -> Self {
         s.parse()
             .unwrap_or_else(|_| panic!("Failed to parse '{}' into an PaymentMethod", s))
+    }
+}
+
+impl From<payment::service::PaymentMethod> for PaymentMethod {
+    fn from(method: payment::service::PaymentMethod) -> Self {
+        match method {
+            payment::service::PaymentMethod::Online => PaymentMethod::Online,
+            payment::service::PaymentMethod::Wallet => PaymentMethod::Wallet,
+        }
     }
 }
 
@@ -1069,20 +1078,37 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
     })
 }
 
-pub async fn confirm_payment<'e, E: PgExecutor<'e>>(e: E, order_id: String) -> Result<bool, Error> {
+pub struct ConfirmPaymentPayload {
+    pub payment_method: PaymentMethod,
+    pub order_id: String,
+}
+
+pub async fn confirm_payment<'e, E: PgExecutor<'e>>(
+    e: E,
+    payload: ConfirmPaymentPayload,
+) -> Result<bool, Error> {
     sqlx::query!(
         r#"
-        UPDATE orders SET status = 'AWAITING_ACKNOWLEDGEMENT'
-        WHERE id = $1
-          AND status = 'AWAITING_PAYMENT'
+        UPDATE orders
+        SET
+            status = 'AWAITING_ACKNOWLEDGEMENT',
+            payment_method = $1
+        WHERE
+            id = $2
+            AND status = 'AWAITING_PAYMENT'
         "#,
-        order_id
+        payload.payment_method.to_string(),
+        payload.order_id,
     )
     .fetch_optional(e)
     .await
     .map(|opt| opt.is_some())
     .map_err(|err| {
-        tracing::error!("Error confirming payment for order {}: {}", order_id, err);
+        tracing::error!(
+            "Error confirming payment for order {}: {}",
+            payload.order_id,
+            err
+        );
         Error::UnexpectedError
     })
 }

@@ -1,12 +1,14 @@
 pub mod online;
 
-use crate::modules::{order, wallet};
 use crate::modules::order::repository::{Order, OrderStatus};
+use crate::modules::{order, transaction, wallet};
 use crate::{modules::user::repository::User, types::Context};
 use serde::Serialize;
 use serde_json::json;
 use sqlx::{PgExecutor, Postgres, Transaction};
 use std::sync::Arc;
+
+use std::borrow::BorrowMut;
 
 pub enum Error {
     UnexpectedError,
@@ -16,6 +18,15 @@ pub enum Error {
 pub enum PaymentMethod {
     Wallet,
     Online,
+}
+
+impl From<order::repository::PaymentMethod> for PaymentMethod {
+    fn from(method: order::repository::PaymentMethod) -> Self {
+        match method {
+            order::repository::PaymentMethod::Online => PaymentMethod::Online,
+            order::repository::PaymentMethod::Wallet => PaymentMethod::Wallet,
+        }
+    }
 }
 
 pub struct InitializePaymentForOrder {
@@ -37,7 +48,8 @@ pub async fn initialize_payment_for_order(
     }
 
     match payload.method {
-        PaymentMethod::Wallet => match wallet::service::initialize_payment_for_order(
+        PaymentMethod::Wallet => wallet::service::initialize_payment_for_order(
+            ctx,
             &mut tx,
             wallet::service::InitializePaymentForOrder {
                 order: payload.order,
@@ -45,11 +57,9 @@ pub async fn initialize_payment_for_order(
             },
         )
         .await
-        {
-            Ok(_) => Ok(PaymentDetails(json!({ "message": "Payment successful" }))),
-            Err(_) => Err(Error::UnexpectedError),
-        },
-        PaymentMethod::Online => match online::initialize_invoice_for_order(
+        .map(|_| PaymentDetails(json!({ "message": "Payment successful" })))
+        .map_err(|_| Error::UnexpectedError),
+        PaymentMethod::Online => online::initialize_invoice_for_order(
             ctx,
             online::InitializeInvoiceForOrder {
                 order: payload.order,
@@ -57,21 +67,61 @@ pub async fn initialize_payment_for_order(
             },
         )
         .await
-        {
-            Ok(details) => Ok(PaymentDetails(json!(details))),
-            Err(_) => Err(Error::UnexpectedError),
-        },
+        .map(|details| PaymentDetails(json!(details)))
+        .map_err(|_| Error::UnexpectedError),
     }
 }
 
-pub async fn confirm_payment_for_order<'e, E: PgExecutor<'e>>(
+pub struct ConfirmPaymentForOrderPayload {
+    pub order: Order,
+    pub payment_method: PaymentMethod,
+}
+pub async fn confirm_payment_for_order(
     _: Arc<Context>,
-    e: E,
-    order: order::repository::Order,
+    tx: &mut Transaction<'_, Postgres>,
+    payload: ConfirmPaymentForOrderPayload,
 ) -> Result<(), Error> {
-    if let Err(_) = order::repository::confirm_payment(e, order.id.clone()).await {
-        return Err(Error::UnexpectedError);
-    };
+    match payload.payment_method {
+        PaymentMethod::Online => online::confirm_payment(
+            tx,
+            online::ConfirmPaymentForOrderPayload {
+                order: payload.order.clone(),
+            },
+        )
+        .await
+        .map_err(|_| Error::UnexpectedError)?,
+        PaymentMethod::Wallet => {
+            let payer_wallet =
+                wallet::repository::find_by_owner_id(&mut **tx, payload.order.owner_id.clone())
+                    .await
+                    .map_err(|_| Error::UnexpectedError)?
+                    .ok_or(Error::UnexpectedError)?;
+            wallet::service::confirm_payment(
+                tx,
+                wallet::service::ConfirmPaymentForOrderPayload {
+                    order: payload.order.clone(),
+                    wallet: payer_wallet,
+                },
+            )
+            .await
+            .map_err(|_| Error::UnexpectedError)?;
+        }
+    }
+
+    tracing::info!(
+        "Transaction successful for order {}",
+        payload.order.id.clone()
+    );
+
+    order::repository::confirm_payment(
+        &mut **tx,
+        order::repository::ConfirmPaymentPayload {
+            order_id: payload.order.id.clone(),
+            payment_method: payload.payment_method.into(),
+        },
+    )
+    .await
+    .map_err(|_| Error::UnexpectedError)?;
 
     // TODO: send notification to the end user
 

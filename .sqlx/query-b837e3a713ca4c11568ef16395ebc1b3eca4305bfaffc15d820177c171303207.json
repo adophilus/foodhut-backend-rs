@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO transactions\n            (id, amount, direction, type, note, user_id)\n        VALUES\n            ($1, $2, $3, $4, $5, $6)\n    RETURNING *\n        ",
+  "query": "\n        INSERT INTO transactions\n            (id, amount, direction, type, note, user_id)\n        VALUES\n            ($1, $2, $3, $4, $5, $6)\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -71,5 +71,5 @@
       false
     ]
   },
-  "hash": "e11832eb5caa57ad9dd695e5714850de38c6b884a10974abe4980fe1ded55166"
+  "hash": "b837e3a713ca4c11568ef16395ebc1b3eca4305bfaffc15d820177c171303207"
 }

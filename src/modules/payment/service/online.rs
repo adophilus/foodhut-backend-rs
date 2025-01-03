@@ -3,9 +3,14 @@ use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sqlx::{PgExecutor, Postgres};
 
 use crate::{
-    modules::{order::repository::Order, user::repository::User},
+    modules::{
+        order::repository::Order,
+        transaction::{self, repository::Transaction},
+        user::repository::User,
+    },
     types::Context,
 };
 use std::sync::Arc;
@@ -235,7 +240,10 @@ pub async fn withdraw_funds(ctx: Arc<Context>, payload: WithdrawFundsPayload) ->
             Error::UnexpectedError
         })?;
 
-        tracing::error!("Failed to create transfer recipient, invalid status code: {}", data);
+        tracing::error!(
+            "Failed to create transfer recipient, invalid status code: {}",
+            data
+        );
         return Err(Error::UnexpectedError);
     }
 
@@ -312,6 +320,31 @@ pub async fn withdraw_funds(ctx: Arc<Context>, payload: WithdrawFundsPayload) ->
         tracing::error!("Failed to create transfer: {}", data);
         return Err(Error::UnexpectedError);
     }
+
+    Ok(())
+}
+
+pub struct ConfirmPaymentForOrderPayload {
+    pub order: Order,
+}
+
+pub async fn confirm_payment(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    payload: ConfirmPaymentForOrderPayload,
+) -> Result<(), Error> {
+    transaction::repository::create(
+        &mut **tx,
+        transaction::repository::CreatePayload::Online(
+            transaction::repository::CreateOnlineTransactionPayload {
+                amount: payload.order.total.clone(),
+                direction: transaction::repository::TransactionDirection::Outgoing,
+                note: Some(format!("Paid for order {}", payload.order.id.clone())),
+                user_id: payload.order.owner_id.clone(),
+            },
+        ),
+    )
+    .await
+    .map_err(|_| Error::UnexpectedError)?;
 
     Ok(())
 }
