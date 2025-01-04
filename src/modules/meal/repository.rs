@@ -29,6 +29,7 @@ pub struct Meal {
     pub kitchen_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+    pub deleted_at: Option<NaiveDateTime>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -46,6 +47,7 @@ pub struct MealWithCartStatus {
     pub kitchen_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+    pub deleted_at: Option<NaiveDateTime>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -176,6 +178,7 @@ where
                 meals.kitchen_id = COALESCE($3, meals.kitchen_id)
                 AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
                 AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
+                AND deleted_at IS NULL
             LIMIT $2 OFFSET ($1 - 1) * $2
         ),
         total_count AS (
@@ -194,6 +197,7 @@ where
                 meals.kitchen_id = COALESCE($3, meals.kitchen_id)
                 AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
                 AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
+                AND deleted_at IS NULL
         )
         SELECT 
             COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
@@ -258,6 +262,7 @@ where
                 AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
                 AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
                 AND (meals.is_available = TRUE OR kitchens.owner_id = $6)
+                AND deleted_at IS NULL
             LIMIT $2 OFFSET ($1 - 1) * $2
         ),
         total_count AS (
@@ -278,6 +283,7 @@ where
                 AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
                 AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
                 AND (meals.is_available = TRUE OR kitchens.owner_id = $6)
+                AND deleted_at IS NULL
         )
         SELECT 
             COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
@@ -341,6 +347,7 @@ where
                 AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
                 AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
                 AND (meals.is_available = TRUE)
+                AND deleted_at IS NULL
             LIMIT $2 OFFSET ($1 - 1) * $2
         ),
         total_count AS (
@@ -360,6 +367,7 @@ where
                 AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
                 AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
                 AND (meals.is_available = TRUE)
+                AND deleted_at IS NULL
         )
         SELECT 
             COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
@@ -454,6 +462,49 @@ pub async fn delete_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<(),
             );
             Error::UnexpectedError
         })
+}
+
+pub async fn delete_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
+    e: E,
+    id: String,
+    owner_id: String,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        WITH filtered_meal AS (
+            SELECT
+                meals.id
+            FROM
+                meals,
+                kitchens
+            WHERE 
+                kitchens.owner_id = $2
+                AND meals.kitchen_id = kitchens.id
+                AND meals.id = $1
+        )
+        UPDATE
+            meals
+        SET
+            deleted_at = NOW()
+        FROM
+            filtered_meal
+        WHERE
+            meals.id = filtered_meal.id
+        ",
+        id,
+        owner_id
+    )
+    .execute(e)
+    .await
+    .map(|_| ())
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to delete a meal by id and owner_id {}: {}",
+            id,
+            err
+        );
+        Error::UnexpectedError
+    })
 }
 
 // TODO: cross check this function

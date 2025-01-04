@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH filtered_meal AS (\n            SELECT\n                meals.id\n            FROM\n                meals,\n                kitchens\n            WHERE \n                kitchens.owner_id = $2\n                AND meals.kitchen_id = kitchens.id\n                AND meals.id = $1\n        )\n        UPDATE\n            meals\n        SET\n            deleted_at = NOW()\n        FROM\n            filtered_meal\n        WHERE\n            meals.id = filtered_meal.id\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b735b1af2d02b52d5d0c2b433deaa947affc09762b9c744aeebaa4ec05102975"
+}

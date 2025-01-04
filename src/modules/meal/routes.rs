@@ -198,8 +198,7 @@ async fn get_meals(
             },
         )
         .await
-    }
-    else if filters.as_kitchen.is_some() {
+    } else if filters.as_kitchen.is_some() {
         repository::find_many_as_kitchen(
             &ctx.db_conn.pool,
             pagination.clone(),
@@ -207,12 +206,11 @@ async fn get_meals(
                 kitchen_id: filters.kitchen_id,
                 search: filters.search,
                 is_liked_by,
-                owner_id: auth.user.id.clone()
+                owner_id: auth.user.id.clone(),
             },
         )
         .await
-    }
-    else {
+    } else {
         repository::find_many_as_user(
             &ctx.db_conn.pool,
             pagination.clone(),
@@ -250,6 +248,7 @@ async fn get_meals(
                     kitchen_id: meal.kitchen_id,
                     created_at: meal.created_at,
                     updated_at: meal.updated_at,
+                    deleted_at: meal.deleted_at,
                 })
                 .collect::<Vec<_>>();
 
@@ -329,6 +328,7 @@ async fn get_meal_by_id(
                 kitchen_id: meal.kitchen_id,
                 created_at: meal.created_at,
                 updated_at: meal.updated_at,
+                deleted_at: meal.deleted_at,
             };
 
             (StatusCode::OK, Json(json!(augmented_meal)))
@@ -466,57 +466,16 @@ async fn delete_meal_by_id(
     auth: Auth,
     State(ctx): State<Arc<Context>>,
 ) -> impl IntoResponse {
-    match repository::find_by_id(&ctx.db_conn.pool, id.clone()).await {
-        Ok(maybe_meal) => {
-            if maybe_meal.is_none() {
-                return (
-                    StatusCode::NOT_FOUND,
-                    Json(json!({"error": "Meal not found"})),
-                );
-            }
-
-            let meal = maybe_meal.unwrap();
-            let kitchen = if let Ok(Some(kitchen)) =
-                kitchen::repository::find_by_id(&ctx.db_conn.pool, meal.kitchen_id.clone()).await
-            {
-                kitchen
-            } else {
-                return (
-                    StatusCode::OK,
-                    Json(json!({ "error": "Kitchen not found" })),
-                );
-            };
-
-            if !repository::is_owner(&auth.user, &kitchen, &meal) {
-                return (
-                    StatusCode::FORBIDDEN,
-                    Json(json!({"error": "You are not the owner of this kitchen"})),
-                );
-            }
-
-            if let Err(_) =
-                storage::delete_file(ctx.storage.clone(), meal.cover_image.clone()).await
-            {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Failed to delete meal" })),
-                );
-            }
-
-            match repository::delete_by_id(&ctx.db_conn.pool, id.clone()).await {
-                Ok(_) => (
-                    StatusCode::OK,
-                    Json(json!({ "message": "Meal deleted successfully" })),
-                ),
-                Err(_) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "message": "Failed to delete meal" })),
-                ),
-            }
-        }
-        Err(_) => (
+    match repository::delete_by_id_and_owner_id(&ctx.db_conn.pool, id.clone(), auth.user.id.clone())
+        .await
+    {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Meal deleted successfully" })),
+        ),
+        _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "message": "Failed to delete meal" })),
+            Json(json!({ "error": "Failed to delete meal" })),
         ),
     }
 }

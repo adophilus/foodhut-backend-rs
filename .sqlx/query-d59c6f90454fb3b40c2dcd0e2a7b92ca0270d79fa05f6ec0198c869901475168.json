@@ -62,6 +62,11 @@
         "ordinal": 11,
         "name": "original_price",
         "type_info": "Numeric"
+      },
+      {
+        "ordinal": 12,
+        "name": "deleted_at",
+        "type_info": "Timestamp"
       }
     ],
     "parameters": {
@@ -81,7 +86,8 @@
       false,
       true,
       false,
-      false
+      false,
+      true
     ]
   },
   "hash": "d59c6f90454fb3b40c2dcd0e2a7b92ca0270d79fa05f6ec0198c869901475168"

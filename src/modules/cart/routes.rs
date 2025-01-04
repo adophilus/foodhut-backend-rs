@@ -83,6 +83,7 @@ async fn get_active_cart(State(ctx): State<Arc<Context>>, auth: Auth) -> impl In
                                 kitchen_id: item.meal.kitchen_id,
                                 created_at: item.meal.created_at,
                                 updated_at: item.meal.updated_at,
+                                deleted_at: item.meal.deleted_at,
                                 in_cart: true,
                             },
                         })
