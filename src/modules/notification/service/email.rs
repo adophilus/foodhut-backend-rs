@@ -9,15 +9,6 @@ use std::sync::Arc;
 
 use super::{types, Error, Notification, Result};
 
-pub mod job {
-    use crate::types::{Context, SchedulableJob};
-    use std::sync::Arc;
-
-    pub fn list(_: Arc<Context>) -> Vec<SchedulableJob> {
-        vec![]
-    }
-}
-
 // TODO: handle other notification types
 pub async fn send(ctx: Arc<Context>, notification: Notification) -> Result<()> {
     match notification.clone() {
@@ -68,7 +59,7 @@ async fn send_email(ctx: Arc<Context>, payload: SendEmailPayload) -> Result<()> 
             .authentication(vec![Mechanism::Plain])
             .credentials(Credentials::new(
                 ctx.mail.user.clone(),
-                ctx.mail.password.clone()
+                ctx.mail.password.clone(),
             ))
             .build();
 

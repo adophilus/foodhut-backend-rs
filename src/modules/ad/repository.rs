@@ -175,7 +175,11 @@ pub async fn delete_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Ad,
 pub async fn delete_expired<'e, E: PgExecutor<'e>>(e: E) -> Result<(), Error> {
     sqlx::query_as!(
         Ad,
-        "DELETE FROM ads WHERE created_at + (duration * INTERVAL '1 second') < NOW()"
+        "
+        DELETE FROM
+            ads
+        WHERE
+            created_at + (duration * INTERVAL '1 second') < NOW()"
     )
     .execute(e)
     .await

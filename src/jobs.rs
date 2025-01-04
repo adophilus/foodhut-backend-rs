@@ -1,4 +1,4 @@
-use crate::modules::{ad, notification};
+use crate::modules::ad;
 use crate::types::{Context, Job, JobStorage, SchedulableJob};
 use apalis::cron::CronStream;
 use apalis::layers::retry::{RetryLayer, RetryPolicy};
@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 pub async fn monitor(ctx: Arc<Context>) -> apalis::prelude::Monitor<TokioExecutor> {
     let mut all_jobs: Vec<SchedulableJob> = vec![];
-    all_jobs.append(&mut notification::service::email::job::list(ctx.clone()));
     all_jobs.append(&mut ad::job::list(ctx));
 
     let storage = JobStorage::new();
@@ -19,7 +18,7 @@ pub async fn monitor(ctx: Arc<Context>) -> apalis::prelude::Monitor<TokioExecuto
         if let Err(err) = (job.job)().await {
             tracing::error!("Error running job: {:?}", err);
         }
-        let worker = WorkerBuilder::new("crate::utils::notification::email::jobs::refresh_token")
+        let worker = WorkerBuilder::new("worker")
             .with_storage(storage.clone())
             .stream(CronStream::new(job.schedule).into_stream())
             .layer(RetryLayer::new(RetryPolicy::retries(3)))

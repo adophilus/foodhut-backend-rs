@@ -28,7 +28,7 @@ fn setup_clean_ads_job(
 
 pub fn list(ctx: Arc<Context>) -> Vec<SchedulableJob> {
     vec![SchedulableJob {
-        schedule: apalis::cron::Schedule::from_str("0 * * * * *")
+        schedule: apalis::cron::Schedule::from_str("@hourly")
             .expect("Couldn't create schedule!"),
         job: setup_clean_ads_job(ctx),
     }]
