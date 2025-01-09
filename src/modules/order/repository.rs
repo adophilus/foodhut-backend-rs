@@ -212,6 +212,7 @@ pub struct FullOrder {
     pub items: FullOrderItems,
     pub kitchen: Kitchen,
     pub kitchen_id: String,
+    // pub owner: User,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -408,7 +409,8 @@ pub async fn find_full_order_by_id<'e, E: PgExecutor<'e>>(
                 filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
-                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen,
+                TO_JSONB(users) AS owner
             FROM
                 filtered_orders
             INNER JOIN
@@ -420,6 +422,9 @@ pub async fn find_full_order_by_id<'e, E: PgExecutor<'e>>(
             INNER JOIN
                 kitchen_cities
             ON kitchen_cities.id = kitchens.city_id
+            INNER JOIN
+                users
+            ON users.id = filtered_orders.owner_id
         )
         SELECT
             order_with_item.id,
@@ -435,6 +440,7 @@ pub async fn find_full_order_by_id<'e, E: PgExecutor<'e>>(
             order_with_item.kitchen_id,
             order_with_item.kitchen AS "kitchen!: sqlx::types::Json<Kitchen>",
             order_with_item.owner_id,
+            -- order_with_item.owner AS "owner!: sqlx::types::Json<User>",
             order_with_item.created_at,
             order_with_item.updated_at,
             JSON_AGG(item) AS items
@@ -454,6 +460,7 @@ pub async fn find_full_order_by_id<'e, E: PgExecutor<'e>>(
             order_with_item.kitchen_id,
             order_with_item.kitchen,
             order_with_item.owner_id,
+            -- order_with_item.owner,
             order_with_item.created_at,
             order_with_item.updated_at
         "#,
@@ -522,7 +529,8 @@ pub async fn find_full_order_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
                 filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
-                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen,
+                TO_JSONB(users) AS owner
             FROM
                 filtered_orders
             INNER JOIN
@@ -534,6 +542,9 @@ pub async fn find_full_order_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
             INNER JOIN
                 kitchen_cities
             ON kitchen_cities.id = kitchens.city_id
+            INNER JOIN
+                users
+            ON users.id = filtered_orders.owner_id
         )
         SELECT
             order_with_item.id,
@@ -549,6 +560,7 @@ pub async fn find_full_order_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
             order_with_item.kitchen_id,
             order_with_item.kitchen AS "kitchen!: sqlx::types::Json<Kitchen>",
             order_with_item.owner_id,
+            -- order_with_item.owner AS "owner!: sqlx::types::Json<User>",
             order_with_item.created_at,
             order_with_item.updated_at,
             JSON_AGG(item) AS items
@@ -568,6 +580,7 @@ pub async fn find_full_order_by_id_and_owner_id<'e, E: PgExecutor<'e>>(
             order_with_item.kitchen_id,
             order_with_item.kitchen,
             order_with_item.owner_id,
+            -- order_with_item.owner,
             order_with_item.created_at,
             order_with_item.updated_at
         "#,
@@ -821,7 +834,8 @@ pub async fn find_many_as_kitchen<'e, E: PgExecutor<'e>>(
                 filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
-                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen,
+                TO_JSONB(users) AS owner
             FROM
                 filtered_orders
             INNER JOIN
@@ -833,6 +847,9 @@ pub async fn find_many_as_kitchen<'e, E: PgExecutor<'e>>(
             INNER JOIN
                 kitchen_cities
             ON kitchen_cities.id = kitchens.city_id
+            INNER JOIN
+                users
+            ON users.id = filtered_orders.owner_id
         ),
         query_result AS (
             SELECT
@@ -986,7 +1003,8 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
-                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen
+                TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen,
+                TO_JSONB(users) AS owner
             FROM
                 filtered_orders
             INNER JOIN
@@ -998,6 +1016,9 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
             INNER JOIN
                 kitchen_cities
             ON kitchen_cities.id = kitchens.city_id
+            INNER JOIN
+                users
+            ON users.id = filtered_orders.owner_id
         ),
         query_result AS (
             SELECT
@@ -1014,6 +1035,7 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 order_with_item.kitchen_id,
                 order_with_item.kitchen,
                 order_with_item.owner_id,
+                order_with_item.owner,
                 order_with_item.created_at,
                 order_with_item.updated_at,
                 JSON_AGG(item) AS items
@@ -1033,6 +1055,7 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 order_with_item.kitchen_id,
                 order_with_item.kitchen,
                 order_with_item.owner_id,
+                order_with_item.owner,
                 order_with_item.created_at,
                 order_with_item.updated_at
         ),

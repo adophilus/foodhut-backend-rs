@@ -66,6 +66,12 @@ pub struct User {
     pub updated_at: Option<NaiveDateTime>,
 }
 
+impl From<sqlx::types::Json<User>> for User {
+    fn from(value: sqlx::types::Json<User>) -> Self {
+        value.0
+    }
+}
+
 pub struct CreateUserPayload {
     pub email: String,
     pub phone_number: String,
