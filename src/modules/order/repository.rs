@@ -635,7 +635,8 @@ pub async fn find_many_as_user<'e, E: PgExecutor<'e>>(
                 )
                 AND ($5::TEXT IS NULL OR orders.payment_method = $5)
                 AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
-            LIMIT $2 OFFSET ($1 - 1) * $2
+            LIMIT $2
+            OFFSET ($1 - 1) * $2
         ),
         order_with_item AS (
             SELECT
@@ -798,7 +799,8 @@ pub async fn find_many_as_kitchen<'e, E: PgExecutor<'e>>(
                 )
                 AND ($5::TEXT IS NULL OR orders.payment_method = $5)
                 AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
-            LIMIT $2 OFFSET ($1 - 1) * $2
+            LIMIT $2
+            OFFSET ($1 - 1) * $2
         ),
         order_with_item AS (
             SELECT

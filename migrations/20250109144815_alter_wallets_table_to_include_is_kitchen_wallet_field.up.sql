@@ -1,0 +1,2 @@
+ALTER TABLE wallets
+ADD COLUMN is_kitchen_wallet BOOLEAN NOT NULL DEFAULT FALSE;

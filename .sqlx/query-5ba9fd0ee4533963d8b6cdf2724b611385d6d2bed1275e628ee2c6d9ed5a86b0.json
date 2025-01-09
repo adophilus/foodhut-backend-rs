@@ -32,6 +32,11 @@
         "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_kitchen_wallet",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -45,7 +50,8 @@
       false,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
   "hash": "5ba9fd0ee4533963d8b6cdf2724b611385d6d2bed1275e628ee2c6d9ed5a86b0"

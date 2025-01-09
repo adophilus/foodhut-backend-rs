@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO wallets (id, balance, metadata, owner_id)\n        VALUES ($1, $2, $3, $4)\n        RETURNING *\n        ",
+  "query": "\n        INSERT INTO wallets (id, balance, metadata, is_kitchen_wallet, owner_id)\n        VALUES ($1, $2, $3, $4, $5)\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,11 @@
         "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_kitchen_wallet",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -39,6 +44,7 @@
         "Varchar",
         "Numeric",
         "Json",
+        "Bool",
         "Varchar"
       ]
     },
@@ -48,8 +54,9 @@
       false,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "f11a3d6c7803215b4b1474a0bfe1dc6afda47b8b53ae426fa1f03d3056ad36f2"
+  "hash": "e40fc522a453e3e3941ead8f184c5d8315d060cefd6fcc49e23a2c1e20cc1037"
 }

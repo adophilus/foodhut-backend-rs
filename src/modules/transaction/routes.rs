@@ -2,7 +2,7 @@ use super::repository;
 use crate::{
     modules::{
         auth::middleware::{AdminAuth, Auth},
-        user,
+        kitchen, user,
     },
     types::Context,
     utils::pagination::Pagination,
@@ -47,6 +47,7 @@ struct GetTransactionFilters {
     user_id: Option<String>,
     before: Option<u64>,
     after: Option<u64>,
+    as_kitchen: Option<bool>,
 }
 
 async fn get_transactions(
@@ -63,20 +64,51 @@ async fn get_transactions(
                 user_id: filters.user_id,
                 before: filters.before,
                 after: filters.after,
+                kitchen_id: None,
             },
         )
         .await
     } else {
-        repository::find_many(
-            &ctx.db_conn.pool,
-            pagination,
-            repository::FindManyFilters {
-                user_id: Some(auth.user.id.clone()),
-                before: filters.before,
-                after: filters.after,
-            },
-        )
-        .await
+        if filters.as_kitchen.unwrap_or(false) {
+            let kitchen = match kitchen::repository::find_by_owner_id(
+                &ctx.db_conn.pool,
+                auth.user.id.clone(),
+            )
+            .await
+            {
+                Ok(Some(kitchen)) => kitchen,
+                _ => {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        Json(json!({ "error": "Kitchen not found"})),
+                    )
+                }
+            };
+
+            repository::find_many(
+                &ctx.db_conn.pool,
+                pagination,
+                repository::FindManyFilters {
+                    user_id: Some(auth.user.id.clone()),
+                    before: filters.before,
+                    after: filters.after,
+                    kitchen_id: Some(kitchen.id),
+                },
+            )
+            .await
+        } else {
+            repository::find_many(
+                &ctx.db_conn.pool,
+                pagination,
+                repository::FindManyFilters {
+                    user_id: Some(auth.user.id.clone()),
+                    before: filters.before,
+                    after: filters.after,
+                    kitchen_id: None,
+                },
+            )
+            .await
+        }
     };
 
     match transactions_result {

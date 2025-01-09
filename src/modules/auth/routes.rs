@@ -120,23 +120,28 @@ async fn sign_up(
         notification::service::Backend::Email,
     ));
 
-    if let Err(_) = wallet::repository::create(&mut *tx, user.id.clone()).await {
+    if let Err(_) = wallet::repository::create(
+        &mut *tx,
+        wallet::repository::CreateWalletPayload {
+            owner_id: user.id.clone(),
+            is_kitchen_wallet: false,
+        },
+    )
+    .await
+    {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to create wallet" })),
         );
     };
 
-    match tx.commit().await {
-        Ok(_) => (),
-        Err(err) => {
-            tracing::error!("{}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Sorry an error occurred" })),
-            );
-        }
-    };
+    if let Err(err) = tx.commit().await {
+        tracing::error!("Failed to commit database transaction: {}", err);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Sorry an error occurred" })),
+        );
+    }
 
     // TODO: if an error occurs at this point the user can always request for another OTP
     let _ = tokio::spawn(service::otp::send(
@@ -248,16 +253,15 @@ async fn verify_otp(
                 .await
             {
                 Ok(_) => {
-                    let session =
-                        match service::auth::create_session(ctx.clone(), user.id).await {
-                            Ok(session) => session,
-                            Err(_) => {
-                                return (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    Json(json!({ "error": "Failed to create session" })),
-                                )
-                            }
-                        };
+                    let session = match service::auth::create_session(ctx.clone(), user.id).await {
+                        Ok(session) => session,
+                        Err(_) => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({ "error": "Failed to create session" })),
+                            )
+                        }
+                    };
 
                     (
                         StatusCode::OK,

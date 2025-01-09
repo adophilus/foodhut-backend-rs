@@ -198,7 +198,7 @@ async fn get_meals(
             },
         )
         .await
-    } else if filters.as_kitchen.is_some() {
+    } else if filters.as_kitchen.unwrap_or(false) {
         repository::find_many_as_kitchen(
             &ctx.db_conn.pool,
             pagination.clone(),

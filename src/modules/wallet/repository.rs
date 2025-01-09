@@ -58,6 +58,7 @@ pub struct Wallet {
     pub id: String,
     pub balance: BigDecimal,
     pub metadata: WalletMetadata,
+    pub is_kitchen_wallet: bool,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -67,18 +68,27 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create<'e, E: PgExecutor<'e>>(e: E, owner_id: String) -> Result<Wallet, Error> {
+pub struct CreateWalletPayload {
+    pub owner_id: String,
+    pub is_kitchen_wallet: bool,
+}
+
+pub async fn create<'e, E: PgExecutor<'e>>(
+    e: E,
+    payload: CreateWalletPayload,
+) -> Result<Wallet, Error> {
     sqlx::query_as!(
         Wallet,
         "
-        INSERT INTO wallets (id, balance, metadata, owner_id)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO wallets (id, balance, metadata, is_kitchen_wallet, owner_id)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         ",
         Ulid::new().to_string(),
         BigDecimal::from_u8(0).unwrap(),
         json!(WalletMetadata { backend: None }),
-        owner_id,
+        payload.is_kitchen_wallet,
+        payload.owner_id,
     )
     .fetch_one(e)
     .await

@@ -127,8 +127,8 @@ impl From<DbTransaction> for Transaction {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum Transaction {
-    Online(OnlineTransaction),
     Wallet(WalletTransaction),
+    Online(OnlineTransaction),
 }
 
 pub enum Error {
@@ -286,6 +286,7 @@ pub struct FindManyFilters {
     pub user_id: Option<String>,
     pub before: Option<u64>,
     pub after: Option<u64>,
+    pub kitchen_id: Option<String>,
 }
 
 pub async fn find_many<'e, Executor: PgExecutor<'e>>(
@@ -297,23 +298,33 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
         DatabasePaginatedDbTransaction,
         r#"
         WITH filtered_transactions AS (
-            SELECT transactions.*
-            FROM transactions
+            SELECT
+                transactions.*
+            FROM
+                transactions
+            LEFT JOIN wallets ON transactions.wallet_id = wallets.id
+            LEFT JOIN kitchens ON wallets.owner_id = kitchens.owner_id
             WHERE
                 ($3::TEXT IS NULL OR transactions.user_id = $3)
                 AND ($4::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) < $4)
                 AND ($5::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) > $5)
+                AND ($6::TEXT IS NULL OR kitchens.id = $6)
             ORDER BY created_at DESC
             LIMIT $2
             OFFSET ($1 - 1) * $2
         ),
         total_count AS (
-            SELECT COUNT(transactions.id) AS total_rows
-            FROM transactions
+            SELECT
+                COUNT(transactions.id) AS total_rows
+            FROM
+                transactions
+            LEFT JOIN wallets ON transactions.wallet_id = wallets.id
+            LEFT JOIN kitchens ON wallets.owner_id = kitchens.owner_id
             WHERE
                 ($3::TEXT IS NULL OR transactions.user_id = $3)
                 AND ($4::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) < $4)
                 AND ($5::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) > $5)
+                AND ($6::TEXT IS NULL OR kitchens.id = $6)
         )
         SELECT 
             COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_transactions)), '[]'::jsonb) AS items,
@@ -329,6 +340,7 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
         filters.user_id,
         filters.before.map(|before| before as i64),
         filters.after.map(|after| after as i64),
+        filters.kitchen_id
     )
     .fetch_one(e)
     .await

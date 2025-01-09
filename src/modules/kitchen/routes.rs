@@ -1,7 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use super::repository;
-use crate::modules::{auth::middleware::AdminAuth, user};
+use crate::modules::{auth::middleware::AdminAuth, user, wallet};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -83,7 +83,18 @@ async fn create_kitchen(
         return utils::validation::into_response(errors);
     }
 
-    match repository::find_by_owner_id(&ctx.db_conn.pool, auth.user.id.clone()).await {
+    let mut tx = match ctx.db_conn.clone().pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            tracing::error!("Failed to start database transaction: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Sorry, an error occurred" })),
+            );
+        }
+    };
+
+    match repository::find_by_owner_id(&mut *tx, auth.user.id.clone()).await {
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -100,7 +111,7 @@ async fn create_kitchen(
     };
 
     if let Err(_) = repository::create(
-        &ctx.db_conn.pool,
+        &mut *tx,
         repository::CreateKitchenPayload {
             name: payload.name,
             address: payload.address,
@@ -123,7 +134,7 @@ async fn create_kitchen(
     }
 
     if let Err(_) = user::repository::update_by_id(
-        &ctx.db_conn.pool,
+        &mut *tx,
         auth.user.id.clone(),
         user::repository::UpdateUserPayload {
             has_kitchen: Some(true),
@@ -142,6 +153,29 @@ async fn create_kitchen(
             Json(json!({ "error": "Kitchen creation failed"})),
         );
     };
+
+    if let Err(_) = wallet::repository::create(
+        &mut *tx,
+        wallet::repository::CreateWalletPayload {
+            is_kitchen_wallet: true,
+            owner_id: auth.user.id.clone(),
+        },
+    )
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Kitchen creation failed"})),
+        );
+    }
+
+    if let Err(err) = tx.commit().await {
+        tracing::error!("Failed to commit database transaction: {}", err);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Sorry an error occurred" })),
+        );
+    }
 
     (
         StatusCode::CREATED,
