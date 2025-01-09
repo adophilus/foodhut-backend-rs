@@ -9,7 +9,9 @@ use sqlx::{Postgres, Transaction};
 use std::sync::Arc;
 
 use crate::{
-    modules::{order::repository::Order, payment, transaction, user::repository::User, wallet},
+    modules::{
+        kitchen, order::repository::Order, payment, transaction, user::repository::User, wallet,
+    },
     types::AppEnvironment,
     Context,
 };
@@ -372,6 +374,7 @@ pub struct WithdrawFundsPayload {
     pub account_name: String,
     pub amount: BigDecimal,
     pub user: User,
+    pub as_kitchen: bool,
 }
 
 pub enum WithdrawFundsError {
@@ -390,14 +393,17 @@ pub async fn withdraw_funds(
         .await
         .map_err(|_| WithdrawFundsError::UnexpectedError)?;
 
-    let maybe_wallet = repository::find_by_owner_id(&mut *tx, payload.user.id.clone())
-        .await
-        .map_err(|_| WithdrawFundsError::UnexpectedError)?;
-
-    let wallet = match maybe_wallet {
-        Some(wallet) => wallet,
-        None => return Err(WithdrawFundsError::UnexpectedError),
-    };
+    let wallet = if payload.as_kitchen {
+        let kitchen = kitchen::repository::find_by_owner_id(&mut *tx, payload.user.id.clone())
+            .await
+            .map_err(|_| WithdrawFundsError::UnexpectedError)?
+            .ok_or(WithdrawFundsError::UnexpectedError)?;
+        repository::find_by_kitchen_id(&mut *tx, kitchen.id).await
+    } else {
+        repository::find_by_owner_id(&mut *tx, payload.user.id.clone()).await
+    }
+    .map_err(|_| WithdrawFundsError::UnexpectedError)?
+    .ok_or(WithdrawFundsError::UnexpectedError)?;
 
     if wallet.balance < payload.amount {
         return Err(WithdrawFundsError::InsufficientBalance);

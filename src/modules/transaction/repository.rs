@@ -308,6 +308,7 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
                 ($3::TEXT IS NULL OR transactions.user_id = $3)
                 AND ($4::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) < $4)
                 AND ($5::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) > $5)
+                AND ($6::TEXT IS NULL OR wallets.is_kitchen_wallet = TRUE)
                 AND ($6::TEXT IS NULL OR kitchens.id = $6)
             ORDER BY created_at DESC
             LIMIT $2
@@ -324,10 +325,11 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
                 ($3::TEXT IS NULL OR transactions.user_id = $3)
                 AND ($4::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) < $4)
                 AND ($5::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) > $5)
+                AND ($6::TEXT IS NULL OR wallets.is_kitchen_wallet = TRUE)
                 AND ($6::TEXT IS NULL OR kitchens.id = $6)
         )
         SELECT 
-            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_transactions)), '[]'::jsonb) AS items,
+            COALESCE(JSONB_AGG(filtered_transactions), '[]'::jsonb) AS items,
             JSONB_BUILD_OBJECT(
                 'page', $1,
                 'per_page', $2,

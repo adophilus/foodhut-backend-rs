@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM wallets WHERE owner_id = $1",
+  "query": "\n        SELECT\n            wallets.*\n        FROM\n            wallets,\n            kitchens,\n            users\n        WHERE\n            kitchens.id = $1\n            AND users.id = kitchens.owner_id\n            AND wallets.owner_id = users.id\n            AND wallets.is_kitchen_wallet = TRUE\n        ",
   "describe": {
     "columns": [
       {
@@ -54,5 +54,5 @@
       false
     ]
   },
-  "hash": "5ba9fd0ee4533963d8b6cdf2724b611385d6d2bed1275e628ee2c6d9ed5a86b0"
+  "hash": "586c3d1e2430ee12f6a71dda4109f6f6cf18fb09dfc760ff207c1a8880c0b497"
 }

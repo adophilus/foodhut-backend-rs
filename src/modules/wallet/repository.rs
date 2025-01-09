@@ -121,7 +121,7 @@ pub async fn find_by_owner_id<'e, Executor: PgExecutor<'e>>(
 ) -> Result<Option<Wallet>, Error> {
     sqlx::query_as!(
         Wallet,
-        "SELECT * FROM wallets WHERE owner_id = $1",
+        "SELECT * FROM wallets WHERE owner_id = $1 AND is_kitchen_wallet = FALSE",
         owner_id
     )
     .fetch_optional(e)
@@ -153,6 +153,7 @@ pub async fn find_by_kitchen_id<'e, Executor: PgExecutor<'e>>(
             kitchens.id = $1
             AND users.id = kitchens.owner_id
             AND wallets.owner_id = users.id
+            AND wallets.is_kitchen_wallet = TRUE
         ",
         kitchen_id
     )

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{repository, service};
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -12,7 +12,10 @@ use bigdecimal::BigDecimal;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::{modules::auth::middleware::Auth, types::Context};
+use crate::{
+    modules::{auth::middleware::Auth, kitchen},
+    types::Context,
+};
 
 #[derive(Deserialize)]
 struct CreateVirtualAccountPayload {
@@ -52,8 +55,33 @@ async fn create_bank_account(
     }
 }
 
-async fn get_wallet_by_profile(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {
-    match repository::find_by_owner_id(&ctx.db_conn.pool, auth.user.id).await {
+#[derive(Deserialize)]
+struct GetWalletByProfileFilters {
+    as_kitchen: Option<bool>,
+}
+
+async fn get_wallet_by_profile(
+    auth: Auth,
+    State(ctx): State<Arc<Context>>,
+    Query(filters): Query<GetWalletByProfileFilters>,
+) -> impl IntoResponse {
+    let maybe_wallet = if filters.as_kitchen.unwrap_or(false) {
+        let kitchen =
+            match kitchen::repository::find_by_owner_id(&ctx.db_conn.pool, auth.user.id).await {
+                Ok(Some(kitchen)) => kitchen,
+                _ => {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        Json(json!({ "error": "Kitchen not found" })),
+                    )
+                }
+            };
+        repository::find_by_kitchen_id(&ctx.db_conn.pool, kitchen.id).await
+    } else {
+        repository::find_by_owner_id(&ctx.db_conn.pool, auth.user.id).await
+    };
+
+    match maybe_wallet {
         Ok(Some(wallet)) => (StatusCode::OK, Json(json!(wallet))),
         Ok(None) => (
             StatusCode::NOT_FOUND,
@@ -116,6 +144,7 @@ struct WithdrawFundsPayload {
     bank_code: String,
     account_name: String,
     amount: BigDecimal,
+    as_kitchen: bool,
 }
 
 async fn withdraw_funds(
@@ -131,6 +160,7 @@ async fn withdraw_funds(
             account_name: payload.account_name,
             amount: payload.amount,
             user: auth.user,
+            as_kitchen: payload.as_kitchen,
         },
     )
     .await
