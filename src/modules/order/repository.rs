@@ -219,6 +219,52 @@ pub struct FullOrder {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FullOrderWithOwner {
+    pub id: String,
+    pub status: OrderStatus,
+    pub payment_method: PaymentMethod,
+    pub delivery_fee: BigDecimal,
+    pub service_fee: BigDecimal,
+    pub sub_total: BigDecimal,
+    pub total: BigDecimal,
+    pub delivery_address: String,
+    pub delivery_date: Option<NaiveDateTime>,
+    pub dispatch_rider_note: String,
+    pub items: FullOrderItems,
+    pub kitchen: Kitchen,
+    pub kitchen_id: String,
+    pub owner: User,
+    pub owner_id: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+
+impl FullOrder {
+    pub fn add_owner(self: Self, owner: User) -> FullOrderWithOwner {
+        FullOrderWithOwner {
+            id: self.id,
+            status: self.status,
+            payment_method: self.payment_method,
+            delivery_fee: self.delivery_fee,
+            service_fee: self.service_fee,
+            sub_total: self.sub_total,
+            total: self.total,
+            delivery_address: self.delivery_address,
+            delivery_date: self.delivery_date,
+            dispatch_rider_note: self.dispatch_rider_note,
+            items: self.items,
+            kitchen: self.kitchen,
+            kitchen_id: self.kitchen_id,
+            owner,
+            owner_id: self.owner_id,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FullOrderItems(pub Vec<FullOrderItem>);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

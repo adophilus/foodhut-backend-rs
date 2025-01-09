@@ -89,23 +89,47 @@ async fn get_order_by_id(
     auth: Auth,
     State(ctx): State<Arc<Context>>,
 ) -> impl IntoResponse {
-    let maybe_order = match user::repository::is_admin(&auth.user) {
-        true => repository::find_full_order_by_id(&ctx.db_conn.pool, id).await,
-        false => {
-            repository::find_full_order_by_id_and_owner_id(&ctx.db_conn.pool, id, auth.user.id)
-                .await
+    if user::repository::is_admin(&auth.user) {
+        match repository::find_full_order_by_id(&ctx.db_conn.pool, id).await {
+            Ok(Some(order)) => {
+                let owner =
+                    match user::repository::find_by_id(&ctx.db_conn.pool, order.owner_id.clone())
+                        .await
+                    {
+                        Ok(Some(owner)) => owner,
+                        _ => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({ "error": "Failed to fetch order owner" })),
+                            )
+                        }
+                    };
+
+                (StatusCode::OK, Json(json!(order.add_owner(owner))))
+            }
+            Ok(None) => (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Order not found" })),
+            ),
+            Err(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to fetch orders"})),
+            ),
         }
-    };
-    match maybe_order {
-        Ok(Some(order)) => (StatusCode::OK, Json(json!(order))),
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Order not found" })),
-        ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch orders"})),
-        ),
+    } else {
+        match repository::find_full_order_by_id_and_owner_id(&ctx.db_conn.pool, id, auth.user.id)
+            .await
+        {
+            Ok(Some(order)) => (StatusCode::OK, Json(json!(order))),
+            Ok(None) => (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Order not found" })),
+            ),
+            Err(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to fetch orders"})),
+            ),
+        }
     }
 }
 
