@@ -457,3 +457,102 @@ pub async fn withdraw_funds(
 
     Ok(())
 }
+
+#[derive(Serialize, Deserialize)]
+struct PaystackBank {
+    id: u64,
+    name: String,
+    code: String,
+}
+
+#[derive(Deserialize)]
+struct PaystackBankResponse {
+    status: bool,
+    data: Vec<PaystackBank>,
+}
+
+pub enum PaystackBankError {
+    UnexpectedError,
+}
+
+async fn fetch_paystack_banks(
+    ctx: Arc<Context>,
+) -> std::result::Result<Vec<PaystackBank>, PaystackBankError> {
+    let mut headers = HeaderMap::new();
+    let auth_header = format!("Bearer {}", ctx.payment.secret_key);
+    headers.insert(
+        "Authorization",
+        auth_header
+            .clone()
+            .try_into()
+            .expect("Invalid auth header value"),
+    );
+    headers.insert(
+        "Content-Type",
+        "application/json"
+            .try_into()
+            .expect("Invalid content type header value"),
+    );
+
+    let res = reqwest::Client::new()
+        .get(format!("{}/bank", ctx.payment.api_endpoint))
+        .headers(headers.clone())
+        .query(&[("country", "nigeria"), ("perPage", "100")])
+        .send()
+        .await
+        .map_err(|err| {
+            tracing::error!("Failed to fetch paystack banks: {}", err);
+            PaystackBankError::UnexpectedError
+        })?;
+
+    if res.status() != StatusCode::OK {
+        let status = res.status();
+        let data = res.text().await.map_err(|err| {
+            tracing::error!("Failed to process fetch banks response: {:?}", err);
+            PaystackBankError::UnexpectedError
+        })?;
+
+        tracing::error!(
+            "Failed to fetch paystack banks invalid status code {}: {}",
+            status,
+            data
+        );
+        return Err(PaystackBankError::UnexpectedError);
+    }
+
+    let data = res.text().await.map_err(|err| {
+        tracing::error!("Failed to process fetch paystack banks response: {:?}", err);
+        PaystackBankError::UnexpectedError
+    })?;
+
+    let paystack_response = serde_json::de::from_str::<PaystackBankResponse>(data.as_str())
+        .map_err(|_| PaystackBankError::UnexpectedError)?;
+
+    if !paystack_response.status {
+        tracing::error!("Failed to fetch paystack banks, false status: {}", data);
+        return Err(PaystackBankError::UnexpectedError);
+    }
+
+    Ok(paystack_response.data)
+}
+
+pub async fn update_paystack_banks(
+    ctx: Arc<Context>,
+) -> std::result::Result<(), PaystackBankError> {
+    let banks = fetch_paystack_banks(ctx.clone()).await?;
+
+    repository::update_banks_batch(
+        &ctx.db_conn.pool,
+        banks
+            .into_iter()
+            .map(|bank| repository::DbPaystackBankUpdate {
+                id: bank.id.to_string(),
+                name: bank.name,
+                code: bank.code,
+            })
+            .collect::<Vec<_>>(),
+    )
+    .await;
+
+    Ok(())
+}

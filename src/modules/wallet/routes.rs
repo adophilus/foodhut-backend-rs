@@ -15,6 +15,7 @@ use serde_json::json;
 use crate::{
     modules::{auth::middleware::Auth, kitchen},
     types::Context,
+    utils::pagination::Pagination,
 };
 
 #[derive(Deserialize)]
@@ -51,6 +52,18 @@ async fn create_bank_account(
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to request verification" })),
+        ),
+    }
+}
+
+async fn get_banks(State(ctx): State<Arc<Context>>, pagination: Pagination) -> impl IntoResponse {
+    match repository::find_many_banks(&ctx.db_conn.pool, pagination).await {
+        Ok(banks) => (StatusCode::OK, Json(json!(banks))),
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "Failed to fetch banks"
+            })),
         ),
     }
 }
@@ -179,6 +192,7 @@ async fn withdraw_funds(
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/bank-account", post(create_bank_account))
+        .route("/banks", get(get_banks))
         .route("/profile", get(get_wallet_by_profile))
         .route("/:id", get(get_wallet_by_id))
         .route("/top-up", post(create_topup_invoice))

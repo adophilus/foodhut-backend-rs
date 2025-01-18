@@ -1,18 +1,16 @@
-use super::repository;
+use super::service;
 use crate::types::{Context, SchedulableJob};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
-async fn clean_ads_job(ctx: Arc<Context>) -> Result<(), apalis::prelude::Error> {
-    tracing::debug!("Cleaning up ads...");
-
-    let _ = repository::delete_expired(&ctx.db_conn.pool).await;
-
+async fn bank_fetch_job(ctx: Arc<Context>) -> Result<(), apalis::prelude::Error> {
+    tracing::debug!("Fetching banks from paystack...");
+    service::update_paystack_banks(ctx).await;
     Ok(())
 }
 
-fn setup_clean_ads_job(
+fn setup_bank_fetch_job(
     ctx: Arc<Context>,
 ) -> Arc<
     dyn Fn()
@@ -22,13 +20,13 @@ fn setup_clean_ads_job(
 > {
     Arc::new(move || {
         let ctx = ctx.clone();
-        Box::pin(async move { clean_ads_job(ctx).await })
+        Box::pin(async move { bank_fetch_job(ctx).await })
     })
 }
 
 pub fn list(ctx: Arc<Context>) -> Vec<SchedulableJob> {
     vec![SchedulableJob {
-        schedule: apalis::cron::Schedule::from_str("@hourly").expect("Couldn't create schedule!"),
-        job: setup_clean_ads_job(ctx),
+        schedule: apalis::cron::Schedule::from_str("@daily").expect("Couldn't create schedule"),
+        job: setup_bank_fetch_job(ctx),
     }]
 }

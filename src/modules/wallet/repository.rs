@@ -1,5 +1,7 @@
-// TODO: switch to the new database paginated macro
-
+use crate::{
+    define_paginated,
+    utils::pagination::{Paginated, Pagination},
+};
 use bigdecimal::FromPrimitive;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
@@ -7,6 +9,17 @@ use serde_json::json;
 use sqlx::{types::BigDecimal, PgExecutor};
 use std::convert::Into;
 use ulid::Ulid;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DbPaystackBank {
+    pub id: String,
+    pub name: String,
+    pub code: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+define_paginated!(DatabasePaginatedDbPaystackBank, DbPaystackBank);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PaystackBank {
@@ -94,6 +107,83 @@ pub async fn create<'e, E: PgExecutor<'e>>(
     .await
     .map_err(|err| {
         tracing::error!("Error occurred while trying to create a wallet: {}", err);
+        Error::UnexpectedError
+    })
+}
+
+pub struct CreatePaystackBankPayload {
+    pub id: String,
+    pub name: String,
+    pub code: String,
+}
+
+pub async fn create_paystack_bank<'e, E: PgExecutor<'e>>(
+    e: E,
+    payload: CreatePaystackBankPayload,
+) -> Result<DbPaystackBank, Error> {
+    sqlx::query_as!(
+        DbPaystackBank,
+        "INSERT INTO paystack_banks (id, name, code) VALUES ($1, $2, $3) RETURNING *",
+        payload.id,
+        payload.name,
+        payload.code
+    )
+    .fetch_one(e)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to create a paystack bank: {}",
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
+pub async fn find_many_banks<'e, E: PgExecutor<'e>>(
+    e: E,
+    filter: Pagination,
+) -> Result<Paginated<DbPaystackBank>, Error> {
+    sqlx::query_as!(
+        DatabasePaginatedDbPaystackBank,
+        "
+        WITH query_result AS (
+            SELECT
+                *
+            FROM
+                paystack_banks
+            ORDER BY
+                name DESC
+            OFFSET ($1 - 1) * $2
+            LIMIT $2
+        ),
+        total_count AS (
+            SELECT
+                COUNT(id) AS total_rows
+            FROM
+                paystack_banks
+        )
+        SELECT 
+            COALESCE(JSONB_AGG(query_result), '[]'::JSONB) AS items,
+            JSONB_BUILD_OBJECT(
+                'page', $1,
+                'per_page', $2,
+                'total', (SELECT total_rows FROM total_count)
+            ) AS meta
+        FROM
+            query_result,
+            total_count
+        ",
+        filter.page as i32,
+        filter.per_page as i32,
+    )
+    .fetch_one(e)
+    .await
+    .map(DatabasePaginatedDbPaystackBank::into)
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch paystack banks: {}",
+            err
+        );
         Error::UnexpectedError
     })
 }
@@ -275,6 +365,53 @@ pub async fn update_metatata_by_owner_id<'e, E: PgExecutor<'e>>(
     .map_err(|e| {
         tracing::error!(
             "Error occurred while trying to update wallet metadata: {}",
+            e
+        );
+        Error::UnexpectedError
+    })
+}
+
+#[derive(Serialize)]
+pub struct DbPaystackBankUpdate {
+    pub id: String,
+    pub name: String,
+    pub code: String,
+}
+
+pub async fn update_banks_batch<'e, E: PgExecutor<'e>>(
+    e: E,
+    banks: Vec<DbPaystackBankUpdate>,
+) -> Result<(), Error> {
+    sqlx::query!(
+        r#"
+        WITH data AS (
+            SELECT
+                *
+            FROM JSONB_TO_RECORDSET($1) AS x(
+                id VARCHAR,
+                name VARCHAR,
+                code VARCHAR
+            )
+        )
+        INSERT INTO
+            paystack_banks (id, name, code, updated_at)
+        SELECT
+            id, name, code, NOW()
+        FROM
+            data
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            code = EXCLUDED.code,
+            updated_at = NOW();
+        "#,
+        serde_json::json!(banks)
+    )
+    .execute(e)
+    .await
+    .map(|_| ())
+    .map_err(|e| {
+        tracing::error!(
+            "Error occurred while trying to update banks in batch: {}",
             e
         );
         Error::UnexpectedError
