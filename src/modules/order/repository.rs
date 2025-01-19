@@ -320,7 +320,7 @@ pub async fn create<'e, E: PgExecutor<'e>>(
         .items
         .clone()
         .into_iter()
-        .fold(BigDecimal::from(0), |acc, item| acc + item.meal.price);
+        .fold(BigDecimal::from(0), |acc, item| acc + (item.meal.price * BigDecimal::from(item.quantity)));
     let total = sub_total.clone();
 
     let order_items = OrderItems(

@@ -152,7 +152,7 @@ pub async fn find_many_banks<'e, E: PgExecutor<'e>>(
             FROM
                 paystack_banks
             ORDER BY
-                name DESC
+                name ASC
             OFFSET ($1 - 1) * $2
             LIMIT $2
         ),
