@@ -1,0 +1,7 @@
+CREATE TABLE paystack_banks (
+  id VARCHAR PRIMARY KEY NOT NULL,
+  name VARCHAR NOT NULL,
+  code VARCHAR NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMP
+);
