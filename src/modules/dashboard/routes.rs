@@ -1,6 +1,12 @@
 use std::sync::Arc;
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
+    Json, Router,
+};
 use serde_json::json;
 
 use super::repository;
@@ -22,21 +28,6 @@ async fn get_info(State(ctx): State<Arc<Context>>, _: AdminAuth) -> impl IntoRes
     }
 }
 
-async fn send_test_email(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {
-    notification::service::email::send(
-        ctx,
-        notification::service::Notification::Registered(notification::service::types::Registered {
-            user: auth.user,
-        }),
-    )
-    .await
-    .unwrap();
-
-    (StatusCode::OK, Json(json!({"message": "Email sent"})))
-}
-
 pub fn get_router() -> Router<Arc<Context>> {
-    Router::new()
-        .route("/info", get(get_info))
-        .route("/test", get(send_test_email))
+    Router::new().route("/info", get(get_info))
 }

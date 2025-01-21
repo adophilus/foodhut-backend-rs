@@ -80,6 +80,7 @@ pub struct CreateUserPayload {
     pub birthday: NaiveDate,
 }
 
+#[derive(Debug)]
 pub enum Error {
     UnexpectedError,
 }

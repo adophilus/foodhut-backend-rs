@@ -51,3 +51,24 @@ pub async fn create<'e, E: PgExecutor<'e>>(
         Error::UnexpectedError
     })
 }
+
+pub async fn find_many_by_user_id<'e, E: PgExecutor<'e>>(
+    e: E,
+    user_id: String,
+) -> Result<Vec<PushToken>, Error> {
+    sqlx::query_as!(
+        PushToken,
+        "SELECT * FROM push_tokens WHERE user_id = $1",
+        &user_id
+    )
+    .fetch_all(e)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to find many push tokens by user id {}: {:?}",
+            user_id,
+            err
+        );
+        Error::UnexpectedError
+    })
+}

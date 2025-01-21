@@ -122,8 +122,8 @@ pub async fn send(
     .map_err(|_| SendError::NotSent)?;
 
     let validity = match ctx.app.environment {
-        AppEnvironment::Production => 5,
-        AppEnvironment::Development => 3,
+        AppEnvironment::Production => 3,
+        AppEnvironment::Development => 1,
     };
 
     let otp = match existing_otp {

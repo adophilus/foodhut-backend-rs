@@ -5,6 +5,7 @@ use super::super::repository;
 use crate::{modules::auth::repository::session::Session, types::Context};
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub enum Error {
     UnexpectedError,
     InvalidSession,

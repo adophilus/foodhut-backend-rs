@@ -1,13 +1,17 @@
 pub use crate::utils::database;
 use async_trait::async_trait;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use chrono::{DateTime, Utc};
 use core::time::Duration;
 use futures::StreamExt;
+use oauth_fcm::{create_shared_token_manager, TokenManager};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use uri_parser::parse_uri;
 use urlencoding::decode;
 
@@ -67,8 +71,8 @@ pub struct OtpContext {
 
 #[derive(Clone)]
 pub struct GoogleContext {
-    pub client_id: String,
-    pub client_secret: String,
+    pub fcm_token_manager: Arc<Mutex<TokenManager>>,
+    pub fcm_project_id: String,
 }
 
 #[derive(Clone)]
@@ -126,8 +130,7 @@ pub struct OtpConfig {
 
 #[derive(Clone)]
 pub struct GoogleConfig {
-    pub client_id: String,
-    pub client_secret: String,
+    pub fcm_credentials: String,
 }
 
 #[derive(Clone)]
@@ -302,9 +305,8 @@ impl Default for Config {
         let otp_send_endpoint = env::var("OTP_SEND_ENDPOINT").expect("OTP_SEND_ENDPOINT not set");
         let otp_verify_endpoint =
             env::var("OTP_VERIFY_ENDPOINT").expect("OTP_VERIFY_ENDPOINT not set");
-        let google_client_id = env::var("GOOGLE_CLIENT_ID").expect("GOOGLE_CLIENT_ID not set");
-        let google_client_secret =
-            env::var("GOOGLE_CLIENT_SECRET").expect("GOOGLE_CLIENT_SECRET not set");
+        let google_fcm_credentials =
+            env::var("GOOGLE_FCM_CREDENTIALS").expect("GOOGLE_FCM_CREDENTIALS not set");
 
         return Self {
             database: DatabaseConfig { url: database_url },
@@ -336,8 +338,7 @@ impl Default for Config {
                 verify_endpoint: otp_verify_endpoint,
             },
             google: GoogleConfig {
-                client_id: google_client_id,
-                client_secret: google_client_secret,
+                fcm_credentials: google_fcm_credentials,
             },
         };
     }
@@ -346,6 +347,11 @@ impl Default for Config {
 #[async_trait]
 pub trait ToContext {
     async fn to_context(self) -> Context;
+}
+
+#[derive(Deserialize)]
+struct GoogleProjectCredentials {
+    project_id: String,
 }
 
 #[async_trait]
@@ -363,6 +369,18 @@ impl ToContext for Config {
         let mail_user = decode(mail_user.name)
             .expect("Invalid mail user")
             .to_string();
+
+        let google_fcm_credentials_decoded =
+            BASE64_STANDARD.decode(self.google.fcm_credentials).unwrap();
+        let google_fcm_credentials_parsed = serde_json::de::from_str::<GoogleProjectCredentials>(
+            String::from_utf8(google_fcm_credentials_decoded.clone())
+                .unwrap()
+                .as_ref(),
+        )
+        .unwrap();
+        let google_fcm_token_manager =
+            create_shared_token_manager::<&[u8]>(&google_fcm_credentials_decoded).unwrap();
+        let google_fcm_project_id = google_fcm_credentials_parsed.project_id;
 
         Context {
             app: AppContext {
@@ -396,8 +414,8 @@ impl ToContext for Config {
                 verify_endpoint: self.otp.verify_endpoint,
             },
             google: GoogleContext {
-                client_id: self.google.client_id,
-                client_secret: self.google.client_secret,
+                fcm_token_manager: google_fcm_token_manager,
+                fcm_project_id: google_fcm_project_id,
             },
         }
     }
