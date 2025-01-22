@@ -1,0 +1,2 @@
+ALTER TABLE push_tokens
+DROP CONSTRAINT token_user_id_unique;
