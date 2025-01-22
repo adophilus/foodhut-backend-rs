@@ -3,6 +3,7 @@ use crate::modules::user::repository::User;
 use crate::modules::{payment, transaction, wallet};
 use crate::types::Context;
 use bigdecimal::BigDecimal;
+use sqlx::{Postgres, Transaction};
 use std::sync::Arc;
 
 use super::repository::{self, Order, OrderStatus};
@@ -65,29 +66,24 @@ pub struct MarkOrderAsDeliveredPayload {
 
 pub async fn mark_order_as_delivered(
     ctx: Arc<Context>,
+    tx: &mut Transaction<'_, Postgres>,
     payload: MarkOrderAsDeliveredPayload,
 ) -> Result<(), Error> {
-    let mut tx = match ctx.db_conn.pool.begin().await {
-        Ok(tx) => tx,
-        Err(_) => return Err(Error::UnexpectedError),
-    };
-
     let vendor_amount = payload.order.total / (BigDecimal::from(12) / BigDecimal::from(10));
 
     match repository::update_order_status(
-        &mut *tx,
+        &mut **tx,
         payload.order.id.clone(),
         OrderStatus::Delivered,
     )
     .await
     {
-        Ok(true) => (),
-        Ok(false) => Err(Error::UnexpectedError)?,
+        Ok(Some(_)) => (),
         _ => Err(Error::UnexpectedError)?,
     };
 
     let wallet =
-        match wallet::repository::find_by_kitchen_id(&mut *tx, payload.order.kitchen_id.clone())
+        match wallet::repository::find_by_kitchen_id(&mut **tx, payload.order.kitchen_id.clone())
             .await
         {
             Ok(Some(wallet)) => wallet,
@@ -95,7 +91,7 @@ pub async fn mark_order_as_delivered(
         };
 
     transaction::repository::create(
-        &mut *tx,
+        &mut **tx,
         transaction::repository::CreatePayload::Wallet(
             transaction::repository::CreateWalletTransactionPayload {
                 amount: vendor_amount.clone(),
@@ -113,7 +109,7 @@ pub async fn mark_order_as_delivered(
     .map_err(|_| Error::UnexpectedError)?;
 
     wallet::repository::update_by_id(
-        &mut *tx,
+        &mut **tx,
         wallet.id,
         wallet::repository::UpdateByIdPayload {
             operation: wallet::repository::UpdateOperation::Credit,
@@ -122,8 +118,6 @@ pub async fn mark_order_as_delivered(
     )
     .await
     .map_err(|_| Error::UnexpectedError)?;
-
-    tx.commit().await.map_err(|_| Error::UnexpectedError)?;
 
     Ok(())
 }

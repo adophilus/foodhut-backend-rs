@@ -3,7 +3,7 @@ pub mod push;
 pub mod sms;
 
 // use super::{email, push, sms};
-use crate::{modules::user::repository::User, types::Context};
+use crate::{modules::order::repository::Order, modules::user::repository::User, types::Context};
 use std::sync::Arc;
 
 pub enum Backend {
@@ -13,7 +13,7 @@ pub enum Backend {
 }
 
 pub mod types {
-    use crate::modules::user::repository::User;
+    use crate::modules::{order::repository::Order, user::repository::User};
 
     #[derive(Clone)]
     pub struct Registered {
@@ -45,6 +45,12 @@ pub mod types {
     pub struct BankAccountCreationFailed {
         pub user: User,
     }
+
+    #[derive(Clone)]
+    pub struct OrderStatusUpdated {
+        pub user: User,
+        pub order: Order,
+    }
 }
 
 // TODO: handle these notifications
@@ -56,6 +62,7 @@ pub enum Notification {
     // CustomerIdentificationFailed(types::CustomerIdentificationFailed),
     BankAccountCreationSuccessful(types::BankAccountCreationSuccessful),
     BankAccountCreationFailed(types::BankAccountCreationFailed),
+    OrderStatusUpdated(types::OrderStatusUpdated),
 }
 
 impl Notification {
@@ -80,6 +87,10 @@ impl Notification {
 
     pub fn bank_account_creation_failed(user: User) -> Self {
         Notification::BankAccountCreationFailed(types::BankAccountCreationFailed { user })
+    }
+
+    pub fn order_status_updated(order: Order, user: User) -> Self {
+        Notification::OrderStatusUpdated(types::OrderStatusUpdated { order, user })
     }
 }
 

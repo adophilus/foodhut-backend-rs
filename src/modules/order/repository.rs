@@ -239,7 +239,6 @@ pub struct FullOrderWithOwner {
     pub updated_at: Option<NaiveDateTime>,
 }
 
-
 impl FullOrder {
     pub fn add_owner(self: Self, owner: User) -> FullOrderWithOwner {
         FullOrderWithOwner {
@@ -320,7 +319,9 @@ pub async fn create<'e, E: PgExecutor<'e>>(
         .items
         .clone()
         .into_iter()
-        .fold(BigDecimal::from(0), |acc, item| acc + (item.meal.price * BigDecimal::from(item.quantity)));
+        .fold(BigDecimal::from(0), |acc, item| {
+            acc + (item.meal.price * BigDecimal::from(item.quantity))
+        });
     let total = sub_total.clone();
 
     let order_items = OrderItems(
@@ -1188,8 +1189,9 @@ pub async fn update_order_status<'e, E: PgExecutor<'e>>(
     e: E,
     order_id: String,
     new_status: OrderStatus,
-) -> Result<bool, Error> {
-    sqlx::query!(
+) -> Result<Option<Order>, Error> {
+    sqlx::query_as!(
+        Order,
         r#"
         WITH valid_transition AS (
             SELECT CASE
@@ -1198,24 +1200,24 @@ pub async fn update_order_status<'e, E: PgExecutor<'e>>(
                 WHEN orders.status = 'IN_TRANSIT' AND $2 = 'DELIVERED' THEN TRUE
                 ELSE FALSE
             END AS is_valid
-            FROM orders
+            FROM
+                orders
             WHERE id = $1
-        ),
-        updated_order AS (
-            UPDATE orders
-            SET status = $2
-            WHERE id = $1
-              AND (SELECT is_valid FROM valid_transition)
-            RETURNING id
         )
-        SELECT EXISTS(SELECT 1 FROM updated_order);
+        UPDATE
+            orders
+        SET
+            status = $2
+        WHERE
+            id = $1
+            AND (SELECT is_valid FROM valid_transition)
+        RETURNING *
         "#,
         order_id,
         new_status.to_string()
     )
     .fetch_optional(e)
     .await
-    .map(|opt| opt.is_some())
     .map_err(|err| {
         tracing::error!("Error updating status for order {}: {}", order_id, err);
         Error::UnexpectedError

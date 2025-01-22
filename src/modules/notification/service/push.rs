@@ -10,7 +10,8 @@ use std::sync::Arc;
 pub async fn send(ctx: Arc<Context>, notification: Notification) -> Result<()> {
     match notification {
         Notification::Registered(n) => send_registered_push_notification(ctx, n).await,
-        // Notification::BankAccountCreationFailed()
+        Notification::OrderStatusUpdated(n) => send_order_status_updated_push_notification(ctx, n).await
+
         _ => Ok(()),
     }
 }
@@ -29,6 +30,29 @@ async fn send_registered_push_notification(
             Some(FcmNotification {
                 title: "Registration successful".to_string(),
                 body: "Welcome to FoodHut".to_string(),
+            }),
+            None,
+            &ctx.google.fcm_token_manager,
+            &ctx.google.fcm_project_id,
+        )
+        .await
+        .map_err(|_| Error::NotSent)?;
+    }
+
+    Ok(())
+}
+
+async fn send_order_status_updated_push_notification (ctx: Arc<Context>, payload: types::OrderStatusUpdated) -> Result<()> {
+    let tokens = push_token::find_many_by_user_id(&ctx.db_conn.pool, payload.user.id)
+        .await
+        .map_err(|_| Error::NotSent)?;
+
+    for token in tokens {
+        send_fcm_message::<String>(
+            &token.token,
+            Some(FcmNotification {
+                title: "Order status updated".to_string(),
+                body: format!("Order {} status has been updated", payload.order.id)
             }),
             None,
             &ctx.google.fcm_token_manager,

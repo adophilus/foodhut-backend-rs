@@ -124,6 +124,36 @@ pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Optio
         })
 }
 
+pub async fn find_by_kitchen_id<'e, E: PgExecutor<'e>>(
+    e: E,
+    kitchen_id: String,
+) -> Result<Option<User>> {
+    sqlx::query_as!(
+        User,
+        "
+        SELECT
+            users.*
+        FROM
+            users,
+            kitchens
+        WHERE
+            kitchens.id = $1
+            AND users.id = kitchens.id
+        ",
+        kitchen_id
+    )
+    .fetch_optional(e)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while fetching user with kitchen id {}: {}",
+            kitchen_id,
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
 pub async fn find_by_email<'e, E: PgExecutor<'e>>(e: E, email: String) -> Result<Option<User>> {
     sqlx::query_as!(User, "SELECT * FROM users WHERE email = $1", email)
         .fetch_optional(e)

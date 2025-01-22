@@ -45,9 +45,7 @@ async fn sign_in(
 async fn send_test_email(auth: Auth, State(ctx): State<Arc<Context>>) -> impl IntoResponse {
     match notification::service::send(
         ctx,
-        notification::service::Notification::Registered(notification::service::types::Registered {
-            user: auth.user,
-        }),
+        notification::service::Notification::registered(auth.user),
         notification::service::Backend::Email,
     )
     .await
@@ -66,9 +64,7 @@ async fn send_test_push_notification(
 ) -> impl IntoResponse {
     match notification::service::send(
         ctx,
-        notification::service::Notification::Registered(notification::service::types::Registered {
-            user: auth.user,
-        }),
+        notification::service::Notification::registered(auth.user),
         notification::service::Backend::Push,
     )
     .await

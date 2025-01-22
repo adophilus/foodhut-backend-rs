@@ -13,7 +13,7 @@ use serde_json::json;
 use validator::Validate;
 
 use crate::{
-    modules::{auth::middleware::Auth, kitchen, payment, user},
+    modules::{auth::middleware::Auth, kitchen, notification, payment, user},
     types::Context,
     utils::pagination::Pagination,
 };
@@ -162,6 +162,17 @@ async fn update_order_status(
         }
     };
 
+    let mut tx = match ctx.db_conn.clone().pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            tracing::error!("Failed to start database transaction: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Sorry, an error occurred" })),
+            );
+        }
+    };
+
     let as_kitchen = payload.as_kitchen.unwrap_or(false);
 
     if as_kitchen {
@@ -185,17 +196,65 @@ async fn update_order_status(
                     | (repository::OrderStatus::Preparing, repository::OrderStatus::InTransit) => {
                         // Update order item status as kitchen
                         match repository::update_order_status(
-                            &ctx.db_conn.pool,
+                            &mut *tx,
                             order.id.clone(),
                             payload.status.clone(),
                         )
                         .await
                         {
-                            Ok(true) => (
-                                StatusCode::OK,
-                                Json(
-                                    json!({ "message": "Order item status updated successfully" }),
-                                ),
+                            Ok(Some(order)) => {
+                                let order_owner = match user::repository::find_by_id(
+                                    &mut *tx,
+                                    order.owner_id.clone(),
+                                )
+                                .await
+                                {
+                                    Ok(Some(user)) => user,
+                                    Ok(None) => {
+                                        return (
+                                            StatusCode::NOT_FOUND,
+                                            Json(json!({ "error": "User not found" })),
+                                        )
+                                    }
+                                    _ => {
+                                        return (
+                                            StatusCode::INTERNAL_SERVER_ERROR,
+                                            Json(
+                                                json!({ "message": "Failed to update order status" }),
+                                            ),
+                                        )
+                                    }
+                                };
+
+                                if let Err(err) = tx.commit().await {
+                                    tracing::error!(
+                                        "Failed to commit database transaction: {}",
+                                        err
+                                    );
+                                    return (
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        Json(json!({ "message": "Failed to update order status" })),
+                                    );
+                                }
+
+                                notification::service::send(
+                                    ctx,
+                                    notification::service::Notification::order_status_updated(
+                                        order,
+                                        order_owner,
+                                    ),
+                                    notification::service::Backend::Push,
+                                )
+                                .await;
+
+                                (
+                                    StatusCode::OK,
+                                    Json(json!({ "message": "Order status updated successfully" })),
+                                )
+                            }
+                            Ok(None) => (
+                                StatusCode::NOT_FOUND,
+                                Json(json!({ "error": "Order not found" })),
                             ),
                             _ => (
                                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -238,15 +297,59 @@ async fn update_order_status(
             (repository::OrderStatus::InTransit, repository::OrderStatus::Delivered) => {
                 // Update order status as user
                 match service::mark_order_as_delivered(
-                    ctx,
-                    service::MarkOrderAsDeliveredPayload { order },
+                    ctx.clone(),
+                    &mut tx,
+                    service::MarkOrderAsDeliveredPayload {
+                        order: order.clone(),
+                    },
                 )
                 .await
                 {
-                    Ok(_) => (
-                        StatusCode::OK,
-                        Json(json!({ "message": "Order status updated successfully" })),
-                    ),
+                    Ok(_) => {
+                        let kithen_owner = match user::repository::find_by_kitchen_id(
+                            &mut *tx,
+                            order.kitchen_id.clone(),
+                        )
+                        .await
+                        {
+                            Ok(Some(user)) => user,
+                            Ok(None) => {
+                                return (
+                                    StatusCode::NOT_FOUND,
+                                    Json(json!({ "error": "User not found" })),
+                                )
+                            }
+                            _ => {
+                                return (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(json!({ "message": "Failed to update order status" })),
+                                )
+                            }
+                        };
+
+                        notification::service::send(
+                            ctx,
+                            notification::service::Notification::order_status_updated(
+                                order,
+                                kithen_owner,
+                            ),
+                            notification::service::Backend::Push,
+                        )
+                        .await;
+
+                        if let Err(err) = tx.commit().await {
+                            tracing::error!("Failed to commit database transaction: {}", err);
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({ "message": "Failed to update order status" })),
+                            );
+                        }
+
+                        (
+                            StatusCode::OK,
+                            Json(json!({ "message": "Order status updated successfully" })),
+                        )
+                    }
                     _ => (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(json!({ "message": "Failed to update order status" })),

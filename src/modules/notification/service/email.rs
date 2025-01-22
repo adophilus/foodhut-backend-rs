@@ -1,4 +1,7 @@
-use crate::{modules::user::repository::User, Context};
+use crate::{
+    modules::{order::repository::OrderStatus, user::repository::User},
+    Context,
+};
 use lettre::{
     message::header::ContentType,
     transport::smtp::authentication::{Credentials, Mechanism},
@@ -24,6 +27,7 @@ pub async fn send(ctx: Arc<Context>, notification: Notification) -> Result<()> {
         Notification::BankAccountCreationSuccessful(n) => {
             send_bank_account_creation_successful_email(ctx, n).await
         }
+        Notification::OrderStatusUpdated(n) => send_order_status_updated_email(ctx, n).await,
     }
 }
 
@@ -119,14 +123,33 @@ async fn send_bank_account_creation_failed_email(
 
 async fn send_bank_account_creation_successful_email(
     ctx: Arc<Context>,
-    _notification: types::BankAccountCreationSuccessful,
+    payload: types::BankAccountCreationSuccessful,
 ) -> Result<()> {
     send_email(
         ctx,
         SendEmailPayload {
-            user: _notification.user.clone(),
+            user: payload.user,
             subject: String::from("Virtual Account Created"),
             body: String::from("Dear customer, your virtual account has been created!"),
+        },
+    )
+    .await
+}
+
+async fn send_order_status_updated_email(
+    ctx: Arc<Context>,
+    payload: types::OrderStatusUpdated,
+) -> Result<()> {
+    send_email(
+        ctx,
+        SendEmailPayload {
+            user: payload.user,
+            subject: format!("Order {} has been Updated", &payload.order.id),
+            body: format!(
+                "Dear customer, the status of your order {} has changed to {}",
+                &payload.order.id,
+                payload.order.status.to_string()
+            ),
         },
     )
     .await
