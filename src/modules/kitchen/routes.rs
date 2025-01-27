@@ -139,7 +139,6 @@ async fn create_kitchen(
         user::repository::UpdateUserPayload {
             has_kitchen: Some(true),
             email: None,
-            birthday: None,
             last_name: None,
             first_name: None,
             phone_number: None,

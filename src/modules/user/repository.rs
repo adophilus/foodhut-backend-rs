@@ -59,7 +59,6 @@ pub struct User {
     pub last_name: String,
     pub role: Role,
     pub has_kitchen: bool,
-    pub birthday: NaiveDateTime,
     pub referral_code: Option<String>,
     pub profile_picture: ProfilePicture,
     pub created_at: NaiveDateTime,
@@ -77,7 +76,6 @@ pub struct CreateUserPayload {
     pub phone_number: String,
     pub first_name: String,
     pub last_name: String,
-    pub birthday: NaiveDate,
 }
 
 #[derive(Debug)]
@@ -92,8 +90,8 @@ where
     match sqlx::query_as!(
         User,
         "
-        INSERT INTO users (id, email, phone_number, first_name, last_name, birthday, is_verified)
-        VALUES ($1, $2, $3, $4, $5, $6, false)
+        INSERT INTO users (id, email, phone_number, first_name, last_name, is_verified)
+        VALUES ($1, $2, $3, $4, $5, false)
         RETURNING *
         ",
         Ulid::new().to_string(),
@@ -101,7 +99,6 @@ where
         payload.phone_number,
         payload.first_name,
         payload.last_name,
-        payload.birthday.into(),
     )
     .fetch_one(db)
     .await
@@ -229,7 +226,6 @@ pub struct UpdateUserPayload {
     pub phone_number: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    pub birthday: Option<NaiveDate>,
     pub has_kitchen: Option<bool>,
     pub profile_picture: Option<UploadedMedia>,
 }
@@ -246,21 +242,19 @@ pub async fn update_by_id<'e, E: PgExecutor<'e>>(
                 phone_number = COALESCE($2, phone_number),
                 first_name = COALESCE($3, first_name),
                 last_name = COALESCE($4, last_name),
-                birthday = COALESCE($5, birthday),
-                has_kitchen = COALESCE($6, has_kitchen),
+                has_kitchen = COALESCE($5, has_kitchen),
                 profile_picture = COALESCE(
-                    CASE WHEN $7::text = 'null' THEN NULL ELSE $7::json END, 
+                    CASE WHEN $6::text = 'null' THEN NULL ELSE $6::json END, 
                     profile_picture
                 ),
                 updated_at = NOW()
             WHERE
-                id = $8
+                id = $7
         ",
         payload.email,
         payload.phone_number,
         payload.first_name,
         payload.last_name,
-        payload.birthday,
         payload.has_kitchen,
         json!(payload.profile_picture).to_string(),
         id,
@@ -275,7 +269,7 @@ pub async fn update_by_id<'e, E: PgExecutor<'e>>(
         );
         Error::UnexpectedError
     })
-    .map(|_| {})
+    .map(|_| ())
 }
 
 pub fn is_admin(user: &User) -> bool {

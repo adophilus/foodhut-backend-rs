@@ -56,7 +56,25 @@ async fn create_bank_account(
     }
 }
 
-async fn get_banks(State(ctx): State<Arc<Context>>, pagination: Pagination) -> impl IntoResponse {
+async fn get_bank_account_details(
+    _: Auth,
+    State(ctx): State<Arc<Context>>,
+    Json(payload): Json<service::GetBankAccountDetailsPayload>,
+) -> impl IntoResponse {
+    match service::get_bank_account_details(ctx.clone(), payload).await {
+        Ok(details) => (StatusCode::OK, Json(json!(details))),
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to fetch bank account details" })),
+        ),
+    }
+}
+
+async fn get_banks(
+    _: Auth,
+    State(ctx): State<Arc<Context>>,
+    pagination: Pagination,
+) -> impl IntoResponse {
     match repository::find_many_banks(&ctx.db_conn.pool, pagination).await {
         Ok(banks) => (StatusCode::OK, Json(json!(banks))),
         _ => (
@@ -192,6 +210,7 @@ async fn withdraw_funds(
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/bank-account", post(create_bank_account))
+        .route("/bank-account/details", post(get_bank_account_details))
         .route("/banks", get(get_banks))
         .route("/profile", get(get_wallet_by_profile))
         .route("/:id", get(get_wallet_by_id))

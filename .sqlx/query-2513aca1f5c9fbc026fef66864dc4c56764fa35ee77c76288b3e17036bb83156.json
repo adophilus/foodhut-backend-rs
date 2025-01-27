@@ -40,31 +40,26 @@
       },
       {
         "ordinal": 7,
-        "name": "birthday",
-        "type_info": "Date"
-      },
-      {
-        "ordinal": 8,
         "name": "referral_code",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "updated_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "has_kitchen",
         "type_info": "Bool"
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "role",
         "type_info": "Varchar"
       }
@@ -83,7 +78,6 @@
       false,
       false,
       true,
-      false,
       true,
       false,
       true,

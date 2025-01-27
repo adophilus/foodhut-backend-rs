@@ -38,7 +38,6 @@ struct SignUpPayload {
     phone_number: String,
     first_name: String,
     last_name: String,
-    birthday: NaiveDate,
 }
 
 async fn sign_up(
@@ -97,7 +96,6 @@ async fn sign_up(
             phone_number: payload.phone_number.clone(),
             first_name: payload.first_name.clone(),
             last_name: payload.last_name.clone(),
-            birthday: payload.birthday.clone(),
         },
     )
     .await

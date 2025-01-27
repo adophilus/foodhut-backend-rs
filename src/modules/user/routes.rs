@@ -29,7 +29,6 @@ struct UpdateUserPayload {
     phone_number: Option<String>,
     first_name: Option<String>,
     last_name: Option<String>,
-    birthday: Option<NaiveDate>,
 }
 
 async fn get_user_by_id(
@@ -84,7 +83,6 @@ async fn update_user_profile(
         phone_number: payload.phone_number,
         first_name: payload.first_name,
         last_name: payload.last_name,
-        birthday: payload.birthday,
         has_kitchen: None,
         profile_picture: None,
     };
@@ -167,7 +165,6 @@ async fn set_user_profile_picture(
             phone_number: None,
             first_name: None,
             last_name: None,
-            birthday: None,
             has_kitchen: None,
             profile_picture: Some(profile_picture),
         },
