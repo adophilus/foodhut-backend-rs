@@ -183,15 +183,20 @@ async fn create_kitchen(
 }
 
 async fn get_kitchens(
-    auth: Auth,
+    maybe_auth: Option<Auth>,
     State(ctx): State<Arc<Context>>,
     Query(filters): Query<repository::FindManyFilters>,
     pagination: Pagination,
 ) -> impl IntoResponse {
-    let kitchens_result = if user::repository::is_admin(&auth.user) {
-        repository::find_many_as_admin(&ctx.db_conn.pool, pagination.clone(), filters).await
-    } else {
-        repository::find_many_as_user(&ctx.db_conn.pool, pagination.clone(), filters).await
+    let kitchens_result = match maybe_auth {
+        Some(auth) => {
+            if user::repository::is_admin(&auth.user) {
+                repository::find_many_as_admin(&ctx.db_conn.pool, pagination.clone(), filters).await
+            } else {
+                repository::find_many_as_user(&ctx.db_conn.pool, pagination.clone(), filters).await
+            }
+        }
+        None => repository::find_many_as_user(&ctx.db_conn.pool, pagination.clone(), filters).await,
     };
 
     match kitchens_result {
