@@ -1,5 +1,6 @@
 use super::repository::{self, Wallet};
 use axum::http::HeaderMap;
+use axum::http::Method;
 use bigdecimal::BigDecimal;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -42,75 +43,34 @@ struct CustomerCreationServiceResponse {
 }
 
 pub async fn create(ctx: Arc<Context>, owner: User) -> std::result::Result<(), CreationError> {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "Authorization",
-        format!("Bearer {}", ctx.payment.secret_key.clone())
-            .try_into()
-            .expect("Invalid authorization header value"),
-    );
-
-    let res = reqwest::Client::new()
-        .post("https://api.paystack.co/customer")
-        .headers(headers)
-        .body(
-            json!({
-                "email": owner.email,
-                "first_name": owner.first_name,
-                "last_name": owner.last_name,
-                "phone": owner.phone_number,
-            })
-            .to_string(),
-        )
-        .send()
-        .await
-        .map_err(|err| {
-            tracing::error!("Failed to communicate with payment service: {}", err);
-            CreationError::UnexpectedError
-        })?;
-
-    let status = res.status();
-    if status != StatusCode::OK {
-        tracing::error!("Got an error response from the payment service: {}", status);
-        return Err(CreationError::UnexpectedError);
-    }
-
-    let text_response = res.text().await.map_err(|err| {
-        tracing::error!("Failed to get payment service text response: {}", err);
-        CreationError::UnexpectedError
-    })?;
-
-    let server_response = serde_json::from_str::<CustomerCreationServiceResponse>(
-        text_response.as_str(),
+    match payment::utils::send_paystack_request::<CustomerCreationServiceResponse>(
+        ctx.clone(),
+        payment::utils::SendPaystackRequestPayload {
+            body: Some(
+                json!({
+                    "email": owner.email,
+                    "first_name": owner.first_name,
+                    "last_name": owner.last_name,
+                    "phone": owner.phone_number,
+                })
+                .to_string(),
+            ),
+            method: Method::POST,
+            route: String::from("/customer"),
+            expected_status_code: StatusCode::OK,
+        },
     )
-    .map_err(|err| {
-        tracing::error!("Failed to decode payment service server response: {}", err);
-        CreationError::UnexpectedError
-    })?;
+    .await
+    {
+        Ok(res) => {
+            if !res.status {
+                return Err(CreationError::CreationFailed(res.message));
+            }
 
-    if !server_response.status {
-        return Err(CreationError::CreationFailed(server_response.message));
+            Ok(())
+        }
+        _ => Err(CreationError::UnexpectedError),
     }
-
-    Ok(())
-
-    // wallet::create(
-    //     e,
-    //     wallet::CreateWalletPayload {
-    //         owner_id: owner.id.clone(),
-    //         metadata: wallet::WalletMetadata {
-    //             backend: WalletBackend::Paystack(wallet::PaystackWalletMetadata {
-    //                 customer: wallet::PaystackCustomer {
-    //                     id: server_response.data.id.clone(),
-    //                     code: server_response.data.customer_code.clone(),
-    //                 },
-    //                 dedicated_account: None,
-    //             }),
-    //         },
-    //     },
-    // )
-    // .await
-    // .map_err(|_| CreationError::UnexpectedError)
 }
 
 pub struct RequestVirtualAccountPayload {

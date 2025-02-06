@@ -1,6 +1,5 @@
 use axum::http::Method;
 use bigdecimal::BigDecimal;
-use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -10,7 +9,7 @@ use crate::{
     modules::{
         order::repository::Order,
         payment::utils,
-        transaction::{self, repository::Transaction},
+        transaction,
         user::repository::User,
     },
     types::Context,
@@ -38,12 +37,12 @@ pub enum Metadata {
     Topup(TopupMetadata),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct PaystackTransactionInitializationResponseData {
     pub authorization_url: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct PaystackTransactionInitializationResponse {
     pub status: bool,
     pub data: PaystackTransactionInitializationResponseData,
@@ -66,68 +65,27 @@ pub struct PaystackTransferResponse {
 }
 
 async fn create_paystack_invoice(ctx: Arc<Context>, payload: String) -> Result<String, Error> {
-    let mut headers = HeaderMap::new();
-    let auth_header = format!("Bearer {}", ctx.payment.secret_key);
-    headers.insert(
-        "Authorization",
-        auth_header
-            .clone()
-            .try_into()
-            .expect("Invalid auth header value"),
-    );
-    headers.insert(
-        "Content-Type",
-        "application/json"
-            .try_into()
-            .expect("Invalid content type header value"),
-    );
+    match utils::send_paystack_request::<PaystackTransactionInitializationResponse>(
+        ctx.clone(),
+        utils::SendPaystackRequestPayload {
+            expected_status_code: StatusCode::OK,
+            body: Some(payload),
+            route: String::from("/transaction/initialize"),
+            method: Method::POST,
+        },
+    )
+    .await
+    {
+        Ok(res) => {
+            if !res.status {
+                tracing::error!("Failed to create invoice link: {:?}", res);
+                return Err(Error::UnexpectedError);
+            }
 
-    let res = reqwest::Client::new()
-        .post("https://api.paystack.co/transaction/initialize")
-        .headers(headers)
-        .body(payload.clone())
-        .send()
-        .await
-        .map_err(|err| {
-            tracing::error!("Failed to create payment link: {}", err);
-            Error::UnexpectedError
-        })?;
-
-    if res.status() != StatusCode::OK {
-        let data = res.text().await.map_err(|err| {
-            tracing::error!(
-                "Failed to process create payment response for payload {}: {:?}",
-                payload,
-                err
-            );
-            Error::UnexpectedError
-        })?;
-
-        tracing::error!("Failed to create invoice link: {}", data);
-        return Err(Error::UnexpectedError);
+            Ok(res.data.authorization_url)
+        }
+        _ => Err(Error::UnexpectedError),
     }
-
-    let data = res.text().await.map_err(|err| {
-        tracing::error!(
-            "Failed to process create invoice link response for payload {}: {:?}",
-            payload.clone(),
-            err
-        );
-        Error::UnexpectedError
-    })?;
-
-    tracing::debug!("Response received from paystack server: {}", data);
-
-    let paystack_response =
-        serde_json::de::from_str::<PaystackTransactionInitializationResponse>(data.as_str())
-            .map_err(|_| Error::UnexpectedError)?;
-
-    if !paystack_response.status {
-        tracing::error!("Failed to create invoice link: {}", data);
-        return Err(Error::UnexpectedError);
-    }
-
-    Ok(paystack_response.data.authorization_url)
 }
 
 pub struct InitializeInvoiceForOrder {
