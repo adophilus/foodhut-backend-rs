@@ -56,7 +56,7 @@ async fn send_verification_otp(
                     "pin_time_to_live": validity,
                     "pin_length": 4,
                     "pin_placeholder":"$PIN",
-                    "message_text": "Your FoodHut app verification pin is $PIN\nPin will expire in 5 minutes, do not share it with anyone" ,
+                    "message_text": format!("Your FoodHut app verification pin is $PIN\nPin will expire in {} minutes, do not share it with anyone", validity),
                     "pin_type":  "NUMERIC"
                 }).to_string())
                 .send()

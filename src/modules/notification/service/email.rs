@@ -1,7 +1,4 @@
-use crate::{
-    modules::{order::repository::OrderStatus, user::repository::User},
-    Context,
-};
+use crate::{modules::user::repository::User, Context};
 use lettre::{
     message::header::ContentType,
     transport::smtp::authentication::{Credentials, Mechanism},
@@ -12,7 +9,6 @@ use std::sync::Arc;
 
 use super::{types, Error, Notification, Result};
 
-// TODO: handle other notification types
 pub async fn send(ctx: Arc<Context>, notification: Notification) -> Result<()> {
     match notification.clone() {
         Notification::Registered(n) => send_registered_email(ctx, n).await,
