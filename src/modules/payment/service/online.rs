@@ -1,13 +1,15 @@
+use axum::http::Method;
 use bigdecimal::BigDecimal;
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::{PgExecutor, Postgres};
+use sqlx::Postgres;
 
 use crate::{
     modules::{
         order::repository::Order,
+        payment::utils,
         transaction::{self, repository::Transaction},
         user::repository::User,
     },
@@ -47,18 +49,18 @@ pub struct PaystackTransactionInitializationResponse {
     pub data: PaystackTransactionInitializationResponseData,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct PaystackTransferRecipientResponseData {
     pub recipient_code: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct PaystackTransferRecipientResponse {
     pub status: bool,
     pub data: PaystackTransferRecipientResponseData,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct PaystackTransferResponse {
     pub status: bool,
 }
@@ -194,134 +196,66 @@ pub struct WithdrawFundsPayload {
 }
 
 pub async fn withdraw_funds(ctx: Arc<Context>, payload: WithdrawFundsPayload) -> Result<(), Error> {
-    let mut headers = HeaderMap::new();
-    let auth_header = format!("Bearer {}", ctx.payment.secret_key);
-    headers.insert(
-        "Authorization",
-        auth_header
-            .clone()
-            .try_into()
-            .expect("Invalid auth header value"),
-    );
-    headers.insert(
-        "Content-Type",
-        "application/json"
-            .try_into()
-            .expect("Invalid content type header value"),
-    );
+    let recipient_code = match utils::send_paystack_request::<PaystackTransferRecipientResponse>(
+        ctx.clone(),
+        utils::SendPaystackRequestPayload {
+            route: String::from("/transferrecipient"),
+            body: Some(
+                json!({
+                  "type": "nuban",
+                  "name":payload.account_name,
+                  "account_number": payload.account_number,
+                  "bank_code": payload.bank_code,
+                  "currency": "NGN"
+                })
+                .to_string(),
+            ),
+            expected_status_code: StatusCode::CREATED,
+            method: Method::POST,
+        },
+    )
+    .await
+    {
+        Ok(res) => {
+            if !res.status {
+                tracing::error!("Failed to create transfer recipient: {:?}", res);
+                return Err(Error::UnexpectedError);
+            }
 
-    let transfer_recipient_payload = json!({
-      "type": "nuban",
-      "name":payload.account_name,
-      "account_number": payload.account_number,
-      "bank_code": payload.bank_code,
-      "currency": "NGN"
-    })
-    .to_string();
+            res.data.recipient_code
+        }
+        _ => Err(Error::UnexpectedError)?,
+    };
 
-    let res = reqwest::Client::new()
-        .post("https://api.paystack.co/transferrecipient")
-        .headers(headers.clone())
-        .body(transfer_recipient_payload.clone())
-        .send()
-        .await
-        .map_err(|err| {
-            tracing::error!("Failed to send create transfer recipient request: {}", err);
-            Error::UnexpectedError
-        })?;
+    match utils::send_paystack_request::<PaystackTransferResponse>(
+        ctx.clone(),
+        utils::SendPaystackRequestPayload {
+            route: String::from("/transfer"),
+            body: Some(
+                json!({
+                    "source": "balance",
+                    "reason": "User placed withdrawal request",
+                    "amount": payload.amount * BigDecimal::from(100),
+                    "recipient": recipient_code
+                })
+                .to_string(),
+            ),
+            expected_status_code: StatusCode::OK,
+            method: Method::POST,
+        },
+    )
+    .await
+    {
+        Ok(res) => {
+            if !res.status {
+                tracing::error!("Failed to create transfer: {:?}", res);
+                return Err(Error::UnexpectedError);
+            }
 
-    if res.status() != StatusCode::CREATED {
-        let data = res.text().await.map_err(|err| {
-            tracing::error!(
-                "Failed to process create transfer recipient for payload {}: {:?}",
-                transfer_recipient_payload.clone(),
-                err
-            );
-            Error::UnexpectedError
-        })?;
-
-        tracing::error!(
-            "Failed to create transfer recipient, invalid status code: {}",
-            data
-        );
-        return Err(Error::UnexpectedError);
+            Ok(())
+        }
+        _ => Err(Error::UnexpectedError),
     }
-
-    let data = res.text().await.map_err(|err| {
-        tracing::error!(
-            "Failed to process create transfer recipient response for payload {}: {:?}",
-            transfer_recipient_payload.clone(),
-            err
-        );
-        Error::UnexpectedError
-    })?;
-
-    tracing::debug!("Response received from paystack server: {}", data);
-
-    let paystack_response =
-        serde_json::de::from_str::<PaystackTransferRecipientResponse>(data.as_str())
-            .map_err(|_| Error::UnexpectedError)?;
-
-    if !paystack_response.status {
-        tracing::error!("Failed to create transfer recipient: {}", data);
-        return Err(Error::UnexpectedError);
-    }
-
-    let recipient_code = paystack_response.data.recipient_code;
-
-    let transfer_payload = json!({
-        "source": "balance",
-        "reason": "User placed withdrawal request",
-        "amount": payload.amount * BigDecimal::from(100),
-        "recipient": recipient_code
-    })
-    .to_string();
-
-    let res = reqwest::Client::new()
-        .post("https://api.paystack.co/transfer")
-        .headers(headers.clone())
-        .body(transfer_payload.clone())
-        .send()
-        .await
-        .map_err(|err| {
-            tracing::error!("Failed to create transfer: {}", err);
-            Error::UnexpectedError
-        })?;
-
-    if res.status() != StatusCode::OK {
-        let data = res.text().await.map_err(|err| {
-            tracing::error!(
-                "Failed to process create transfer for payload {}: {:?}",
-                transfer_payload.clone(),
-                err
-            );
-            Error::UnexpectedError
-        })?;
-
-        tracing::error!("Failed to create transfer: {}", data);
-        return Err(Error::UnexpectedError);
-    }
-
-    let data = res.text().await.map_err(|err| {
-        tracing::error!(
-            "Failed to process create transfer response for payload {}: {:?}",
-            transfer_payload.clone(),
-            err
-        );
-        Error::UnexpectedError
-    })?;
-
-    tracing::debug!("Response received from paystack server: {}", data);
-
-    let paystack_response = serde_json::de::from_str::<PaystackTransferResponse>(data.as_str())
-        .map_err(|_| Error::UnexpectedError)?;
-
-    if !paystack_response.status {
-        tracing::error!("Failed to create transfer: {}", data);
-        return Err(Error::UnexpectedError);
-    }
-
-    Ok(())
 }
 
 pub struct ConfirmPaymentForOrderPayload {
