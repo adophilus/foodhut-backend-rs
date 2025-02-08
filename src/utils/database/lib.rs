@@ -29,10 +29,10 @@ pub async fn migrate(db_conn: DatabaseConnection) {
 }
 
 pub mod pagination {
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
     use serde_json::Value;
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     pub struct Meta {
         pub total: u32,
         pub per_page: u32,
@@ -58,7 +58,7 @@ pub mod pagination {
         }
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     pub struct Item<T>(pub Vec<T>);
 
     impl<T: serde::de::DeserializeOwned> From<Option<Value>> for Item<T> {
@@ -74,7 +74,7 @@ pub mod pagination {
 #[macro_export]
 macro_rules! define_paginated {
     ($name:ident, $type:ty) => {
-        #[derive(Debug, Deserialize)]
+        #[derive(Debug, Deserialize, Serialize)]
         pub struct $name {
             pub items: crate::utils::database::pagination::Item<$type>,
             pub meta: crate::utils::database::pagination::Meta,

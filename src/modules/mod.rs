@@ -9,6 +9,7 @@ pub mod media;
 pub mod notification;
 pub mod order;
 pub mod payment;
+pub mod search;
 pub mod storage;
 pub mod transaction;
 pub mod user;

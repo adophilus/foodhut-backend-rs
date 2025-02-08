@@ -2,7 +2,7 @@ use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router}
 use serde_json::json;
 
 use super::{
-    ad, auth, cart, dashboard, dev, kitchen, meal, media, notification, order, payment,
+    ad, auth, cart, dashboard, dev, kitchen, meal, media, notification, order, payment, search,
     transaction, user, wallet,
 };
 use crate::types::Context;
@@ -32,5 +32,6 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/dashboard", dashboard::get_router())
         .nest("/wallets", wallet::get_router())
         .nest("/transactions", transaction::get_router())
+        .nest("/search", search::get_router())
     // .layer(axum::middleware::from_fn(auth::middleware::auth))
 }
