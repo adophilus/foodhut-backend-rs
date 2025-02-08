@@ -3,11 +3,12 @@ use axum::http::{HeaderMap, Method, StatusCode};
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
 
-pub struct SendPaystackRequestPayload {
+pub struct SendPaystackRequestPayload<'a> {
     pub route: String,
     pub body: Option<String>,
     pub expected_status_code: StatusCode,
     pub method: Method,
+    pub query: Option<&'a [(&'a str, &'a str)]>,
 }
 
 pub enum Error {
@@ -16,9 +17,9 @@ pub enum Error {
     FailedToDecodeResponse,
 }
 
-pub async fn send_paystack_request<R: DeserializeOwned>(
+pub async fn send_paystack_request<'a, R: DeserializeOwned>(
     ctx: Arc<Context>,
-    payload: SendPaystackRequestPayload,
+    payload: SendPaystackRequestPayload<'a>,
 ) -> Result<R, Error> {
     let mut headers = HeaderMap::new();
     let auth_header = format!("Bearer {}", ctx.payment.secret_key);
@@ -36,11 +37,18 @@ pub async fn send_paystack_request<R: DeserializeOwned>(
             .expect("Invalid content type header value"),
     );
 
-    let url = format!("https://api.paystack.co{}", payload.route);
+    let url = format!("{}{}", ctx.payment.api_endpoint, payload.route);
     let client = reqwest::Client::new();
     let mut req = match payload.method {
         Method::GET => client.get(url),
         _ => client.post(url),
+    };
+
+    match payload.query {
+        Some(query) => {
+            req = req.query(query)
+        },
+        _ => ()
     };
 
     req = req.headers(headers.clone());

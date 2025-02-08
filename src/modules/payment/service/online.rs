@@ -72,6 +72,7 @@ async fn create_paystack_invoice(ctx: Arc<Context>, payload: String) -> Result<S
             body: Some(payload),
             route: String::from("/transaction/initialize"),
             method: Method::POST,
+            query: None
         },
     )
     .await
@@ -170,6 +171,7 @@ pub async fn withdraw_funds(ctx: Arc<Context>, payload: WithdrawFundsPayload) ->
             ),
             expected_status_code: StatusCode::CREATED,
             method: Method::POST,
+            query: None
         },
     )
     .await
@@ -200,6 +202,7 @@ pub async fn withdraw_funds(ctx: Arc<Context>, payload: WithdrawFundsPayload) ->
             ),
             expected_status_code: StatusCode::OK,
             method: Method::POST,
+            query: None
         },
     )
     .await
