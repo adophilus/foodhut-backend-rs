@@ -162,7 +162,7 @@ pub async fn withdraw_funds(ctx: Arc<Context>, payload: WithdrawFundsPayload) ->
             body: Some(
                 json!({
                   "type": "nuban",
-                  "name":payload.account_name,
+                  "name": payload.account_name,
                   "account_number": payload.account_number,
                   "bank_code": payload.bank_code,
                   "currency": "NGN"

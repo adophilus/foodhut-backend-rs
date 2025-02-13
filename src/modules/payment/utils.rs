@@ -45,10 +45,8 @@ pub async fn send_paystack_request<'a, R: DeserializeOwned>(
     };
 
     match payload.query {
-        Some(query) => {
-            req = req.query(query)
-        },
-        _ => ()
+        Some(query) => req = req.query(query),
+        _ => (),
     };
 
     req = req.headers(headers.clone());
@@ -65,8 +63,13 @@ pub async fn send_paystack_request<'a, R: DeserializeOwned>(
         Error::RequestNotSent
     })?;
 
-    if res.status() != payload.expected_status_code {
-        tracing::error!("Got unexpected http response status");
+    let http_response_status_code = res.status();
+
+    if http_response_status_code != payload.expected_status_code {
+        tracing::error!(
+            "Got unexpected http response status: {}",
+            http_response_status_code
+        );
         Err(Error::InvalidHttpResponseStatusCode)?
     }
 
