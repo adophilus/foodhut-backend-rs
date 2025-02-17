@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            users.*\n        FROM\n            users,\n            kitchens\n        WHERE\n            kitchens.id = $1\n            AND users.id = kitchens.id\n        ",
+  "query": "\n        SELECT\n            users.*\n        FROM\n            users,\n            kitchens\n        WHERE\n            kitchens.id = $1\n            AND users.id = kitchens.owner_id\n        ",
   "describe": {
     "columns": [
       {
@@ -84,5 +84,5 @@
       false
     ]
   },
-  "hash": "1447ab9048ff0861ae081b57bbf9a677f0b1bdfadeab7ee8fda0b3de834b487d"
+  "hash": "76dea0489fb7dcdb06abaf1f08ef6e7565b896fe0b32237ff512e7f4929a5476"
 }

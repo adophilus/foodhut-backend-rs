@@ -135,7 +135,7 @@ pub async fn find_by_kitchen_id<'e, E: PgExecutor<'e>>(
             kitchens
         WHERE
             kitchens.id = $1
-            AND users.id = kitchens.id
+            AND users.id = kitchens.owner_id
         ",
         kitchen_id
     )
