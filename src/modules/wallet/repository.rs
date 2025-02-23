@@ -291,8 +291,9 @@ pub async fn update_by_id<'e, Executor: PgExecutor<'e>>(
 
     sqlx::query!(
         "
-        UPDATE wallets SET
-                balance = CASE WHEN $1 = $2 THEN balance + $3::numeric ELSE balance - $3::numeric END
+        UPDATE wallets
+        SET
+            balance = CASE WHEN $1 = $2 THEN balance + $3::numeric ELSE balance - $3::numeric END
         WHERE
             id = $4
         ",
@@ -302,10 +303,13 @@ pub async fn update_by_id<'e, Executor: PgExecutor<'e>>(
         id
     )
     .execute(e)
-        .await
-        .map(|_|())
-    .map_err(|err|{
-        tracing::error!("Error occurred while trying to update wallet by id: {}", err);
+    .await
+    .map(|_| ())
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to update wallet by id: {}",
+            err
+        );
         Error::UnexpectedError
     })
 }

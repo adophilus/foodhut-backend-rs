@@ -13,7 +13,7 @@ use serde_json::json;
 use validator::Validate;
 
 use crate::{
-    modules::{auth::middleware::Auth, kitchen, notification, payment, user},
+    modules::{auth::middleware::Auth, kitchen, notification, payment, user, wallet},
     types::Context,
     utils::pagination::Pagination,
 };
@@ -193,7 +193,52 @@ async fn update_order_status(
                         repository::OrderStatus::AwaitingAcknowledgement,
                         repository::OrderStatus::Preparing,
                     )
+                    | (
+                        repository::OrderStatus::AwaitingAcknowledgement,
+                        repository::OrderStatus::Cancelled,
+                    )
                     | (repository::OrderStatus::Preparing, repository::OrderStatus::InTransit) => {
+                        match payload.status.clone() {
+                            repository::OrderStatus::Cancelled => {
+                                match wallet::repository::find_by_owner_id(
+                                    &mut *tx,
+                                    order.owner_id.clone(),
+                                )
+                                .await
+                                {
+                                    Ok(Some(wallet)) => match wallet::repository::update_by_id(
+                                        &mut *tx,
+                                        wallet.id,
+                                        wallet::repository::UpdateByIdPayload {
+                                            operation: wallet::repository::UpdateOperation::Credit,
+                                            amount: order.total.clone(),
+                                        },
+                                    )
+                                    .await
+                                    {
+                                        Ok(_) => (),
+                                        _ => {
+                                            return (
+                                                StatusCode::INTERNAL_SERVER_ERROR,
+                                                Json(json!({ "error": "Sorry an error occurred" })),
+                                            )
+                                        }
+                                    },
+                                    _ => {
+                                        tracing::warn!(
+                                            "Wallet not found while trying to cancel order for {}",
+                                            order.id.clone()
+                                        );
+                                        return (
+                                            StatusCode::INTERNAL_SERVER_ERROR,
+                                            Json(json!({ "error": "Sorry, an error occurred" })),
+                                        );
+                                    }
+                                }
+                            }
+                            _ => (),
+                        };
+
                         // Update order item status as kitchen
                         match repository::update_order_status(
                             &mut *tx,
@@ -306,7 +351,7 @@ async fn update_order_status(
                 .await
                 {
                     Ok(_) => {
-                        let kithen_owner = match user::repository::find_by_kitchen_id(
+                        let kitchen_owner = match user::repository::find_by_kitchen_id(
                             &mut *tx,
                             order.kitchen_id.clone(),
                         )
@@ -331,7 +376,7 @@ async fn update_order_status(
                             ctx,
                             notification::service::Notification::order_status_updated(
                                 order,
-                                kithen_owner,
+                                kitchen_owner,
                             ),
                             notification::service::Backend::Push,
                         )

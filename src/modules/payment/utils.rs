@@ -78,7 +78,7 @@ pub async fn send_paystack_request<'a, R: DeserializeOwned>(
         Error::InvalidHttpResponseStatusCode
     })?;
 
-    tracing::debug!("Response received from paystack server: {}", data);
+    tracing::trace!("Response received from paystack server: {}", data);
 
     let paystack_response = serde_json::de::from_str::<R>(&data).map_err(|err| {
         tracing::error!("Failed to decode Paystack response: {}", err);

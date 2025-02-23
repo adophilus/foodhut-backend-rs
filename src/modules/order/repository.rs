@@ -1196,6 +1196,7 @@ pub async fn update_order_status<'e, E: PgExecutor<'e>>(
         WITH valid_transition AS (
             SELECT CASE
                 WHEN orders.status = 'AWAITING_ACKNOWLEDGEMENT' AND $2 = 'PREPARING' THEN TRUE
+                WHEN orders.status = 'AWAITING_ACKNOWLEDGEMENT' AND $2 = 'CANCELLED' THEN TRUE
                 WHEN orders.status = 'PREPARING' AND $2 = 'IN_TRANSIT' THEN TRUE
                 WHEN orders.status = 'IN_TRANSIT' AND $2 = 'DELIVERED' THEN TRUE
                 ELSE FALSE
