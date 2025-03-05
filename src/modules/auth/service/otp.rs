@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use sha2::Digest;
 
 use crate::{
-    modules::{auth::repository, notification, user::repository::User},
+    modules::{auth::repository, notification, user, user::repository::User},
     types::{AppEnvironment, Context},
 };
 use std::sync::Arc;
@@ -238,26 +238,32 @@ pub async fn verify(
         return Err(VerificationError::Expired);
     }
 
-    let res = hit_up_endpoint_and_parse(
-        ctx.otp.verify_endpoint.clone(),
-        json!({
-            "api_key":ctx.otp.api_key.clone(),
-            "pin_id":existing_otp.otp.clone(),
-            "pin" : code.clone()
-        })
-        .to_string(),
-    )
-    .await
-    .map_err(|_| VerificationError::UnexpectedError)?;
+    match user::repository::find_exempt_by_id(&ctx.db_conn.pool, user.id.clone()).await {
+        Ok(Some(eu)) => {}
+        Ok(_) => {
+            let res = hit_up_endpoint_and_parse(
+                ctx.otp.verify_endpoint.clone(),
+                json!({
+                    "api_key":ctx.otp.api_key.clone(),
+                    "pin_id":existing_otp.otp.clone(),
+                    "pin" : code.clone()
+                })
+                .to_string(),
+            )
+            .await
+            .map_err(|_| VerificationError::UnexpectedError)?;
 
-    if let VerifiedEndpointStatus::Error(err) = res.verified {
-        tracing::debug!("Got an error response when verifying OTP: {}", err);
-        return Err(VerificationError::InvalidOtp);
-    }
+            if let VerifiedEndpointStatus::Error(err) = res.verified {
+                tracing::debug!("Got an error response when verifying OTP: {}", err);
+                return Err(VerificationError::InvalidOtp);
+            }
 
-    if res.pin_id != existing_otp.otp {
-        return Err(VerificationError::InvalidOtp);
-    }
+            if res.pin_id != existing_otp.otp {
+                return Err(VerificationError::InvalidOtp);
+            }
+        }
+        _ => return Err(VerificationError::UnexpectedError),
+    };
 
     repository::otp::delete_by_id(&ctx.db_conn.pool, existing_otp.id)
         .await
