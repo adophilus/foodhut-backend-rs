@@ -1,0 +1,5 @@
+CREATE TABLE exempt_users (
+  id VARCHAR PRIMARY KEY NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP
+);

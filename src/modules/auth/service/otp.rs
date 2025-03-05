@@ -98,6 +98,62 @@ async fn hit_up_endpoint_and_parse(
     })
 }
 
+pub async fn create(
+    ctx: Arc<Context>,
+    user: User,
+    purpose: String,
+    otp: String,
+) -> Result<repository::otp::Otp, SendError> {
+    let hash = generate_hash(&purpose, &user);
+
+    let existing_otp = repository::otp::find_by_hash(&ctx.db_conn.pool, hash.clone())
+        .await
+        .map_err(|_| SendError::NotSent)?;
+
+    if existing_otp.is_some() && Utc::now().naive_utc() <= existing_otp.clone().unwrap().expires_at
+    {
+        return Err(SendError::NotExpired);
+    }
+
+    let validity = match ctx.app.environment {
+        AppEnvironment::Production => 3,
+        AppEnvironment::Development => 1,
+    };
+
+    let otp = match existing_otp {
+        Some(existing_otp) => {
+            repository::otp::update_by_id(
+                &ctx.db_conn.pool,
+                existing_otp.id.clone(),
+                repository::otp::UpdateOtpPayload {
+                    hash: hash.clone(),
+                    otp,
+                    purpose: purpose.clone(),
+                    meta: Some("".to_string()),
+                    validity,
+                },
+            )
+            .await
+        }
+        None => {
+            repository::otp::create(
+                &ctx.db_conn.pool,
+                repository::otp::CreateOtpPayload {
+                    purpose,
+                    meta: otp.clone(),
+                    hash,
+                    otp: otp.clone(),
+                    validity,
+                },
+            )
+            .await
+        }
+    }
+    .map_err(|_| SendError::NotSent)?;
+
+    Ok(otp)
+}
+
 pub async fn send(
     ctx: Arc<Context>,
     user: User,

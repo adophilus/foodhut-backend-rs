@@ -48,11 +48,13 @@ async fn get_orders(
         }
         false => {
             if filters.kitchen_id.is_some() {
+                tracing::warn!("Got here???");
                 repository::find_many_as_kitchen(
                     &ctx.db_conn.pool,
                     pagination.clone(),
                     repository::FindManyAsKitchenFilters {
-                        owner_id: Some(auth.user.id.clone()),
+                        // owner_id: Some(auth.user.id.clone()),
+                        owner_id: None,
                         payment_method: None,
                         status: filters.status,
                         kitchen_id: filters.kitchen_id,

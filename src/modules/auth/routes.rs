@@ -238,7 +238,7 @@ async fn verify_otp(
         }
     };
 
-    match service::otp::verify(
+    if let Err(_) = service::otp::verify(
         ctx.clone(),
         user.clone(),
         "auth.verification".to_string(),
@@ -246,39 +246,37 @@ async fn verify_otp(
     )
     .await
     {
-        Ok(_) => {
-            match user::repository::verify_by_phone_number(&ctx.db_conn.pool, payload.phone_number)
-                .await
-            {
-                Ok(_) => {
-                    let session = match service::auth::create_session(ctx.clone(), user.id).await {
-                        Ok(session) => session,
-                        Err(_) => {
-                            return (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                Json(json!({ "error": "Failed to create session" })),
-                            )
-                        }
-                    };
-
-                    (
-                        StatusCode::OK,
-                        Json(
-                            json!({ "access_token": session.access_token, "refresh_token": session.refresh_token }),
-                        ),
-                    )
-                }
-                _ => (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({ "error" : "Failed to verify OTP"})),
-                ),
-            }
-        }
-        _ => (
+        return (
             StatusCode::BAD_REQUEST,
             Json(json!({ "error" : "Invalid or expired OTP"})),
+        );
+    };
+
+    if let Err(_) =
+        user::repository::verify_by_phone_number(&ctx.db_conn.pool, payload.phone_number).await
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error" : "Failed to verify OTP"})),
+        );
+    };
+
+    let session = match service::auth::create_session(ctx.clone(), user.id).await {
+        Ok(session) => session,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to create session" })),
+            )
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(
+            json!({ "access_token": session.access_token, "refresh_token": session.refresh_token }),
         ),
-    }
+    )
 }
 
 #[derive(Deserialize)]
@@ -318,18 +316,49 @@ async fn sign_in(
         );
     }
 
-    match service::otp::send(ctx.clone(), user, "auth.verification".to_string()).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(json!({"message": "Check your phone for a verification OTP"})),
-        ),
-        Err(service::otp::SendError::NotExpired) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "OTP not expired"})),
-        ),
-        Err(_) => (
+    match user::repository::find_exempt_by_id(&ctx.db_conn.pool, user.id.clone()).await {
+        Ok(Some(_)) => {
+            match service::otp::create(
+                ctx.clone(),
+                user,
+                "auth.verification".to_string(),
+                "1234".to_string(),
+            )
+            .await
+            {
+                Ok(_) => (
+                    StatusCode::OK,
+                    Json(json!({"message": "Check your phone for a verification OTP"})),
+                ),
+                Err(service::otp::SendError::NotExpired) => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "OTP not expired"})),
+                ),
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Failed to send OTP"})),
+                ),
+            }
+        }
+        Ok(_) => {
+            match service::otp::send(ctx.clone(), user, "auth.verification".to_string()).await {
+                Ok(_) => (
+                    StatusCode::OK,
+                    Json(json!({"message": "Check your phone for a verification OTP"})),
+                ),
+                Err(service::otp::SendError::NotExpired) => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "OTP not expired"})),
+                ),
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Failed to send OTP"})),
+                ),
+            }
+        }
+        _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Failed to send OTP"})),
+            Json(json!({ "error": "Failed to send OTP!" })),
         ),
     }
 }

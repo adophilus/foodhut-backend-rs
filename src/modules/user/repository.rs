@@ -71,6 +71,13 @@ impl From<sqlx::types::Json<User>> for User {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ExemptUser {
+    pub id: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
 pub struct CreateUserPayload {
     pub email: String,
     pub phone_number: String,
@@ -270,6 +277,27 @@ pub async fn update_by_id<'e, E: PgExecutor<'e>>(
         Error::UnexpectedError
     })
     .map(|_| ())
+}
+
+pub async fn find_exempt_by_id<'e, E: PgExecutor<'e>>(
+    e: E,
+    user_id: String,
+) -> Result<Option<ExemptUser>> {
+    sqlx::query_as!(
+        ExemptUser,
+        "SELECT * FROM exempt_users WHERE id = $1",
+        user_id
+    )
+    .fetch_optional(e)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch exempt user by id {}: {}",
+            user_id,
+            err
+        );
+        Error::UnexpectedError
+    })
 }
 
 pub fn is_admin(user: &User) -> bool {

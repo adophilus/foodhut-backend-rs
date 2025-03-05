@@ -364,3 +364,31 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
         Error::UnexpectedError
     })
 }
+
+#[derive(Deserialize)]
+pub struct TotalTransactionVolume {
+    pub total_transaction_volume: BigDecimal,
+}
+
+pub async fn get_total_transaction_volume<'e, E: PgExecutor<'e>>(
+    e: E,
+) -> Result<TotalTransactionVolume, Error> {
+    sqlx::query_as!(
+        TotalTransactionVolume,
+        r#"
+        SELECT
+            COALESCE(SUM(amount), 0) AS "total_transaction_volume!"
+        FROM
+            transactions
+        "#
+    )
+    .fetch_one(e)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch transaction volume: {}",
+            err
+        );
+        Error::UnexpectedError
+    })
+}
