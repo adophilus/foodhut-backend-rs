@@ -4,12 +4,12 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
-async fn bank_fetch_job(ctx: Arc<Context>) -> Result<(), apalis::prelude::Error> {
-    service::update_paystack_banks(ctx).await;
+async fn refresh_access_token_job(ctx: Arc<Context>) -> Result<(), apalis::prelude::Error> {
+    service::refresh_access_token(ctx).await;
     Ok(())
 }
 
-fn setup_bank_fetch_job(
+fn setup_refresh_access_token_job(
     ctx: Arc<Context>,
 ) -> Arc<
     dyn Fn()
@@ -19,13 +19,13 @@ fn setup_bank_fetch_job(
 > {
     Arc::new(move || {
         let ctx = ctx.clone();
-        Box::pin(async move { bank_fetch_job(ctx).await })
+        Box::pin(async move { refresh_access_token_job(ctx).await })
     })
 }
 
 pub fn list(ctx: Arc<Context>) -> Vec<SchedulableJob> {
     vec![SchedulableJob {
-        schedule: apalis::cron::Schedule::from_str("@daily").expect("Couldn't create schedule"),
-        job: setup_bank_fetch_job(ctx),
+        schedule: apalis::cron::Schedule::from_str("@hourly").expect("Couldn't create schedule"),
+        job: setup_refresh_access_token_job(ctx),
     }]
 }

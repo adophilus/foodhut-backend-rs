@@ -1,6 +1,6 @@
-use crate::modules::{notification, user, wallet};
+use crate::modules::{notification, user, wallet, zoho};
 use crate::types::Context;
-use crate::utils::{self};
+use crate::utils;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{
@@ -217,11 +217,18 @@ async fn verify_otp(
     State(ctx): State<Arc<Context>>,
     Json(payload): Json<VerifyOtpPayload>,
 ) -> impl IntoResponse {
-    let user = match user::repository::find_by_phone_number(
-        &ctx.db_conn.pool,
-        payload.phone_number.clone(),
-    )
-    .await
+    let mut tx = match ctx.db_conn.pool.begin().await {
+        Ok(tx) => tx,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Sorry, an unexpected error occurred" })),
+            )
+        }
+    };
+
+    let user = match user::repository::find_by_phone_number(&mut *tx, payload.phone_number.clone())
+        .await
     {
         Ok(Some(user)) => user,
         Ok(None) => {
@@ -240,6 +247,7 @@ async fn verify_otp(
 
     if let Err(_) = service::otp::verify(
         ctx.clone(),
+        &mut tx,
         user.clone(),
         "auth.verification".to_string(),
         payload.otp.clone(),
@@ -252,16 +260,23 @@ async fn verify_otp(
         );
     };
 
-    if let Err(_) =
-        user::repository::verify_by_phone_number(&ctx.db_conn.pool, payload.phone_number).await
-    {
+    if let Err(_) = user::repository::verify_by_phone_number(&mut *tx, payload.phone_number).await {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({ "error" : "Failed to verify OTP"})),
         );
     };
 
-    let session = match service::auth::create_session(ctx.clone(), user.id).await {
+    if user.is_verified == false {
+        if let Err(_) = zoho::service::register_user(ctx.clone(), user.clone()).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Sorry, an unexpected error occurred" })),
+            );
+        }
+    }
+
+    let session = match service::auth::create_session(&mut *tx, user.id).await {
         Ok(session) => session,
         Err(_) => {
             return (
@@ -271,12 +286,21 @@ async fn verify_otp(
         }
     };
 
-    (
-        StatusCode::OK,
-        Json(
-            json!({ "access_token": session.access_token, "refresh_token": session.refresh_token }),
+    match tx.commit().await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(
+                json!({ "access_token": session.access_token, "refresh_token": session.refresh_token }),
+            ),
         ),
-    )
+        Err(err) => {
+            tracing::error!("Failed to commit transaction: {}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Sorry, an unexpected error occurred" })),
+            )
+        }
+    }
 }
 
 #[derive(Deserialize)]

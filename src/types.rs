@@ -76,6 +76,18 @@ pub struct GoogleContext {
 }
 
 #[derive(Clone)]
+pub struct ZohoContext {
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+    pub refresh_token: String,
+    pub access_token: Arc<Mutex<String>>,
+    pub accounts_api_endpoint: String,
+    pub campaigns_api_endpoint: String,
+    pub campaigns_list_key: String,
+}
+
+#[derive(Clone)]
 pub struct Context {
     pub app: AppContext,
     pub db_conn: database::DatabaseConnection,
@@ -84,6 +96,7 @@ pub struct Context {
     pub mail: MailContext,
     pub otp: OtpContext,
     pub google: GoogleContext,
+    pub zoho: ZohoContext,
 }
 
 #[derive(Clone)]
@@ -134,6 +147,17 @@ pub struct GoogleConfig {
 }
 
 #[derive(Clone)]
+pub struct ZohoConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+    pub refresh_token: String,
+    pub accounts_api_endpoint: String,
+    pub campaigns_api_endpoint: String,
+    pub campaigns_list_key: String,
+}
+
+#[derive(Clone)]
 pub struct Config {
     pub database: DatabaseConfig,
     pub app: AppConfig,
@@ -142,6 +166,7 @@ pub struct Config {
     pub mail: MailConfig,
     pub otp: OtpConfig,
     pub google: GoogleConfig,
+    pub zoho: ZohoConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -307,6 +332,18 @@ impl Default for Config {
             env::var("OTP_VERIFY_ENDPOINT").expect("OTP_VERIFY_ENDPOINT not set");
         let google_fcm_credentials =
             env::var("GOOGLE_FCM_CREDENTIALS").expect("GOOGLE_FCM_CREDENTIALS not set");
+        let zoho_client_id = env::var("ZOHO_CLIENT_ID").expect("ZOHO_CLIENT_ID not set");
+        let zoho_client_secret =
+            env::var("ZOHO_CLIENT_SECRET").expect("ZOHO_CLIENT_SECRET not set");
+        let zoho_redirect_url = env::var("ZOHO_REDIRECT_URL").expect("ZOHO_REDIRECT_URL not set");
+        let zoho_refresh_token =
+            env::var("ZOHO_REFRESH_TOKEN").expect("ZOHO_REFRESH_TOKEN not set");
+        let zoho_accounts_api_endpoint =
+            env::var("ZOHO_ACCOUNTS_API_ENDPOINT").expect("ZOHO_ACCOUNTS_API_ENDPOINT not set");
+        let zoho_campaigns_api_endpoint =
+            env::var("ZOHO_CAMPAIGNS_API_ENDPOINT").expect("ZOHO_CAMPAIGNS_API_ENDPOINT not set");
+        let zoho_campaigns_list_key =
+            env::var("ZOHO_CAMPAIGNS_LIST_KEY").expect("ZOHO_CAMPAIGNS_LIST_KEY not set");
 
         return Self {
             database: DatabaseConfig { url: database_url },
@@ -339,6 +376,15 @@ impl Default for Config {
             },
             google: GoogleConfig {
                 fcm_credentials: google_fcm_credentials,
+            },
+            zoho: ZohoConfig {
+                client_id: zoho_client_id,
+                client_secret: zoho_client_secret,
+                redirect_url: zoho_redirect_url,
+                refresh_token: zoho_refresh_token,
+                accounts_api_endpoint: zoho_accounts_api_endpoint,
+                campaigns_api_endpoint: zoho_campaigns_api_endpoint,
+                campaigns_list_key: zoho_campaigns_list_key,
             },
         };
     }
@@ -416,6 +462,16 @@ impl ToContext for Config {
             google: GoogleContext {
                 fcm_token_manager: google_fcm_token_manager,
                 fcm_project_id: google_fcm_project_id,
+            },
+            zoho: ZohoContext {
+                client_id: self.zoho.client_id,
+                client_secret: self.zoho.client_secret,
+                redirect_url: self.zoho.redirect_url,
+                access_token: Arc::new(Mutex::new(String::from(""))),
+                refresh_token: self.zoho.refresh_token,
+                accounts_api_endpoint: self.zoho.accounts_api_endpoint,
+                campaigns_api_endpoint: self.zoho.campaigns_api_endpoint,
+                campaigns_list_key: self.zoho.campaigns_list_key,
             },
         }
     }

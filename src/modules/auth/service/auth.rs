@@ -1,4 +1,5 @@
 use chrono::Utc;
+use sqlx::{PgExecutor, Postgres, Transaction};
 use ulid::Ulid;
 
 use super::super::repository;
@@ -14,11 +15,11 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub async fn create_session(ctx: Arc<Context>, user_id: String) -> Result<Session> {
+pub async fn create_session<'e, E: PgExecutor<'e>>(e: E, user_id: String) -> Result<Session> {
     let access_token = Ulid::new().to_string();
     let refresh_token = Ulid::new().to_string();
     repository::session::create(
-        &ctx.db_conn.pool,
+        e,
         repository::session::SessionCreationPayload {
             user_id,
             access_token,

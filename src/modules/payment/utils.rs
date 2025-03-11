@@ -49,7 +49,7 @@ pub async fn send_paystack_request<'a, R: DeserializeOwned>(
         _ => (),
     };
 
-    req = req.headers(headers.clone());
+    req = req.headers(headers);
 
     match payload.body {
         Some(body) => {

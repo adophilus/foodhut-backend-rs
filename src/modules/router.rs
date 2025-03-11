@@ -3,7 +3,7 @@ use serde_json::json;
 
 use super::{
     ad, auth, cart, dashboard, dev, kitchen, meal, media, notification, order, payment, search,
-    transaction, user, wallet,
+    transaction, user, wallet, zoho,
 };
 use crate::types::Context;
 use std::sync::Arc;
@@ -33,5 +33,6 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/wallets", wallet::get_router())
         .nest("/transactions", transaction::get_router())
         .nest("/search", search::get_router())
+        .nest("/zoho", zoho::get_router())
     // .layer(axum::middleware::from_fn(auth::middleware::auth))
 }

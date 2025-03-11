@@ -6,12 +6,7 @@ use serde_json::json;
 use sqlx::Postgres;
 
 use crate::{
-    modules::{
-        order::repository::Order,
-        payment::utils,
-        transaction,
-        user::repository::User,
-    },
+    modules::{order::repository::Order, payment::utils, transaction, user::repository::User},
     types::Context,
 };
 use std::sync::Arc;
@@ -72,7 +67,7 @@ async fn create_paystack_invoice(ctx: Arc<Context>, payload: String) -> Result<S
             body: Some(payload),
             route: String::from("/transaction/initialize"),
             method: Method::POST,
-            query: None
+            query: None,
         },
     )
     .await
@@ -171,7 +166,7 @@ pub async fn withdraw_funds(ctx: Arc<Context>, payload: WithdrawFundsPayload) ->
             ),
             expected_status_code: StatusCode::CREATED,
             method: Method::POST,
-            query: None
+            query: None,
         },
     )
     .await
@@ -202,7 +197,7 @@ pub async fn withdraw_funds(ctx: Arc<Context>, payload: WithdrawFundsPayload) ->
             ),
             expected_status_code: StatusCode::OK,
             method: Method::POST,
-            query: None
+            query: None,
         },
     )
     .await

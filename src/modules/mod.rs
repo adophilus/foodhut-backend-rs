@@ -14,6 +14,7 @@ pub mod storage;
 pub mod transaction;
 pub mod user;
 pub mod wallet;
+pub mod zoho;
 
 mod router;
 pub use router::get_router;

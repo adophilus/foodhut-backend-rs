@@ -1,4 +1,4 @@
-use crate::modules::{ad, wallet};
+use crate::modules::{ad, wallet, zoho};
 use crate::types::{Context, Job, JobStorage, SchedulableJob};
 use apalis::cron::CronStream;
 use apalis::layers::retry::{RetryLayer, RetryPolicy};
@@ -9,7 +9,8 @@ use std::sync::Arc;
 pub async fn monitor(ctx: Arc<Context>) -> apalis::prelude::Monitor<TokioExecutor> {
     let mut all_jobs: Vec<SchedulableJob> = vec![];
     all_jobs.append(&mut ad::job::list(ctx.clone()));
-    all_jobs.append(&mut wallet::job::list(ctx));
+    all_jobs.append(&mut wallet::job::list(ctx.clone()));
+    all_jobs.append(&mut zoho::job::list(ctx));
 
     let storage = JobStorage::new();
     let mut monitor = apalis::prelude::Monitor::<TokioExecutor>::new();

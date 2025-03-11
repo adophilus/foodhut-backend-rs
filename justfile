@@ -12,3 +12,9 @@ reverse-proxy-webhook:
 
 reverse-proxy-payment:
   mitmproxy --mode reverse:https://api.paystack.co --listen-port 8083
+
+reverse-proxy-zoho-accounts:
+  mitmproxy --mode reverse:https://accounts.zoho.com --listen-port 8084
+
+reverse-proxy-zoho-campaigns:
+  mitmproxy --mode reverse:https://campaigns.zoho.com --listen-port 8085

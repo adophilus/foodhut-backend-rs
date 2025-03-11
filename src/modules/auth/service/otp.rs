@@ -5,6 +5,7 @@ use reqwest::Client;
 use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
 use sha2::Digest;
+use sqlx::{PgExecutor, Postgres, Transaction};
 
 use crate::{
     modules::{auth::repository, notification, user, user::repository::User},
@@ -218,13 +219,14 @@ pub async fn send(
 
 pub async fn verify(
     ctx: Arc<Context>,
+    tx: &mut Transaction<'_, Postgres>,
     user: User,
     purpose: String,
     code: String,
 ) -> Result<(), VerificationError> {
     let hash = generate_hash(&purpose, &user);
 
-    let existing_otp = repository::otp::find_by_hash(&ctx.db_conn.pool, hash.clone())
+    let existing_otp = repository::otp::find_by_hash(&mut **tx, hash.clone())
         .await
         .map_err(|_| VerificationError::UnexpectedError)?
         .ok_or(VerificationError::UnexpectedError)?;
@@ -238,8 +240,8 @@ pub async fn verify(
         return Err(VerificationError::Expired);
     }
 
-    match user::repository::find_exempt_by_id(&ctx.db_conn.pool, user.id.clone()).await {
-        Ok(Some(eu)) => {}
+    match user::repository::find_exempt_by_id(&mut **tx, user.id.clone()).await {
+        Ok(Some(_)) => {}
         Ok(_) => {
             let res = hit_up_endpoint_and_parse(
                 ctx.otp.verify_endpoint.clone(),
@@ -265,7 +267,7 @@ pub async fn verify(
         _ => return Err(VerificationError::UnexpectedError),
     };
 
-    repository::otp::delete_by_id(&ctx.db_conn.pool, existing_otp.id)
+    repository::otp::delete_by_id(&mut **tx, existing_otp.id)
         .await
         .ok();
 

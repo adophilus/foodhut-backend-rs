@@ -1,14 +1,14 @@
 use crate::{
     modules::{
         auth::{self, middleware::Auth},
-        notification, user,
+        notification, user, zoho,
     },
     Context,
 };
 use axum::{
     extract::State,
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Redirect},
     routing::{get, post},
     Json, Router,
 };
@@ -30,7 +30,8 @@ async fn sign_in(
             .await
             .unwrap()
             .unwrap();
-    let session = auth::service::auth::create_session(ctx, user.id)
+
+    let session = auth::service::auth::create_session(&ctx.db_conn.pool, user.id)
         .await
         .unwrap();
 
@@ -80,9 +81,21 @@ async fn send_test_push_notification(
     }
 }
 
+async fn generate_zoho_tokens(State(ctx): State<Arc<Context>>) -> impl IntoResponse {
+    match zoho::service::generate_token_link(ctx).await {
+        Ok(url) => Redirect::to(&url).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Sorry an error occurred" })),
+        )
+            .into_response(),
+    }
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route("/auth/sign-in", post(sign_in))
         .route("/test/email", post(send_test_email))
         .route("/test/push-notification", post(send_test_push_notification))
+        .route("/zoho/generate-token", get(generate_zoho_tokens))
 }
