@@ -395,4 +395,3 @@ pub async fn get_total_transaction_volume<'e, E: PgExecutor<'e>>(
         Error::UnexpectedError
     })
 }
-// just to rebuild
