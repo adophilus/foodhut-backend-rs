@@ -179,9 +179,9 @@ async fn create_online_transaction<'e, E: PgExecutor<'e>>(
         DbTransaction,
         "
         INSERT INTO transactions
-            (id, amount, direction, type, note, user_id)
+            (id, amount, direction, type, note, ref, user_id)
         VALUES
-            ($1, $2, $3, $4, $5, $6)
+            ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
         ",
         Ulid::new().to_string(),
@@ -189,6 +189,7 @@ async fn create_online_transaction<'e, E: PgExecutor<'e>>(
         payload.direction.to_string(),
         TransactionType::Online.to_string(),
         payload.note,
+        Ulid::new().to_string(),
         payload.user_id
     )
     .fetch_one(e)
@@ -212,9 +213,9 @@ async fn create_wallet_transaction<'e, E: PgExecutor<'e>>(
         DbTransaction,
         "
         INSERT INTO transactions
-            (id, amount, direction, type, note, wallet_id, user_id)
+            (id, amount, direction, type, note, ref, wallet_id, user_id)
         VALUES
-            ($1, $2, $3, $4, $5, $6, $7)
+            ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
         ",
         Ulid::new().to_string(),
@@ -222,6 +223,7 @@ async fn create_wallet_transaction<'e, E: PgExecutor<'e>>(
         payload.direction.to_string(),
         TransactionType::Wallet.to_string(),
         payload.note,
+        Ulid::new().to_string(),
         payload.wallet_id,
         payload.user_id
     )
