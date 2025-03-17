@@ -340,6 +340,13 @@ async fn sign_in(
         );
     }
 
+    if user.is_deleted {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "User not found"})),
+        );
+    }
+
     match user::repository::find_exempt_by_id(&ctx.db_conn.pool, user.id.clone()).await {
         Ok(Some(_)) => {
             match service::otp::create(

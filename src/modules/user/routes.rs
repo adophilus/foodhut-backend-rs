@@ -183,11 +183,26 @@ async fn set_user_profile_picture(
     )
 }
 
+async fn delete_user_by_profile(State(ctx): State<Arc<Context>>, auth: Auth) -> impl IntoResponse {
+    match repository::delete_by_id(&ctx.db_conn.pool, auth.user.id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({ "message": "Account successfully deleted!" })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Failed to delete account"})),
+        ),
+    }
+}
+
 pub fn get_router() -> Router<Arc<Context>> {
     Router::new()
         .route(
             "/profile",
-            get(get_user_by_profile).patch(update_user_by_profile),
+            get(get_user_by_profile)
+                .patch(update_user_by_profile)
+                .delete(delete_user_by_profile),
         )
         .route("/profile/profile-picture", put(set_user_profile_picture))
         .route("/:id", get(get_user_by_id).patch(update_user_by_id))

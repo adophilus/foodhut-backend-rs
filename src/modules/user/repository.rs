@@ -61,6 +61,7 @@ pub struct User {
     pub has_kitchen: bool,
     pub referral_code: Option<String>,
     pub profile_picture: ProfilePicture,
+    pub is_deleted: bool,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -94,7 +95,7 @@ pub async fn create<'e, E>(db: E, payload: CreateUserPayload) -> Result<User>
 where
     E: PgExecutor<'e>,
 {
-    match sqlx::query_as!(
+    sqlx::query_as!(
         User,
         "
         INSERT INTO users (id, email, phone_number, first_name, last_name, is_verified)
@@ -109,13 +110,10 @@ where
     )
     .fetch_one(db)
     .await
-    {
-        Ok(user) => Ok(user),
-        Err(err) => {
-            tracing::error!("Error occured while creating a user account: {}", err);
-            Err(Error::UnexpectedError)
-        }
-    }
+    .map_err(|err| {
+        tracing::error!("Error occured while creating a user account: {}", err);
+        Error::UnexpectedError
+    })
 }
 
 pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Option<User>> {
@@ -294,6 +292,31 @@ pub async fn find_exempt_by_id<'e, E: PgExecutor<'e>>(
         tracing::error!(
             "Error occurred while trying to fetch exempt user by id {}: {}",
             user_id,
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
+pub async fn delete_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<()> {
+    sqlx::query!(
+        r#"
+        UPDATE
+            users
+        SET
+            is_deleted = TRUE
+        WHERE
+            id = $1
+        "#,
+        id
+    )
+    .execute(e)
+    .await
+    .map(|_| ())
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to delete user by id {}: {}",
+            id,
             err
         );
         Error::UnexpectedError
