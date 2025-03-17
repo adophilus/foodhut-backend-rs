@@ -15,7 +15,7 @@ use std::sync::Arc;
 use tempfile::NamedTempFile;
 
 use crate::{
-    modules::{auth::middleware::Auth, storage},
+    modules::{auth::middleware::Auth, kitchen, storage},
     types::{database::DatabaseConnection, Context},
 };
 
@@ -184,12 +184,65 @@ async fn set_user_profile_picture(
 }
 
 async fn delete_user_by_profile(State(ctx): State<Arc<Context>>, auth: Auth) -> impl IntoResponse {
-    match repository::delete_by_id(&ctx.db_conn.pool, auth.user.id).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(json!({ "message": "Account successfully deleted!" })),
-        ),
-        Err(_) => (
+    let mut tx = match ctx.db_conn.pool.begin().await {
+        Ok(tx) => tx,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to delete account"})),
+            )
+        }
+    };
+
+    match kitchen::repository::find_by_owner_id(&mut *tx, auth.user.id.clone()).await {
+        Ok(Some(kitchen)) => {
+            match kitchen::repository::update_by_id(
+                &mut *tx,
+                kitchen.id,
+                kitchen::repository::UpdateKitchenPayload {
+                    name: None,
+                    address: None,
+                    phone_number: None,
+                    r#type: None,
+                    opening_time: None,
+                    closing_time: None,
+                    preparation_time: None,
+                    delivery_time: None,
+                    cover_image: None,
+                    rating: None,
+                    likes: None,
+                    is_available: Some(false),
+                },
+            )
+            .await
+            {
+                Ok(_) => (),
+                _ => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "error": "Failed to delete account"})),
+                    )
+                }
+            };
+        }
+        _ => (),
+    };
+
+    match repository::delete_by_id(&mut *tx, auth.user.id).await {
+        Ok(_) => match tx.commit().await {
+            Ok(_) => (
+                StatusCode::OK,
+                Json(json!({ "message": "Account successfully deleted!" })),
+            ),
+            Err(err) => {
+                tracing::error!("Failed to commit transaction: {}", err);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Failed to delete account"})),
+                )
+            }
+        },
+        _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Failed to delete account"})),
         ),
