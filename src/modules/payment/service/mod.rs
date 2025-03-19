@@ -82,7 +82,7 @@ pub async fn confirm_payment_for_order(
     payload: ConfirmPaymentForOrderPayload,
 ) -> Result<(), Error> {
     match payload.payment_method {
-        PaymentMethod::Online => online::confirm_payment(
+        PaymentMethod::Online => online::confirm_payment_for_order(
             tx,
             online::ConfirmPaymentForOrderPayload {
                 order: payload.order.clone(),
@@ -96,7 +96,7 @@ pub async fn confirm_payment_for_order(
                     .await
                     .map_err(|_| Error::UnexpectedError)?
                     .ok_or(Error::UnexpectedError)?;
-            wallet::service::confirm_payment(
+            wallet::service::confirm_payment_for_order(
                 tx,
                 wallet::service::ConfirmPaymentForOrderPayload {
                     order: payload.order.clone(),

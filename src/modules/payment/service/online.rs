@@ -218,7 +218,7 @@ pub struct ConfirmPaymentForOrderPayload {
     pub order: Order,
 }
 
-pub async fn confirm_payment(
+pub async fn confirm_payment_for_order(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     payload: ConfirmPaymentForOrderPayload,
 ) -> Result<(), Error> {
@@ -229,6 +229,12 @@ pub async fn confirm_payment(
                 amount: payload.order.total.clone(),
                 direction: transaction::repository::TransactionDirection::Outgoing,
                 note: Some(format!("Paid for order {}", payload.order.id.clone())),
+                purpose: Some(transaction::repository::TransactionPurpose::Order(
+                    transaction::repository::TransactionPurposeOrder {
+                        order_id: payload.order.id,
+                    },
+                )),
+                r#ref: None,
                 user_id: payload.order.owner_id.clone(),
             },
         ),

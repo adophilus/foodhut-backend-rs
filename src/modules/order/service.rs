@@ -90,6 +90,21 @@ pub async fn mark_order_as_delivered(
             _ => Err(Error::UnexpectedError)?,
         };
 
+    let initial_order_payment_transaction =
+        transaction::repository::find_initial_order_payment_transaction_by_order_id(
+            &mut **tx,
+            payload.order.id.clone(),
+        )
+        .await
+        .map_err(|_| Error::UnexpectedError)?;
+
+    if initial_order_payment_transaction.is_none() {
+        tracing::error!("Required a transaction for an order which doesn't have an initial payment transaction: {}", &payload.order.id);
+        return Err(Error::UnexpectedError);
+    }
+
+    let initial_order_payment_transaction = initial_order_payment_transaction.unwrap();
+
     transaction::repository::create(
         &mut **tx,
         transaction::repository::CreatePayload::Wallet(
@@ -100,6 +115,12 @@ pub async fn mark_order_as_delivered(
                     "Payment received for order {}",
                     payload.order.id.clone()
                 )),
+                purpose: Some(transaction::repository::TransactionPurpose::Order(
+                    transaction::repository::TransactionPurposeOrder {
+                        order_id: payload.order.id,
+                    },
+                )),
+                r#ref: Some(initial_order_payment_transaction.r#ref),
                 wallet_id: wallet.id.clone(),
                 user_id: payload.order.owner_id.clone(),
             },

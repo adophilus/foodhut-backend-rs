@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO transactions\n            (id, amount, direction, type, note, ref, wallet_id, user_id)\n        VALUES\n            ($1, $2, $3, $4, $5, $6, $7, $8)\n        RETURNING *\n        ",
+  "query": "\n        INSERT INTO transactions\n            (id, amount, direction, type, note, ref, purpose, wallet_id, user_id)\n        VALUES\n            ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -52,6 +52,11 @@
         "ordinal": 9,
         "name": "ref",
         "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "purpose",
+        "type_info": "Jsonb"
       }
     ],
     "parameters": {
@@ -62,6 +67,7 @@
         "Varchar",
         "Varchar",
         "Varchar",
+        "Jsonb",
         "Varchar",
         "Varchar"
       ]
@@ -76,8 +82,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "ec0eb470f5614f2b56114ce78f7244d2bc5ac51e8cd9cd7f957468ddca6028b6"
+  "hash": "94864c32d24e086211540e47642e0846ab943ad0a0a78ba25b2290636b4a9c1a"
 }

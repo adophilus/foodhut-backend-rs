@@ -258,7 +258,7 @@ pub struct ConfirmPaymentForOrderPayload {
     pub wallet: Wallet,
 }
 
-pub async fn confirm_payment(
+pub async fn confirm_payment_for_order(
     tx: &mut Transaction<'_, Postgres>,
     payload: ConfirmPaymentForOrderPayload,
 ) -> Result<()> {
@@ -269,6 +269,12 @@ pub async fn confirm_payment(
                 amount: payload.order.total.clone(),
                 direction: transaction::repository::TransactionDirection::Outgoing,
                 note: Some(format!("Paid for order {}", payload.order.id.clone())),
+                purpose: Some(transaction::repository::TransactionPurpose::Order(
+                    transaction::repository::TransactionPurposeOrder {
+                        order_id: payload.order.id,
+                    },
+                )),
+                r#ref: None,
                 wallet_id: payload.wallet.id.clone(),
                 user_id: payload.wallet.owner_id.clone(),
             },
@@ -373,6 +379,10 @@ pub async fn withdraw_funds(
                     "Withdrawal to {} {}",
                     payload.account_name, payload.account_number
                 )),
+                purpose: Some(transaction::repository::TransactionPurpose::Other(
+                    transaction::repository::TransactionPurposeOther,
+                )),
+                r#ref: None,
                 wallet_id: wallet.id.clone(),
                 user_id: payload.user.id.clone(),
             },

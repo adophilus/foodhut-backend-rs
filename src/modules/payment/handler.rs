@@ -92,6 +92,10 @@ pub async fn successful_topup(
                 amount: topup_amount,
                 direction: transaction::repository::TransactionDirection::Incoming,
                 note: Some("Topup".to_string()),
+                purpose: Some(transaction::repository::TransactionPurpose::Other(
+                    transaction::repository::TransactionPurposeOther,
+                )),
+                r#ref: None,
                 user_id: metadata.user_id.clone(),
             },
         ),

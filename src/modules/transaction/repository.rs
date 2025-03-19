@@ -5,6 +5,7 @@ use crate::{
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::PgExecutor;
 use std::convert::Into;
 use std::str::FromStr;
@@ -78,6 +79,30 @@ impl ToString for TransactionDirection {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TransactionPurposeOrder {
+    pub order_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TransactionPurposeOther;
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum TransactionPurpose {
+    #[serde(rename = "other")]
+    Other(TransactionPurposeOther),
+    #[serde(rename = "order")]
+    Order(TransactionPurposeOrder),
+}
+
+impl From<serde_json::Value> for TransactionPurpose {
+    fn from(value: serde_json::Value) -> Self {
+        serde_json::de::from_str::<_>(value.to_string().as_str())
+            .expect("Invalid transaction purpose")
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OnlineTransaction {
     pub id: String,
@@ -85,6 +110,7 @@ pub struct OnlineTransaction {
     pub note: Option<String>,
     pub direction: TransactionDirection,
     pub r#ref: String,
+    pub purpose: TransactionPurpose,
     pub user_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -97,6 +123,7 @@ pub struct WalletTransaction {
     pub note: Option<String>,
     pub direction: TransactionDirection,
     pub r#ref: String,
+    pub purpose: TransactionPurpose,
     pub wallet_id: String,
     pub user_id: String,
     pub created_at: NaiveDateTime,
@@ -111,6 +138,7 @@ pub struct DbTransaction {
     pub direction: TransactionDirection,
     pub r#ref: String,
     pub r#type: TransactionType,
+    pub purpose: TransactionPurpose,
     pub wallet_id: Option<String>,
     pub user_id: String,
     pub created_at: NaiveDateTime,
@@ -144,6 +172,8 @@ pub struct CreateOnlineTransactionPayload {
     pub direction: TransactionDirection,
     pub user_id: String,
     pub note: Option<String>,
+    pub r#ref: Option<String>,
+    pub purpose: Option<TransactionPurpose>,
 }
 
 #[derive(Debug)]
@@ -151,6 +181,8 @@ pub struct CreateWalletTransactionPayload {
     pub amount: BigDecimal,
     pub direction: TransactionDirection,
     pub note: Option<String>,
+    pub r#ref: Option<String>,
+    pub purpose: Option<TransactionPurpose>,
     pub wallet_id: String,
     pub user_id: String,
 }
@@ -179,9 +211,9 @@ async fn create_online_transaction<'e, E: PgExecutor<'e>>(
         DbTransaction,
         "
         INSERT INTO transactions
-            (id, amount, direction, type, note, ref, user_id)
+            (id, amount, direction, type, note, ref, purpose, user_id)
         VALUES
-            ($1, $2, $3, $4, $5, $6, $7)
+            ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
         ",
         Ulid::new().to_string(),
@@ -189,7 +221,8 @@ async fn create_online_transaction<'e, E: PgExecutor<'e>>(
         payload.direction.to_string(),
         TransactionType::Online.to_string(),
         payload.note,
-        Ulid::new().to_string(),
+        payload.r#ref.clone().unwrap_or(Ulid::new().to_string()),
+        json!(payload.purpose),
         payload.user_id
     )
     .fetch_one(e)
@@ -213,9 +246,9 @@ async fn create_wallet_transaction<'e, E: PgExecutor<'e>>(
         DbTransaction,
         "
         INSERT INTO transactions
-            (id, amount, direction, type, note, ref, wallet_id, user_id)
+            (id, amount, direction, type, note, ref, purpose, wallet_id, user_id)
         VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8)
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
         ",
         Ulid::new().to_string(),
@@ -223,7 +256,8 @@ async fn create_wallet_transaction<'e, E: PgExecutor<'e>>(
         payload.direction.to_string(),
         TransactionType::Wallet.to_string(),
         payload.note,
-        Ulid::new().to_string(),
+        payload.r#ref.clone().unwrap_or(Ulid::new().to_string()),
+        json!(payload.purpose),
         payload.wallet_id,
         payload.user_id
     )
@@ -392,6 +426,35 @@ pub async fn get_total_transaction_volume<'e, E: PgExecutor<'e>>(
     .map_err(|err| {
         tracing::error!(
             "Error occurred while trying to fetch transaction volume: {}",
+            err
+        );
+        Error::UnexpectedError
+    })
+}
+
+pub async fn find_initial_order_payment_transaction_by_order_id<'e, E: PgExecutor<'e>>(
+    executor: E,
+    id: String,
+) -> Result<Option<DbTransaction>, Error> {
+    sqlx::query_as!(
+        DbTransaction,
+        r#"
+        SELECT
+            *
+        FROM
+            transactions 
+        WHERE
+            transactions.purpose->>type = 'order'
+            transactions.purpose->>order_id = $1
+        "#,
+        id
+    )
+    .fetch_optional(executor)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to find iniitla order payment transaction by id {}: {}",
+            id,
             err
         );
         Error::UnexpectedError
