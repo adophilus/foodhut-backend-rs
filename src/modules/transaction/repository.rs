@@ -444,8 +444,8 @@ pub async fn find_initial_order_payment_transaction_by_order_id<'e, E: PgExecuto
         FROM
             transactions 
         WHERE
-            transactions.purpose->>type = 'order'
-            transactions.purpose->>order_id = $1
+            transactions.purpose ->> 'type' = 'order'
+            AND transactions.purpose ->> 'order_id' = $1
         "#,
         id
     )
