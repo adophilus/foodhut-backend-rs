@@ -61,9 +61,9 @@ pub struct User {
     pub has_kitchen: bool,
     pub referral_code: Option<String>,
     pub profile_picture: ProfilePicture,
-    pub is_deleted: bool,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+    pub deleted_at: Option<NaiveDateTime>,
 }
 
 impl From<sqlx::types::Json<User>> for User {
@@ -304,7 +304,7 @@ pub async fn delete_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<()>
         UPDATE
             users
         SET
-            is_deleted = TRUE
+            deleted_at = NOW()
         WHERE
             id = $1
         "#,

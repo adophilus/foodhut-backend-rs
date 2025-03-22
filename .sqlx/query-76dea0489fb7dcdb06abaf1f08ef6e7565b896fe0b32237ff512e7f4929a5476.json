@@ -65,8 +65,8 @@
       },
       {
         "ordinal": 12,
-        "name": "is_deleted",
-        "type_info": "Bool"
+        "name": "deleted_at",
+        "type_info": "Timestamp"
       }
     ],
     "parameters": {
@@ -87,7 +87,7 @@
       true,
       false,
       false,
-      false
+      true
     ]
   },
   "hash": "76dea0489fb7dcdb06abaf1f08ef6e7565b896fe0b32237ff512e7f4929a5476"

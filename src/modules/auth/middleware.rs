@@ -36,7 +36,7 @@ async fn get_user_from_header(ctx: Arc<Context>, header: String) -> Result<User,
         .map_err(|_| Error::InvalidSession)?
         .ok_or(Error::InvalidSession)
         .map(|user| {
-            if user.is_deleted {
+            if user.deleted_at.is_some() {
                 return Err(Error::InvalidSession);
             }
 

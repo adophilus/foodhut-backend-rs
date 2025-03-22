@@ -340,7 +340,7 @@ async fn sign_in(
         );
     }
 
-    if user.is_deleted {
+    if user.deleted_at.is_some() {
         return (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "User not found"})),
