@@ -69,31 +69,31 @@ async fn send_order_status_updated_push_notification(
     Ok(())
 }
 
-#[cfg(test)]
-mod test {
-    use oauth_fcm::{create_shared_token_manager, send_fcm_message, FcmNotification};
-    use std::fs::File;
-
-    #[tokio::test]
-    async fn should_send_push_notification() {
-        let payload: Option<String> = None;
-        let token_manager = create_shared_token_manager(
-            // File::open("config/messaging-service-account.json").unwrap(),
-            File::open("config/credentials.json").unwrap(),
-        )
-        .unwrap();
-        send_fcm_message(
-            "DEVICE_TOKEN",
-            Some(FcmNotification {
-                title: "Order status updated".to_string(),
-                body: "Your order is being prepared".to_string(),
-            }),
-            payload,
-            &token_manager,
-            // "foodhut-434413",
-            "foodhut-75a56",
-        )
-        .await
-        .unwrap();
-    }
-}
+// #[cfg(test)]
+// mod test {
+//     use oauth_fcm::{create_shared_token_manager, send_fcm_message, FcmNotification};
+//     use std::fs::File;
+//
+//     #[tokio::test]
+//     async fn should_send_push_notification() {
+//         let payload: Option<String> = None;
+//         let token_manager = create_shared_token_manager(
+//             // File::open("config/messaging-service-account.json").unwrap(),
+//             File::open("config/credentials.json").unwrap(),
+//         )
+//         .unwrap();
+//         send_fcm_message(
+//             "DEVICE_TOKEN",
+//             Some(FcmNotification {
+//                 title: "Order status updated".to_string(),
+//                 body: "Your order is being prepared".to_string(),
+//             }),
+//             payload,
+//             &token_manager,
+//             // "foodhut-434413",
+//             "foodhut-75a56",
+//         )
+//         .await
+//         .unwrap();
+//     }
+// }

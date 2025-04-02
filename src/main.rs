@@ -1,12 +1,16 @@
-mod modules;
 mod jobs;
+mod modules;
 mod types;
 mod utils;
 
 use crate::types::{Config, Context, ToContext};
-use axum::{extract::DefaultBodyLimit, Extension, Router};
+use axum::{
+    extract::DefaultBodyLimit,
+    http::{header, Method},
+    Extension, Router,
+};
 use std::sync::Arc;
-use tower_http::trace::TraceLayer;
+use tower_http::{cors, trace};
 use tracing_subscriber::prelude::*;
 
 fn init_tracing() {
@@ -27,7 +31,20 @@ async fn main() {
         .with_state(ctx.clone())
         .layer(Extension(ctx.clone()))
         .layer(DefaultBodyLimit::max(1024 * 1024 * 10))
-        .layer(TraceLayer::new_for_http());
+        .layer(trace::TraceLayer::new_for_http())
+        .layer(
+            cors::CorsLayer::new()
+                .allow_methods([
+                    Method::OPTIONS,
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::PATCH,
+                    Method::DELETE,
+                ])
+                .allow_headers([header::CONTENT_TYPE])
+                .allow_origin(cors::Any),
+        );
 
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", ctx.app.host, ctx.app.port))
         .await
@@ -38,7 +55,5 @@ async fn main() {
     let http = async { axum::serve(listener, app).await.unwrap() };
     let job_monitor = async { jobs::monitor(ctx.clone()).await.run().await.unwrap() };
 
-    let _res = tokio::join!(http, job_monitor);
-
-    // Ok(())
+    tokio::join!(http, job_monitor);
 }
