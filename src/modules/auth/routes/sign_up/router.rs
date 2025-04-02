@@ -4,5 +4,5 @@ use axum::routing::{post, Router};
 use std::sync::Arc;
 
 pub fn get_router() -> Router<Arc<Context>> {
-    Router::new().route("/strategy/phone", post(handler::handler))
+    Router::new().route("/strategy/credentials", post(handler::handler))
 }
