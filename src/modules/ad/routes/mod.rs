@@ -2,6 +2,7 @@ mod create;
 mod get;
 mod list;
 mod update;
+mod delete;
 
 use crate::types::Context;
 use axum::routing::Router;
@@ -13,4 +14,5 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/", list::get_router())
         .nest("/", get::get_router())
         .nest("/", update::get_router())
+        .nest("/", delete::get_router())
 }
