@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            kitchens.*,\n            TO_JSONB(kitchen_cities) AS \"city!: sqlx::types::Json<KitchenCity>\"\n        FROM\n            kitchens,\n            kitchen_cities\n        WHERE\n            kitchens.id = $1\n            AND kitchen_cities.id = kitchens.city_id\n            AND kitchens.city_id = kitchen_cities.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "phone_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "opening_time",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "closing_time",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "preparation_time",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "delivery_time",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "cover_image",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 10,
+        "name": "rating",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "owner_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 12,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 13,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 14,
+        "name": "likes",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 15,
+        "name": "is_available",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 16,
+        "name": "city_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 17,
+        "name": "city!: sqlx::types::Json<KitchenCity>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "5d8ef53cbf63a67c46a70fdffedd944343142a5bfb5161519c1e01fd4779a6c7"
+}

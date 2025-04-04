@@ -32,7 +32,7 @@ log = "0.4.22"
 num-bigint = "0.4.6"
 oauth_fcm = "0.3.0"
 regex = "1.10.5"
-reqwest = { version = "0.12.5", features = ["multipart"] }
+reqwest = { version = "0.12.5", features = ["json", "multipart"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde-aux = "4.5.0"
 serde_json = "1.0.120"

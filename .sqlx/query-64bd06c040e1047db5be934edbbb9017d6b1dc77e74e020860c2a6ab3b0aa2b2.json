@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE orders\n        SET\n            status = 'AWAITING_ACKNOWLEDGEMENT',\n            payment_method = $1\n        WHERE\n            id = $2\n            AND status = 'AWAITING_PAYMENT'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "64bd06c040e1047db5be934edbbb9017d6b1dc77e74e020860c2a6ab3b0aa2b2"
+}
