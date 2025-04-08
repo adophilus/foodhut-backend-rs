@@ -1,7 +1,12 @@
 use super::types::{request, response};
 use crate::{
-    modules::{auth::middleware::Auth, cart, meal::repository, user},
+    modules::{
+        cart,
+        meal::repository::{self, MealWithCartStatus},
+        user,
+    },
     types::Context,
+    utils::pagination::Paginated,
 };
 use std::sync::Arc;
 
@@ -70,50 +75,23 @@ pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::
                 .await
             };
 
-            match paginated_meals {
-                Ok(paginated_meals) => {
-                    let augmented_meals = paginated_meals
+            paginated_meals
+                .map_err(|_| response::Error::FailedToFetchMeals)
+                .map(|meals| {
+                    let augmented_meals = meals
                         .items
                         .clone()
                         .into_iter()
-                        .map(|meal| MealWithCartStatus {
-                            id: meal.id.clone(),
-                            name: meal.name,
-                            description: meal.description,
-                            rating: meal.rating,
-                            original_price: meal.original_price,
-                            price: meal.price,
-                            likes: meal.likes,
-                            cover_image: meal.cover_image,
-                            is_available: meal.is_available,
-                            in_cart: cart
-                                .items
-                                .0
-                                .iter()
-                                .find(|item| item.meal_id == meal.id)
-                                .is_some(),
-                            kitchen_id: meal.kitchen_id,
-                            created_at: meal.created_at,
-                            updated_at: meal.updated_at,
-                            deleted_at: meal.deleted_at,
-                        })
+                        .map(|meal| meal.with_cart_status(&cart))
                         .collect::<Vec<_>>();
 
-                    (
-                        StatusCode::OK,
-                        Json(json!(pagination::Paginated::new(
-                            augmented_meals,
-                            paginated_meals.meta.total,
-                            paginated_meals.meta.page,
-                            paginated_meals.meta.per_page,
-                        ))),
-                    )
-                }
-                _ => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": "Failed to fetch meals"})),
-                ),
-            }
+                    response::Success::Meals(Paginated::new(
+                        augmented_meals,
+                        meals.meta.total,
+                        meals.meta.page,
+                        meals.meta.per_page,
+                    ))
+                })
         }
         None => {
             let paginated_meals = repository::find_many_as_user(
@@ -127,45 +105,23 @@ pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::
             )
             .await;
 
-            match paginated_meals {
-                Ok(paginated_meals) => {
-                    let augmented_meals = paginated_meals
+            paginated_meals
+                .map_err(|_| response::Error::FailedToFetchMeals)
+                .map(|meals| {
+                    let augmented_meals = meals
                         .items
                         .clone()
                         .into_iter()
-                        .map(|meal| MealWithCartStatus {
-                            id: meal.id.clone(),
-                            name: meal.name,
-                            description: meal.description,
-                            rating: meal.rating,
-                            original_price: meal.original_price,
-                            price: meal.price,
-                            likes: meal.likes,
-                            cover_image: meal.cover_image,
-                            is_available: meal.is_available,
-                            in_cart: false,
-                            kitchen_id: meal.kitchen_id,
-                            created_at: meal.created_at,
-                            updated_at: meal.updated_at,
-                            deleted_at: meal.deleted_at,
-                        })
-                        .collect::<Vec<_>>();
+                        .map(|meal| meal.into())
+                        .collect::<Vec<MealWithCartStatus>>();
 
-                    (
-                        StatusCode::OK,
-                        Json(json!(pagination::Paginated::new(
-                            augmented_meals,
-                            paginated_meals.meta.total,
-                            paginated_meals.meta.page,
-                            paginated_meals.meta.per_page,
-                        ))),
-                    )
-                }
-                _ => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": "Failed to fetch meals"})),
-                ),
-            }
+                    response::Success::Meals(Paginated::new(
+                        augmented_meals,
+                        meals.meta.total,
+                        meals.meta.page,
+                        meals.meta.per_page,
+                    ))
+                })
         }
     }
 }

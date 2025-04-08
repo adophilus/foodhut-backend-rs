@@ -1,5 +1,6 @@
 use crate::define_paginated;
 use crate::modules::{
+    cart::repository::Cart,
     kitchen::{self, repository::Kitchen},
     storage,
     user::repository::User,
@@ -10,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::types::BigDecimal;
 use sqlx::PgExecutor;
+use std::convert::From;
 use std::convert::Into;
 use ulid::Ulid;
 
@@ -32,6 +34,33 @@ pub struct Meal {
     pub deleted_at: Option<NaiveDateTime>,
 }
 
+impl Meal {
+    pub fn with_cart_status(self, cart: &Cart) -> MealWithCartStatus {
+        MealWithCartStatus {
+            id: self.id.clone(),
+            name: self.name,
+            description: self.description,
+            rating: self.rating,
+            original_price: self.original_price,
+            price: self.price,
+            likes: self.likes,
+            cover_image: self.cover_image,
+            is_available: self.is_available,
+            in_cart: !cart
+                .items
+                .0
+                .iter()
+                .filter(|item| item.meal_id == self.id)
+                .collect::<Vec<_>>()
+                .is_empty(),
+            kitchen_id: self.kitchen_id,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+            deleted_at: self.deleted_at,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MealWithCartStatus {
     pub id: String,
@@ -48,6 +77,27 @@ pub struct MealWithCartStatus {
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
     pub deleted_at: Option<NaiveDateTime>,
+}
+
+impl From<Meal> for MealWithCartStatus {
+    fn from(meal: Meal) -> Self {
+        Self {
+            id: meal.id.clone(),
+            name: meal.name,
+            description: meal.description,
+            rating: meal.rating,
+            original_price: meal.original_price,
+            price: meal.price,
+            likes: meal.likes,
+            cover_image: meal.cover_image,
+            is_available: meal.is_available,
+            in_cart: false,
+            kitchen_id: meal.kitchen_id,
+            created_at: meal.created_at,
+            updated_at: meal.updated_at,
+            deleted_at: meal.deleted_at,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]

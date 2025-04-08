@@ -21,16 +21,16 @@ pub mod response {
     use axum::{extract::Json, http::StatusCode, response::IntoResponse};
     use serde_json::json;
 
-    use crate::{modules::kitchen::repository::Kitchen, utils::pagination::Paginated};
+    use crate::{modules::meal::repository::MealWithCartStatus, utils::pagination::Paginated};
 
     pub enum Success {
-        Kitchens(Paginated<Kitchen>),
+        Meals(Paginated<MealWithCartStatus>),
     }
 
     impl IntoResponse for Success {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::Kitchens(kitchens) => (StatusCode::OK, Json(json!(kitchens))).into_response(),
+                Self::Meals(meals) => (StatusCode::OK, Json(json!(meals))).into_response(),
             }
         }
     }
