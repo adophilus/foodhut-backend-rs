@@ -406,16 +406,29 @@ pub async fn find_many_as_user<'e, E: PgExecutor<'e>>(
 }
 
 pub async fn find_many_cities<'e, E: PgExecutor<'e>>(e: E) -> Result<Vec<KitchenCity>, Error> {
-    sqlx::query_as!(KitchenCity, "SELECT * FROM kitchen_cities")
-        .fetch_all(e)
-        .await
-        .map_err(|err| {
-            tracing::error!(
-                "Error occurred while trying to fetch many kitchen cities: {}",
-                err
-            );
-            Error::UnexpectedError
-        })
+    sqlx::query_as!(
+        KitchenCity,
+        "
+        SELECT
+            *
+        FROM
+            kitchen_cities
+        WHERE
+            is_deleted = FALSE
+        ORDER BY
+            state ASC,
+            name ASC
+        "
+    )
+    .fetch_all(e)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to fetch many kitchen cities: {}",
+            err
+        );
+        Error::UnexpectedError
+    })
 }
 
 pub struct UpdateCityByIdPayload {
@@ -446,6 +459,33 @@ pub async fn update_city_by_id<'e, E: PgExecutor<'e>>(
     .map_err(|err| {
         tracing::error!(
             "Error occurred while trying to update city by id {}: {:?}",
+            id,
+            err
+        );
+        Error::UnexpectedError
+    })
+    .map(|_| ())
+}
+
+pub async fn delete_city_by_id<'e, E: PgExecutor<'e>>(
+    executor: E,
+    id: String,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        UPDATE kitchen_cities
+        SET
+            is_deleted = TRUE
+        WHERE
+            id = $1
+        ",
+        id
+    )
+    .execute(executor)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to delete city by id {}: {:?}",
             id,
             err
         );
@@ -591,14 +631,14 @@ pub async fn unlike_by_id<'e, E: PgExecutor<'e>>(
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct CreateKitchenCityPayload {
+pub struct CreateCityPayload {
     pub name: String,
     pub state: String,
 }
 
 pub async fn create_kitchen_city<'e, E: PgExecutor<'e>>(
     e: E,
-    payload: CreateKitchenCityPayload,
+    payload: CreateCityPayload,
 ) -> Result<KitchenCity, Error> {
     sqlx::query_as!(
         KitchenCity,

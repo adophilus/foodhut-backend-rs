@@ -31,6 +31,7 @@ pub mod request {
 pub mod response {
     use axum::{extract::Json, http::StatusCode, response::IntoResponse};
     use serde_json::json;
+    use validator::ValidationErrors;
 
     pub enum Success {
         CheckPhoneForVerificationOtp,
@@ -53,13 +54,13 @@ pub mod response {
         UserNotFound,
         UserNotVerified,
         FailedToSendOtp,
-        FailedToValidatePayload,
         OtpNotExpired,
         SignupFailed,
         EmailAlreadyInUse,
         PhoneNumberAlreadyInUse,
         FailedToCreateWallet,
         UnexpectedError,
+        FailedToValidate(ValidationErrors),
     }
 
     impl IntoResponse for Error {
@@ -73,11 +74,6 @@ pub mod response {
                 Error::FailedToFetchUser => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({ "error": "Failed to fetch user" })),
-                )
-                    .into_response(),
-                Error::FailedToValidatePayload => (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": "Failed to validate payload"})),
                 )
                     .into_response(),
                 Error::UserNotFound => (
@@ -122,6 +118,9 @@ pub mod response {
                     Json(json!({ "error": "Sorry an error occurred" })),
                 )
                     .into_response(),
+                Error::FailedToValidate(errors) => {
+                    (StatusCode::BAD_REQUEST, Json(json!({ "errors": errors }))).into_response()
+                }
             }
         }
     }

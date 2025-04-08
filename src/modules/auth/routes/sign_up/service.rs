@@ -7,10 +7,10 @@ use std::sync::Arc;
 use validator::Validate;
 
 pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::Response {
-    if let Err(errors) = payload.validate() {
+    payload.validate().map_err(|errors| {
         tracing::warn!("Failed to validate payload: {errors}");
-        return Err(response::Error::FailedToValidatePayload);
-    }
+        response::Error::FailedToValidate(errors)
+    })?;
 
     let mut tx = ctx.db_conn.clone().pool.begin().await.map_err(|err| {
         tracing::error!("Failed to start database transaction: {}", err);
