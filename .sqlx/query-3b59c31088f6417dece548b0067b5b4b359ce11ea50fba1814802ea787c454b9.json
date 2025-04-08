@@ -27,6 +27,11 @@
         "ordinal": 4,
         "name": "updated_at",
         "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_deleted",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -41,6 +46,7 @@
       false,
       false,
       false,
+      true,
       true
     ]
   },

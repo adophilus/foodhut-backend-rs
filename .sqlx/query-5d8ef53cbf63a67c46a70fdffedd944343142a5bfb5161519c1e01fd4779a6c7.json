@@ -90,6 +90,11 @@
       },
       {
         "ordinal": 17,
+        "name": "is_blocked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 18,
         "name": "city!: sqlx::types::Json<KitchenCity>",
         "type_info": "Jsonb"
       }
@@ -114,6 +119,7 @@
       false,
       false,
       true,
+      false,
       false,
       false,
       false,

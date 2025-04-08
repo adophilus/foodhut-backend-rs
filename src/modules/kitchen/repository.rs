@@ -31,6 +31,7 @@ pub struct KitchenCity {
     pub id: String,
     pub name: String,
     pub state: String,
+    pub is_deleted: bool,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -58,6 +59,7 @@ pub struct Kitchen {
     pub city_id: String,
     pub city: KitchenCity,
     pub is_available: bool,
+    pub is_blocked: bool,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -416,6 +418,42 @@ pub async fn find_many_cities<'e, E: PgExecutor<'e>>(e: E) -> Result<Vec<Kitchen
         })
 }
 
+pub struct UpdateCityByIdPayload {
+    pub name: Option<String>,
+    pub state: Option<String>,
+}
+
+pub async fn update_city_by_id<'e, E: PgExecutor<'e>>(
+    executor: E,
+    id: String,
+    payload: UpdateCityByIdPayload,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        UPDATE kitchen_cities
+        SET
+            name = COALESCE($1, name),
+            state = COALESCE($2, state)
+        WHERE
+            id = $3
+        ",
+        payload.name,
+        payload.state,
+        id
+    )
+    .execute(executor)
+    .await
+    .map_err(|err| {
+        tracing::error!(
+            "Error occurred while trying to update city by id {}: {:?}",
+            id,
+            err
+        );
+        Error::UnexpectedError
+    })
+    .map(|_| ())
+}
+
 #[derive(Serialize)]
 pub struct UpdateKitchenPayload {
     pub name: Option<String>,
@@ -579,6 +617,46 @@ pub async fn create_kitchen_city<'e, E: PgExecutor<'e>>(
         tracing::error!("Failed to create kitchen city: {}", err);
         Error::UnexpectedError
     })
+}
+
+pub async fn block_by_id<'e, E: PgExecutor<'e>>(executor: E, id: String) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        UPDATE kitchens
+        SET
+            is_blocked = TRUE
+        WHERE
+            id = $1
+        ",
+        id
+    )
+    .execute(executor)
+    .await
+    .map_err(|err| {
+        tracing::error!("Failed to block kitchen by id {}: {:?}", id, err);
+        Error::UnexpectedError
+    })
+    .map(|_| ())
+}
+
+pub async fn unblock_by_id<'e, E: PgExecutor<'e>>(executor: E, id: String) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        UPDATE kitchens
+        SET
+            is_blocked = FALSE
+        WHERE
+            id = $1
+        ",
+        id
+    )
+    .execute(executor)
+    .await
+    .map_err(|err| {
+        tracing::error!("Failed to unblock kitchen by id {}: {:?}", id, err);
+        Error::UnexpectedError
+    })
+    .map(|_| ())
 }
 
 pub fn is_owner(user: &User, kitchen: &Kitchen) -> bool {

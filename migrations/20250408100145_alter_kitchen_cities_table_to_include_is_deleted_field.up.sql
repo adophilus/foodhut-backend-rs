@@ -1,0 +1,2 @@
+ALTER TABLE kitchen_cities
+ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE;
