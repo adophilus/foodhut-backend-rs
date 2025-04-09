@@ -1,15 +1,20 @@
+pub mod request {
+    pub struct Payload {
+        pub id: String,
+    }
+}
+
 pub mod response {
-    use axum::{extract::Json, http::StatusCode, response::IntoResponse};
-    use serde_json::json;
+    use axum::{http::StatusCode, response::IntoResponse};
 
     pub enum Success {
-        Types(Vec<String>),
+        Media(String),
     }
 
     impl IntoResponse for Success {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::Types(types) => (StatusCode::OK, Json(json!(types))).into_response(),
+                Self::Media(id) => (StatusCode::OK, id).into_response(),
             }
         }
     }
