@@ -255,7 +255,7 @@ pub struct FullOrderWithOwner {
 }
 
 impl FullOrder {
-    pub fn add_owner(self: Self, owner: User) -> FullOrderWithOwner {
+    pub fn with_owner(self, owner: User) -> FullOrderWithOwner {
         FullOrderWithOwner {
             id: self.id,
             status: self.status,
