@@ -1,11 +1,20 @@
 pub mod request {
-    use crate::{modules::kitchen::repository, utils::pagination::Pagination};
+    use crate::{
+        modules::{auth::middleware::Auth, order::repository::OrderSimpleStatus},
+        utils::pagination::Pagination,
+    };
+    use serde::Deserialize;
 
-    pub type Filters = repository::FindManyFilters;
+    #[derive(Deserialize)]
+    pub struct Filters {
+        pub status: Option<OrderSimpleStatus>,
+        pub kitchen_id: Option<String>,
+    }
 
     pub struct Payload {
         pub filters: Filters,
         pub pagination: Pagination,
+        pub auth: Auth,
     }
 }
 
@@ -13,30 +22,30 @@ pub mod response {
     use axum::{extract::Json, http::StatusCode, response::IntoResponse};
     use serde_json::json;
 
-    use crate::{modules::kitchen::repository::Kitchen, utils::pagination::Paginated};
+    use crate::{modules::order::repository::FullOrder, utils::pagination::Paginated};
 
     pub enum Success {
-        Kitchens(Paginated<Kitchen>),
+        Orders(Paginated<FullOrder>),
     }
 
     impl IntoResponse for Success {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::Kitchens(kitchens) => (StatusCode::OK, Json(json!(kitchens))).into_response(),
+                Self::Orders(orders) => (StatusCode::OK, Json(json!(orders))).into_response(),
             }
         }
     }
 
     pub enum Error {
-        FailedToFetchKitchens,
+        FailedToFetchOrders,
     }
 
     impl IntoResponse for Error {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::FailedToFetchKitchens => (
+                Self::FailedToFetchOrders => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Failed to fetch kitchens" })),
+                    Json(json!({ "error": "Failed to fetch orders" })),
                 )
                     .into_response(),
             }
