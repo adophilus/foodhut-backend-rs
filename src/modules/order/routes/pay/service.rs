@@ -1,82 +1,68 @@
 use super::types::{request, response};
 use crate::{
-    modules::{auth::middleware::Auth, kitchen::repository, user, wallet},
+    modules::{
+        order::repository::{self, Order},
+        payment,
+        user::repository::User,
+    },
     types::Context,
 };
 use std::sync::Arc;
-use validator::Validate;
 
-pub async fn service(
-    ctx: Arc<Context>,
-    auth: Auth,
-    payload: request::Payload,
-) -> response::Response {
-    payload.validate().map_err(|errors| {
-        tracing::warn!("Failed to validate payload: {errors}");
-        response::Error::FailedToValidate(errors)
+pub struct PayForOrderPayload {
+    pub payment_method: repository::PaymentMethod,
+    pub order: Order,
+    pub payer: User,
+}
+
+pub async fn pay_for_order(ctx: Arc<Context>, payload: PayForOrderPayload) -> response::Response {
+    let method = match payload.payment_method {
+        repository::PaymentMethod::Online => payment::service::PaymentMethod::Online,
+        repository::PaymentMethod::Wallet => payment::service::PaymentMethod::Wallet,
+    };
+
+    let mut tx = ctx.db_conn.pool.begin().await.map_err(|err| {
+        tracing::error!("Failed to start transaction: {}", err);
+        response::Error::FailedToInitiateOrderPayment
     })?;
 
-    let mut tx = ctx.db_conn.clone().pool.begin().await.map_err(|err| {
-        tracing::error!("Failed to start database transaction: {}", err);
-        response::Error::FailedToCreateKitchen
+    let details = payment::service::initialize_payment_for_order(
+        ctx.clone(),
+        &mut tx,
+        payment::service::InitializePaymentForOrder {
+            method,
+            order: payload.order,
+            payer: payload.payer.clone(),
+        },
+    )
+    .await
+    .map_err(|err| match err {
+        payment::service::Error::AlreadyPaid => response::Error::PaymentAlreadyMade,
+        _ => response::Error::FailedToInitiateOrderPayment,
     })?;
-
-    let kitchen = repository::find_by_owner_id(&mut *tx, auth.user.id.clone())
-        .await
-        .map_err(|_| response::Error::FailedToCreateKitchen)?;
-
-    if kitchen.is_some() {
-        return Err(response::Error::AlreadyCreatedKitchen);
-    }
-
-    repository::create(
-        &mut *tx,
-        repository::CreateKitchenPayload {
-            name: payload.name,
-            address: payload.address,
-            r#type: payload.type_,
-            phone_number: payload.phone_number,
-            opening_time: payload.opening_time,
-            closing_time: payload.closing_time,
-            preparation_time: payload.preparation_time,
-            delivery_time: payload.delivery_time,
-            city_id: payload.city_id,
-            owner_id: auth.user.id.clone(),
-        },
-    )
-    .await
-    .map_err(|_| response::Error::FailedToCreateKitchen)?;
-
-    user::repository::update_by_id(
-        &mut *tx,
-        auth.user.id.clone(),
-        user::repository::UpdateUserPayload {
-            has_kitchen: Some(true),
-            email: None,
-            last_name: None,
-            first_name: None,
-            phone_number: None,
-            profile_picture: None,
-        },
-    )
-    .await
-    .map_err(|_| response::Error::FailedToCreateKitchen)?;
-
-    wallet::repository::create(
-        &mut *tx,
-        wallet::repository::CreateWalletPayload {
-            is_kitchen_wallet: true,
-            owner_id: auth.user.id.clone(),
-        },
-    )
-    .await
-    .map_err(|_| response::Error::FailedToCreateKitchen)?;
 
     tx.commit()
         .await
         .map_err(|err| {
-            tracing::error!("Failed to commit database transaction: {}", err);
-            response::Error::FailedToCreateKitchen
+            tracing::error!("Failed to commit transaction: {}", err);
+            response::Error::FailedToInitiateOrderPayment
         })
-        .map(|_| response::Success::KitchenCreated)
+        .map(|_| response::Success::PaymentDetails(details))
+}
+
+pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::Response {
+    let order = repository::find_by_id(&ctx.db_conn.pool, payload.id)
+        .await
+        .map_err(|_| response::Error::FailedToInitiateOrderPayment)?
+        .ok_or(response::Error::OrderNotFound)?;
+
+    pay_for_order(
+        ctx.clone(),
+        PayForOrderPayload {
+            payment_method: payload.body.with,
+            order,
+            payer: payload.auth.user,
+        },
+    )
+    .await
 }

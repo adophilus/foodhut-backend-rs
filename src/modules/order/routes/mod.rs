@@ -1,7 +1,7 @@
 mod get;
 mod list;
 mod pay;
-mod status;
+mod update_status;
 
 use crate::types::Context;
 use axum::routing::Router;
@@ -12,5 +12,5 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/", list::get_router())
         .nest("/", get::get_router())
         .nest("/", pay::get_router())
-        .nest("/", status::get_router())
+        .nest("/", update_status::get_router())
 }
