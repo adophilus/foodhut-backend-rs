@@ -1,6 +1,9 @@
 pub mod request {
+    use crate::modules::auth::middleware::Auth;
+
     pub struct Payload {
         pub id: String,
+        pub auth: Auth,
     }
 }
 
@@ -9,15 +12,15 @@ pub mod response {
     use serde_json::json;
 
     pub enum Success {
-        KitchenUnliked,
+        MealUnliked,
     }
 
     impl IntoResponse for Success {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::KitchenUnliked => (
+                Self::MealUnliked => (
                     StatusCode::OK,
-                    Json(json!({ "message": "Kitchen unliked successfully" })),
+                    Json(json!({ "message": "Meal unliked successfully" })),
                 )
                     .into_response(),
             }
@@ -25,15 +28,15 @@ pub mod response {
     }
 
     pub enum Error {
-        FailedToUnlikeKitchen,
+        FailedToUnlikeMeal,
     }
 
     impl IntoResponse for Error {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::FailedToUnlikeKitchen => (
+                Self::FailedToUnlikeMeal => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "message": "Failed to unlike kitchen" })),
+                    Json(json!({ "message": "Failed to unlike meal" })),
                 )
                     .into_response(),
             }

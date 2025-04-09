@@ -11,5 +11,5 @@ pub async fn handler(
     State(ctx): State<Arc<Context>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    service(ctx, request::Payload { id }, auth).await
+    service(ctx, request::Payload { id, auth }).await
 }

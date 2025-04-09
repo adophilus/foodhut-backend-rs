@@ -1,62 +1,56 @@
 pub mod request {
-    use crate::modules::kitchen::types;
-    use regex::Regex;
-    use serde::Deserialize;
-    use std::borrow::Cow;
-    use validator::{Validate, ValidationError};
+    use crate::modules::auth::middleware::Auth;
+    use async_trait::async_trait;
+    use axum::extract::multipart::Field;
+    use axum_typed_multipart::{FieldData, TryFromField, TryFromMultipart, TypedMultipartError};
+    use bigdecimal::{BigDecimal, FromPrimitive};
+    use tempfile::NamedTempFile;
 
-    fn validate_kitchen_type(r#type: &str) -> Result<(), ValidationError> {
-        match types::KITCHEN_TYPES.contains(&r#type) {
-            true => Ok(()),
-            false => Err(ValidationError::new("INVALID_KITCHEN_TYPE")
-                .with_message(Cow::from("Invalid kitchen type"))),
+    #[derive(Debug, Clone)]
+    pub struct Price(pub BigDecimal);
+
+    #[async_trait]
+    impl TryFromField for Price {
+        async fn try_from_field<'a>(
+            field: Field<'a>,
+            _: Option<usize>,
+        ) -> Result<Self, TypedMultipartError> {
+            field
+                .text()
+                .await
+                .map(|text| {
+                    text.parse::<f32>().map(|price| {
+                        Price(BigDecimal::from_f32(price).unwrap_or(BigDecimal::from(0)))
+                    })
+                })
+                .map_err(|err| {
+                    tracing::error!("Error occurred while parsing body: {}", err);
+                    TypedMultipartError::InvalidRequestBody { source: err }
+                })
+                .unwrap()
+                .map_err(|err| {
+                    tracing::error!("Error occurred while parsing body: {}", err);
+                    TypedMultipartError::UnknownField {
+                        field_name: String::from("price"),
+                    }
+                })
         }
     }
 
-    fn validate_opening_time(time_str: &str) -> Result<(), ValidationError> {
-        let regex = Regex::new(r"^\d{2}:\d{2}$").expect("Invalid opening time regex");
-        match regex.is_match(time_str) {
-            true => Ok(()),
-            false => Err(
-                ValidationError::new("INVALID_OPENING_TIME").with_message(Cow::from(
-                    r"Opening time must be in 24 hour format (e.g: 08:00)",
-                )),
-            ),
-        }
-    }
-
-    fn validate_closing_time(time_str: &str) -> Result<(), ValidationError> {
-        let regex = Regex::new(r"^\d{2}:\d{2}$").expect("Invalid closing time regex");
-        match regex.is_match(time_str) {
-            true => Ok(()),
-            false => Err(
-                ValidationError::new("INVALID_CLOSING_TIME").with_message(Cow::from(
-                    r"Closing time must be in 24 hour format (e.g: 20:00)",
-                )),
-            ),
-        }
-    }
-
-    #[derive(Deserialize, Validate)]
+    #[derive(TryFromMultipart)]
     pub struct Body {
         pub name: Option<String>,
-        pub address: Option<String>,
-        pub phone_number: Option<String>,
-        #[validate(custom(function = "validate_kitchen_type"))]
-        #[serde(rename = "type")]
-        pub r#type: Option<String>,
-        #[validate(custom(function = "validate_opening_time"))]
-        pub opening_time: Option<String>,
-        #[validate(custom(function = "validate_closing_time"))]
-        pub closing_time: Option<String>,
-        pub preparation_time: Option<String>,
-        pub delivery_time: Option<String>,
+        pub description: Option<String>,
+        pub price: Option<Price>,
         pub is_available: Option<bool>,
+        #[form_data(limit = "10MiB")]
+        pub cover_image: Option<FieldData<NamedTempFile>>,
     }
 
     pub struct Payload {
         pub id: String,
         pub body: Body,
+        pub auth: Auth,
     }
 }
 
@@ -65,15 +59,15 @@ pub mod response {
     use serde_json::json;
 
     pub enum Success {
-        KitchenUpdated,
+        MealUpdated,
     }
 
     impl IntoResponse for Success {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::KitchenUpdated => (
+                Self::MealUpdated => (
                     StatusCode::OK,
-                    Json(json!({ "message": "Kitchen updated successfully" })),
+                    Json(json!({ "message": "Meal updated successfully" })),
                 )
                     .into_response(),
             }
@@ -81,33 +75,33 @@ pub mod response {
     }
 
     pub enum Error {
-        FailedToUpdateKitchen,
-        FailedToFetchKitchen,
-        KitchenNotFound,
-        NotKitchenOwner,
+        MealNotFound,
+        FailedToUpdateMeal,
+        NotMealOwner,
+        KitchenNotCreated,
     }
 
     impl IntoResponse for Error {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::FailedToUpdateKitchen => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "message": "Failed to update kitchen" })),
-                )
-                    .into_response(),
-                Self::NotKitchenOwner => (
+                Self::NotMealOwner => (
                     StatusCode::FORBIDDEN,
-                    Json(json!({"error": "You are not the owner of this kitchen"})),
+                    Json(json!({"error": "You are not the owner of this meal"})),
                 )
                     .into_response(),
-                Self::FailedToFetchKitchen => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Failed to fetch kitchen" })),
-                )
-                    .into_response(),
-                Self::KitchenNotFound => (
+                Self::MealNotFound => (
                     StatusCode::NOT_FOUND,
-                    Json(json!({ "error": "Kitchen not found" })),
+                    Json(json!({"error": "Meal not found"})),
+                )
+                    .into_response(),
+                Self::KitchenNotCreated => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": "Kitchen not created" })),
+                )
+                    .into_response(),
+                Self::FailedToUpdateMeal => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "Failed to update meal" })),
                 )
                     .into_response(),
             }
