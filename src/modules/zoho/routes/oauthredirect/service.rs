@@ -6,13 +6,6 @@ use crate::modules::user::repository::User;
 use axum::http::{HeaderMap, Method, StatusCode};
 use serde::{de::DeserializeOwned, Deserialize};
 
-pub enum Error {
-    UnexpectedError,
-    RequestNotSent,
-    InvalidHttpResponseStatusCode,
-    FailedToDecodeResponse,
-}
-
 pub async fn generate_token_link(ctx: Arc<Context>) -> Result<String, response::Error> {
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
