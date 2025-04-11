@@ -1,0 +1,7 @@
+mod dedicated_account_assignment_failed;
+mod dedicated_account_assignment_successful;
+mod transaction_successful;
+
+pub use dedicated_account_assignment_failed::handler as dedicated_account_assignment_failed;
+pub use dedicated_account_assignment_successful::handler as dedicated_account_assignment_successful;
+pub use transaction_successful::handler as transaction_successful;

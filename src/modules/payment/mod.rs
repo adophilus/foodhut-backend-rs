@@ -1,6 +1,5 @@
-pub mod handler;
 pub mod model;
-mod router;
-pub use router::get_router;
+mod routes;
+pub use routes::get_router;
 pub mod service;
 pub mod utils;
