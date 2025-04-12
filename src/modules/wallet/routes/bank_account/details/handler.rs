@@ -1,15 +1,14 @@
-use super::service::service;
-use super::types::request;
+use super::{service::service, types::request};
 use crate::types::Context;
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, State},
     response::IntoResponse,
 };
 use std::sync::Arc;
 
 pub async fn handler(
     State(ctx): State<Arc<Context>>,
-    Json(payload): Json<request::Payload>,
+    Json(body): Json<request::Body>,
 ) -> impl IntoResponse {
-    service(ctx, payload).await
+    service(ctx, request::Payload { body }).await
 }

@@ -189,20 +189,17 @@ pub async fn find_many_banks<'e, E: PgExecutor<'e>>(
 }
 
 pub async fn find_by_id<'e, E: PgExecutor<'e>>(e: E, id: String) -> Result<Option<Wallet>, Error> {
-    match sqlx::query_as!(Wallet, "SELECT * FROM wallets WHERE id = $1", id)
+    sqlx::query_as!(Wallet, "SELECT * FROM wallets WHERE id = $1", id)
         .fetch_optional(e)
         .await
-    {
-        Ok(maybe_wallet) => Ok(maybe_wallet),
-        Err(err) => {
+        .map_err(|err| {
             tracing::error!(
                 "Error occurred while trying to fetch a wallet by id {}: {}",
                 id,
                 err
             );
-            Err(Error::UnexpectedError)
-        }
-    }
+            Error::UnexpectedError
+        })
 }
 
 pub async fn find_by_owner_id<'e, Executor: PgExecutor<'e>>(
