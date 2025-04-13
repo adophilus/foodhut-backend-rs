@@ -7,7 +7,7 @@ use axum::{
 use std::sync::Arc;
 
 pub async fn handler(
-    _: request::Auth,
+    // _: request::Auth,
     State(ctx): State<Arc<Context>>,
     Query(params): Query<request::Params>,
 ) -> impl IntoResponse {

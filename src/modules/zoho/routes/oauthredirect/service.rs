@@ -155,13 +155,15 @@ async fn send_zoho_request<'a, R: DeserializeOwned>(
     payload: SendZohoRequestPayload<'a>,
 ) -> Result<R, response::Error> {
     let mut headers = HeaderMap::new();
-    let auth_header = format!("Bearer {}", *ctx.zoho.access_token.lock().await);
+    let access_token = ctx.zoho.access_token.lock().await.clone();
+    tracing::debug!("access_token: {}", &access_token);
+    let auth_header = format!("Bearer {}", access_token);
     headers.insert(
         "Authorization",
-        auth_header
-            .clone()
-            .try_into()
-            .map_err(|_|response::Error::ServerError)?,
+        auth_header.clone().try_into().map_err(|err| {
+            tracing::error!("Failed to parse auth_header: {:?}", err);
+            response::Error::ServerError
+        })?,
     );
     let target = match payload.target {
         ZohoRequestTarget::Accounts => &ctx.zoho.accounts_api_endpoint,
