@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM users WHERE email = $1 OR phone_number = $2",
+  "query": "\n        SELECT\n            *\n        FROM\n            users\n        WHERE\n            (\n                email = $1\n                OR phone_number = $2\n            )\n            AND deleted_at IS NULL\n        ",
   "describe": {
     "columns": [
       {
@@ -91,5 +91,5 @@
       true
     ]
   },
-  "hash": "2513aca1f5c9fbc026fef66864dc4c56764fa35ee77c76288b3e17036bb83156"
+  "hash": "c0c163d0ee4da0ecbe5fb94a534692e825580ea0b58473997d3920f5181ca242"
 }

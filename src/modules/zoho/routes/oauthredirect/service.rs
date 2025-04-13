@@ -161,7 +161,7 @@ async fn send_zoho_request<'a, R: DeserializeOwned>(
         auth_header
             .clone()
             .try_into()
-            .expect("Invalid auth header value"),
+            .map_err(|_|response::Error::ServerError)?,
     );
     let target = match payload.target {
         ZohoRequestTarget::Accounts => &ctx.zoho.accounts_api_endpoint,

@@ -172,7 +172,15 @@ pub async fn find_by_phone_number<'e, E: PgExecutor<'e>>(
 ) -> Result<Option<User>> {
     sqlx::query_as!(
         User,
-        "SELECT * FROM users WHERE phone_number = $1",
+        "
+        SELECT
+            *
+        FROM
+            users
+        WHERE
+            phone_number = $1
+            AND deleted_at IS NULL
+        ",
         phone_number
     )
     .fetch_optional(e)
@@ -194,7 +202,18 @@ pub async fn find_by_email_or_phone_number<'e, E: PgExecutor<'e>>(
 ) -> Result<Option<User>> {
     sqlx::query_as!(
         User,
-        "SELECT * FROM users WHERE email = $1 OR phone_number = $2",
+        "
+        SELECT
+            *
+        FROM
+            users
+        WHERE
+            (
+                email = $1
+                OR phone_number = $2
+            )
+            AND deleted_at IS NULL
+        ",
         payload.email,
         payload.phone_number
     )
@@ -211,7 +230,15 @@ pub async fn verify_by_phone_number<'e, E: PgExecutor<'e>>(
     phone_number: String,
 ) -> Result<()> {
     sqlx::query!(
-        "UPDATE users SET is_verified = true WHERE phone_number = $1",
+        "
+        UPDATE
+            users
+        SET
+            is_verified = true
+        WHERE
+            phone_number = $1
+            AND deleted_at IS NULL
+        ",
         phone_number
     )
     .execute(e)

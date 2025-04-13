@@ -1,6 +1,9 @@
-use super::types::{request, response};
+use super::{
+    super::super::service,
+    types::{request, response},
+};
 use crate::{
-    modules::{auth::service, notification, user, wallet},
+    modules::{user, wallet},
     types::Context,
 };
 use std::sync::Arc;
@@ -17,7 +20,7 @@ pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::
         return response::Error::UnexpectedError;
     })?;
 
-    match user::repository::find_by_email_or_phone_number(
+    user::repository::find_by_email_or_phone_number(
         &mut *tx,
         user::repository::FindByEmailOrPhoneNumber {
             email: payload.email.clone().to_lowercase(),
@@ -26,15 +29,13 @@ pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::
     )
     .await
     .map_err(|_| response::Error::FailedToFetchUser)?
-    {
-        Some(user) => {
-            if user.email == payload.email {
-                return Err(response::Error::EmailAlreadyInUse);
-            }
-            return Err(response::Error::PhoneNumberAlreadyInUse);
+    .map(|user| -> Result<(), _> {
+        if user.email == payload.email {
+            return Err(response::Error::EmailAlreadyInUse);
         }
-        _ => (),
-    };
+        return Err(response::Error::PhoneNumberAlreadyInUse);
+    })
+    .transpose()?;
 
     let user = user::repository::create(
         &mut *tx,
@@ -49,11 +50,11 @@ pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::
     .map_err(|_| response::Error::SignupFailed)?;
 
     // TODO: Notification failing to send is insignificant for now
-    let _ = tokio::spawn(notification::service::send(
-        ctx.clone(),
-        notification::service::Notification::registered(user.clone()),
-        notification::service::Backend::Email,
-    ));
+    // tokio::spawn(notification::service::send(
+    //     ctx.clone(),
+    //     notification::service::Notification::registered(user.clone()),
+    //     notification::service::Backend::Email,
+    // ));
 
     wallet::repository::create(
         &mut *tx,
