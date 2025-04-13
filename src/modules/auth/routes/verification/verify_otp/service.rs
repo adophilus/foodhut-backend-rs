@@ -32,11 +32,11 @@ pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::
         .await
         .map_err(|_| response::Error::OtpVerificationFailed)?;
 
-    if user.is_verified == false {
-        zoho::service::register_user(ctx.clone(), user.clone())
-            .await
-            .map_err(|_| response::Error::UnexpectedError)?;
-    }
+    // if user.is_verified == false {
+    //     zoho::service::register_user(ctx.clone(), user.clone())
+    //         .await
+    //         .map_err(|_| response::Error::UnexpectedError)?;
+    // }
 
     let session = service::auth::create_session(&mut *tx, user.id)
         .await

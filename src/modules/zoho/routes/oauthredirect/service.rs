@@ -95,8 +95,15 @@ pub async fn refresh_access_token(ctx: Arc<Context>) -> Result<(), response::Err
     )
     .await?;
 
+    tracing::info!(
+        "Actually obtained the access token: {}",
+        &response.access_token
+    );
+
     let mut access_token = ctx.zoho.access_token.lock().await;
     *access_token = response.access_token;
+
+    tracing::info!("Set access token: {}", &access_token);
 
     Ok(())
 }
