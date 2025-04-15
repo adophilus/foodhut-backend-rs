@@ -2,7 +2,6 @@ mod block;
 mod cities;
 mod create;
 mod get;
-mod items;
 mod like;
 mod list;
 mod profile;
@@ -32,7 +31,6 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/", block::get_router())
         .nest("/", unblock::get_router())
         .nest("/", cities::get_router())
-        .nest("/", items::get_router())
         .nest("/", verify::get_router())
         .nest("/", unverify::get_router())
 }
