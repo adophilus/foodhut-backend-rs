@@ -60,6 +60,7 @@ pub struct Kitchen {
     pub city: KitchenCity,
     pub is_available: bool,
     pub is_blocked: bool,
+    pub is_verified: bool,
     pub owner_id: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
