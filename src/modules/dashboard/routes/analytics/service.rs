@@ -14,10 +14,10 @@ pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::
         },
     )
     .await
-    .map_err(|_| response::Error::FailedToFetchInfo)?;
+    .map_err(|_| response::Error::FailedToFetchAnalytics)?;
 
     transaction::repository::get_total_transaction_volume(&ctx.db_conn.pool)
         .await
-        .map_err(|_| response::Error::FailedToFetchInfo)
+        .map_err(|_| response::Error::FailedToFetchAnalytics)
         .map(|tv| response::Success::Analytics(tv, paginated_transactions))
 }

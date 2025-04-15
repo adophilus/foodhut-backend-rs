@@ -51,15 +51,15 @@ pub mod response {
     }
 
     pub enum Error {
-        FailedToFetchInfo,
+        FailedToFetchAnalytics,
     }
 
     impl IntoResponse for Error {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::FailedToFetchInfo => (
+                Self::FailedToFetchAnalytics => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Failed to fetch info" })),
+                    Json(json!({ "error": "Failed to fetch analytics" })),
                 )
                     .into_response(),
             }
