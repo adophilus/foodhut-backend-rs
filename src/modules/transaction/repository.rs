@@ -9,6 +9,7 @@ use serde_json::json;
 use sqlx::PgExecutor;
 use std::convert::Into;
 use std::str::FromStr;
+use std::string::ToString;
 use ulid::Ulid;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -90,9 +91,9 @@ pub struct TransactionPurposeOther;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum TransactionPurpose {
-    #[serde(rename = "other")]
+    #[serde(rename = "OTHER")]
     Other(TransactionPurposeOther),
-    #[serde(rename = "order")]
+    #[serde(rename = "ORDER")]
     Order(TransactionPurposeOrder),
 }
 
@@ -404,6 +405,114 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
     })
 }
 
+#[derive(Serialize)]
+pub enum FindManyForOrdersType {
+    #[serde(rename = "TOTAL")]
+    Total,
+    #[serde(rename = "VENDOR")]
+    Vendor,
+    #[serde(rename = "PROFIT")]
+    Profit,
+}
+
+impl ToString for FindManyForOrdersType {
+    fn to_string(&self) -> String {
+        match serde_json::to_value(self).unwrap() {
+            serde_json::Value::String(string) => string,
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub struct FindManyForOrdersFilters {
+    pub before: Option<u64>,
+    pub after: Option<u64>,
+    pub r#type: FindManyForOrdersType,
+}
+
+pub async fn find_many_for_orders<'e, Executor: PgExecutor<'e>>(
+    e: Executor,
+    pagination: Pagination,
+    filters: FindManyForOrdersFilters,
+) -> Result<Paginated<Transaction>, Error> {
+    sqlx::query_as!(
+        DatabasePaginatedDbTransaction,
+        r#"
+        WITH transactions AS (
+        SELECT
+            DISTINCT ref,
+            *
+        FROM
+            transactions
+        ),
+        filtered_transactions AS (
+            SELECT
+                transactions.*
+            FROM
+                transactions
+            LEFT JOIN wallets ON transactions.wallet_id = wallets.id
+            LEFT JOIN kitchens ON wallets.owner_id = kitchens.owner_id
+            WHERE
+                ($3::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) < $3)
+                AND ($4::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) > $4)
+                AND (
+                    ($5::TEXT = 'TOTAL' AND transactions.direction = 'OUTGOING')
+                    OR ($5::TEXT = 'VENDOR' AND transactions.direction = 'INCOMING')
+                    OR ($5::TEXT = 'PROFIT' AND transactions.direction = 'OUTGOING')
+                )
+                AND transactions.purpose->>'type' = 'ORDER'
+            ORDER BY created_at DESC
+        ),
+        limited_transactions AS (
+            SELECT
+                *
+            FROM
+                filtered_transactions
+            LIMIT $2
+            OFFSET ($1 - 1) * $2
+        ),
+        total_count AS (
+            SELECT
+                COUNT(id) AS total_rows
+            FROM
+                filtered_transactions
+        )
+        SELECT 
+            COALESCE(JSONB_AGG(limited_transactions), '[]'::jsonb) AS items,
+            JSONB_BUILD_OBJECT(
+                'page', $1,
+                'per_page', $2,
+                'total', (SELECT total_rows FROM total_count)
+            ) AS meta
+        FROM limited_transactions
+        "#,
+        pagination.page as i32,
+        pagination.per_page as i32,
+        filters.before.map(|before| before as i64),
+        filters.after.map(|after| after as i64),
+        filters.r#type.to_string()
+    )
+    .fetch_one(e)
+    .await
+    .map(|paginated_db_transaction| {
+        Paginated::new(
+            paginated_db_transaction
+                .items
+                .0
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+            paginated_db_transaction.meta.total,
+            paginated_db_transaction.meta.page,
+            paginated_db_transaction.meta.per_page,
+        )
+    })
+    .map_err(|err| {
+        tracing::error!("Error occurred while trying to fetch transactions: {}", err);
+        Error::UnexpectedError
+    })
+}
+
 #[derive(Deserialize)]
 pub struct TotalTransactionVolume {
     pub total_transaction_volume: BigDecimal,
@@ -415,10 +524,25 @@ pub async fn get_total_transaction_volume<'e, E: PgExecutor<'e>>(
     sqlx::query_as!(
         TotalTransactionVolume,
         r#"
-        SELECT
-            COALESCE(SUM(amount), 0) AS "total_transaction_volume!"
+        WITH txs AS (
+            SELECT
+            DISTINCT ref,
+            TO_JSONB(transactions) AS transaction
+            FROM
+                transactions
+            WHERE
+                purpose->>'type' = 'order'
+                AND direction = 'OUTGOING'
+            GROUP BY
+                transactions.ref,
+                transactions.*
+        )
+        SELECT 
+            COALESCE(SUM((txs.transaction->>'amount')::NUMERIC), 0) AS "total_transaction_volume!"
         FROM
-            transactions
+            txs
+        GROUP BY
+            txs.transaction
         "#
     )
     .fetch_one(e)

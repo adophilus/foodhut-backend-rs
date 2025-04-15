@@ -19,8 +19,6 @@ pub mod response {
     use axum::{extract::Json, http::StatusCode, response::IntoResponse};
     use serde_json::json;
 
-    use crate::{modules::kitchen::repository::Kitchen, utils::pagination::Paginated};
-
     pub enum Success {
         OrderStatusUpdated,
     }

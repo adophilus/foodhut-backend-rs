@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH txs AS (\n            SELECT\n            DISTINCT ref,\n            TO_JSONB(transactions) AS transaction\n            FROM\n                transactions\n            WHERE\n                purpose->>'type' = 'order'\n                AND direction = 'OUTGOING'\n            GROUP BY\n                transactions.ref,\n                transactions.*\n        )\n        SELECT \n            COALESCE(SUM((txs.transaction->>'amount')::NUMERIC), 0) AS \"total_transaction_volume!\"\n        FROM\n            txs\n        GROUP BY\n            txs.transaction\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_transaction_volume!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "871a571176ff15a4d0e201ad83c53f8de13903e40c69df5a4c8392679a6b79c8"
+}

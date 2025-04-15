@@ -34,5 +34,4 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/transactions", transaction::get_router())
         .nest("/search", search::get_router())
         .nest("/zoho", zoho::get_router())
-    // .layer(axum::middleware::from_fn(auth::middleware::auth))
 }

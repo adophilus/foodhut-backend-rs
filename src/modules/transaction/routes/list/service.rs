@@ -23,7 +23,7 @@ pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::
             )
             .await
         }
-        false => match payload.filters.as_kitchen.is_some() {
+        false => match payload.filters.as_kitchen.unwrap_or(false) {
             true => {
                 kitchen::repository::find_by_owner_id(
                     &ctx.db_conn.pool,
