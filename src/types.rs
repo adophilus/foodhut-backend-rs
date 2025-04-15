@@ -87,6 +87,16 @@ pub struct ZohoContext {
     pub campaigns_list_key: String,
 }
 
+impl ZohoContext {
+    pub async fn get_access_token(&self) -> String {
+        self.access_token.lock().await.clone()
+    }
+
+    pub async fn set_access_token(&self, token: String) {
+        *self.access_token.lock().await = token;
+    }
+}
+
 #[derive(Clone)]
 pub struct Context {
     pub app: AppContext,

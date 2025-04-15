@@ -93,17 +93,10 @@ pub async fn refresh_access_token(ctx: Arc<Context>) -> Result<(), response::Err
             expected_status_code: StatusCode::OK,
         },
     )
-    .await?;
+    .await
+    .unwrap();
 
-    tracing::info!(
-        "Actually obtained the access token: {}",
-        &response.access_token
-    );
-
-    let mut access_token = ctx.zoho.access_token.lock().await;
-    *access_token = response.access_token;
-
-    tracing::info!("Set access token: {}", &access_token);
+    ctx.zoho.set_access_token(response.access_token).await;
 
     Ok(())
 }
@@ -162,9 +155,8 @@ async fn send_zoho_request<'a, R: DeserializeOwned>(
     payload: SendZohoRequestPayload<'a>,
 ) -> Result<R, response::Error> {
     let mut headers = HeaderMap::new();
-    let access_token = ctx.zoho.access_token.lock().await.clone();
-    tracing::debug!("access_token: {}", &access_token);
-    let auth_header = format!("Bearer {}", access_token);
+    let access_token = ctx.zoho.get_access_token().await;
+    let auth_header = format!("Bearer {}", &access_token);
     headers.insert(
         "Authorization",
         auth_header.clone().try_into().map_err(|err| {

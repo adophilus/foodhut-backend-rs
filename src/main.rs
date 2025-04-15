@@ -20,14 +20,14 @@ fn init_tracing() {
 
 #[tokio::main]
 async fn main() {
-    let ctx: Arc<Context> = Arc::new(Config::default().to_context().await);
-
     init_tracing();
 
-    let app = App::new().await;
+    let ctx: Arc<Context> = Arc::new(Config::default().to_context().await);
+
+    let app = App::new(ctx.clone()).await;
 
     let http = app.serve();
-    let job_monitor = async { jobs::monitor(ctx.clone()).await.run().await.unwrap() };
+    let job_monitor = async { jobs::monitor(ctx).await.run().await.unwrap() };
 
     tokio::join!(http, job_monitor);
 }

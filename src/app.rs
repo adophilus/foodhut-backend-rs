@@ -1,7 +1,4 @@
-use crate::{
-    modules,
-    types::{Config, Context, ToContext},
-};
+use crate::{modules, types::Context};
 use axum::{
     extract::DefaultBodyLimit,
     http::{header, Method},
@@ -10,14 +7,6 @@ use axum::{
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::{cors, trace};
-use tracing_subscriber::prelude::*;
-
-fn init_tracing() {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-}
 
 pub struct App {
     ctx: Arc<Context>,
@@ -25,9 +14,7 @@ pub struct App {
 }
 
 impl App {
-    pub async fn new() -> Self {
-        let ctx: Arc<Context> = Arc::new(Config::default().to_context().await);
-
+    pub async fn new(ctx: Arc<Context>) -> Self {
         let router = Router::new()
             .nest("/api", modules::get_router())
             .with_state(ctx.clone())
@@ -58,6 +45,10 @@ impl App {
 
         axum::serve(listener, self.router).await.unwrap();
 
-        tracing::debug!("App is running on {}:{}", self.ctx.app.host, self.ctx.app.port);
+        tracing::debug!(
+            "App is running on {}:{}",
+            self.ctx.app.host,
+            self.ctx.app.port
+        );
     }
 }

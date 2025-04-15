@@ -19,12 +19,13 @@ pub mod response {
     use serde::{Deserialize, Serialize};
     use serde_json::json;
 
-    #[derive(Deserialize, Serialize)]
+    #[derive(Deserialize, Serialize, Debug)]
     pub struct Tokens {
         pub access_token: String,
         pub refresh_token: String,
     }
 
+    #[derive(Debug)]
     pub enum Success {
         Tokens(Tokens),
     }
@@ -37,6 +38,7 @@ pub mod response {
         }
     }
 
+    #[derive(Debug)]
     pub enum Error {
         ServerError,
     }
