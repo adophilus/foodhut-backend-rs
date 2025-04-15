@@ -12,6 +12,7 @@ mod unlike;
 mod update;
 mod update_cover_image;
 mod verify;
+mod unverify;
 
 use crate::types::Context;
 use axum::routing::Router;
@@ -33,4 +34,5 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/", cities::get_router())
         .nest("/", items::get_router())
         .nest("/", verify::get_router())
+        .nest("/", unverify::get_router())
 }

@@ -9,15 +9,15 @@ pub mod response {
     use serde_json::json;
 
     pub enum Success {
-        KitchenUnverified,
+        KitchenVerified,
     }
 
     impl IntoResponse for Success {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::KitchenUnverified => (
+                Self::KitchenVerified => (
                     StatusCode::OK,
-                    Json(json!({ "message": "Kitchen unverified successfully" })),
+                    Json(json!({ "message": "Kitchen verified successfully" })),
                 )
                     .into_response(),
             }
@@ -25,15 +25,15 @@ pub mod response {
     }
 
     pub enum Error {
-        FailedToUnverifyKitchen,
+        FailedToVerifyKitchen,
     }
 
     impl IntoResponse for Error {
         fn into_response(self) -> axum::response::Response {
             match self {
-                Self::FailedToUnverifyKitchen => (
+                Self::FailedToVerifyKitchen => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "message": "Failed to unverify kitchen" })),
+                    Json(json!({ "message": "Failed to verify kitchen" })),
                 )
                     .into_response(),
             }
