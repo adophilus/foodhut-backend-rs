@@ -11,6 +11,7 @@ mod unblock;
 mod unlike;
 mod update;
 mod update_cover_image;
+mod verify;
 
 use crate::types::Context;
 use axum::routing::Router;
@@ -31,4 +32,5 @@ pub fn get_router() -> Router<Arc<Context>> {
         .nest("/", unblock::get_router())
         .nest("/", cities::get_router())
         .nest("/", items::get_router())
+        .nest("/", verify::get_router())
 }

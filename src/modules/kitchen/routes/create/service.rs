@@ -29,7 +29,7 @@ pub async fn service(
         return Err(response::Error::AlreadyCreatedKitchen);
     }
 
-    repository::create(
+    repository::create_kitchen(
         &mut *tx,
         repository::CreateKitchenPayload {
             name: payload.name,

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE kitchens\n        SET\n            is_verified = FALSE\n        WHERE\n            id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "966ffc82128390a1f9bbe9b911f838da57f86bd305c1760047a3a25c20a38b21"
+}

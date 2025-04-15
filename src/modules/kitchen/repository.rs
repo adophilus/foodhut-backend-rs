@@ -165,7 +165,7 @@ pub enum Error {
     UnexpectedError,
 }
 
-pub async fn create<'e, E: PgExecutor<'e>>(
+pub async fn create_kitchen<'e, E: PgExecutor<'e>>(
     e: E,
     payload: CreateKitchenPayload,
 ) -> Result<(), Error> {
@@ -183,11 +183,12 @@ pub async fn create<'e, E: PgExecutor<'e>>(
             delivery_time,
             rating,
             likes,
+            is_verified,
             is_available,
             city_id,
             owner_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         ",
         Ulid::new().to_string(),
         payload.name,
@@ -200,6 +201,7 @@ pub async fn create<'e, E: PgExecutor<'e>>(
         payload.delivery_time,
         BigDecimal::new(BigInt::new(Sign::Plus, vec![0]), 2),
         0,
+        false,
         true,
         payload.city_id,
         payload.owner_id
@@ -698,6 +700,48 @@ pub async fn unblock_by_id<'e, E: PgExecutor<'e>>(executor: E, id: String) -> Re
     })
     .map(|_| ())
 }
+
+pub async fn verify_by_id<'e, E: PgExecutor<'e>>(executor: E, id: String) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        UPDATE kitchens
+        SET
+            is_verified = TRUE
+        WHERE
+            id = $1
+        ",
+        id
+    )
+    .execute(executor)
+    .await
+    .map_err(|err| {
+        tracing::error!("Failed to verify kitchen by id {}: {:?}", id, err);
+        Error::UnexpectedError
+    })
+    .map(|_| ())
+}
+
+pub async fn unverify_by_id<'e, E: PgExecutor<'e>>(executor: E, id: String) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        UPDATE kitchens
+        SET
+            is_verified = FALSE
+        WHERE
+            id = $1
+        ",
+        id
+    )
+    .execute(executor)
+    .await
+    .map_err(|err| {
+        tracing::error!("Failed to unverify kitchen by id {}: {:?}", id, err);
+        Error::UnexpectedError
+    })
+    .map(|_| ())
+}
+
+
 
 pub fn is_owner(user: &User, kitchen: &Kitchen) -> bool {
     kitchen.owner_id == user.id
