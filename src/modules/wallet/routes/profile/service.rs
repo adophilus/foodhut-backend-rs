@@ -6,7 +6,7 @@ use crate::{modules::kitchen, types::Context};
 use std::sync::Arc;
 
 pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::Response {
-    let wallet = match payload.filters.as_kitchen.is_some() {
+    let wallet = match payload.filters.as_kitchen.unwrap_or(false) {
         true => {
             let kitchen =
                 kitchen::repository::find_by_owner_id(&ctx.db_conn.pool, payload.auth.user.id)
