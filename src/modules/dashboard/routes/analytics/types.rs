@@ -43,7 +43,7 @@ pub mod response {
             match self {
                 Self::Analytics(tv, tx) => (
                     StatusCode::OK,
-                    Json(json!({"total": tv.total_transaction_volume, "data": tx})),
+                    Json(json!({ "total": tv.total_transaction_volume, "data": tx })),
                 )
                     .into_response(),
             }
@@ -59,7 +59,7 @@ pub mod response {
             match self {
                 Self::FailedToFetchInfo => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": "Failed to fetch info"})),
+                    Json(json!({ "error": "Failed to fetch info" })),
                 )
                     .into_response(),
             }

@@ -93,8 +93,7 @@ pub async fn refresh_access_token(ctx: Arc<Context>) -> Result<(), response::Err
             expected_status_code: StatusCode::OK,
         },
     )
-    .await
-    .unwrap();
+    .await?;
 
     ctx.zoho.set_access_token(response.access_token).await;
 
