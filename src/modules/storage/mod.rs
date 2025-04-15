@@ -41,14 +41,14 @@ impl From<Value> for UploadedMedia {
     }
 }
 
-pub async fn upload_file(cfg: StorageContext, contents: Vec<u8>) -> Result<UploadedMedia, Error> {
+pub async fn upload_file(ctx: StorageContext, contents: Vec<u8>) -> Result<UploadedMedia, Error> {
     let file_name = Ulid::new().to_string();
     let part = Part::bytes(contents).file_name(file_name.clone());
 
     let timestamp = chrono::Utc::now().timestamp();
     let data_to_sign = format!(
         "timestamp={}&upload_preset={}{}",
-        timestamp, cfg.upload_preset, cfg.api_secret
+        timestamp, ctx.upload_preset, ctx.api_secret
     );
 
     let mut hasher = Sha256::new();
@@ -57,15 +57,15 @@ pub async fn upload_file(cfg: StorageContext, contents: Vec<u8>) -> Result<Uploa
     let signature = base16ct::lower::encode_string(&hash);
 
     let form = Form::new()
-        .text("upload_preset", cfg.upload_preset.clone())
-        .text("api_key", cfg.api_key.clone())
+        .text("upload_preset", ctx.upload_preset.clone())
+        .text("api_key", ctx.api_key.clone())
         .text("timestamp", format!("{}", timestamp))
         .text("signature", signature)
         .text("signature_algorithm", "sha256")
         .part("file", part);
 
     let res = Client::new()
-        .post(cfg.upload_endpoint)
+        .post(ctx.upload_endpoint)
         .multipart(form)
         .send()
         .await
@@ -80,7 +80,7 @@ pub async fn upload_file(cfg: StorageContext, contents: Vec<u8>) -> Result<Uploa
             Error::UploadFailed
         })?;
 
-        tracing::error!("Failed to upload file: {}", data);
+        tracing::error!("Failed to upload file, non OK status: {}", data);
         return Err(Error::UploadFailed);
     }
 
