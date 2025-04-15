@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE kitchen_cities\n        SET\n            is_deleted = TRUE\n        WHERE\n            id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69e6bbdea0ff30bd92815f4da63a936a7e524a595a5e33353f0b040dbf0ede59"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH data AS (\n            SELECT\n                *\n            FROM JSONB_TO_RECORDSET($1) AS x(\n                id VARCHAR,\n                name VARCHAR,\n                code VARCHAR\n            )\n        )\n        INSERT INTO\n            paystack_banks (id, name, code, updated_at)\n        SELECT\n            id, name, code, NOW()\n        FROM\n            data\n        ON CONFLICT (id) DO UPDATE SET\n            name = EXCLUDED.name,\n            code = EXCLUDED.code,\n            updated_at = NOW();\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "197ab2e8ba2534cade4ba9287ccc9def72e4e7a62b21cc8793948fb5588c4ee9"
+}

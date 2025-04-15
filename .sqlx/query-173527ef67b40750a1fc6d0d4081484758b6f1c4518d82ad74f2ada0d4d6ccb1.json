@@ -1,0 +1,107 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH valid_transition AS (\n            SELECT CASE\n                WHEN orders.status = 'AWAITING_ACKNOWLEDGEMENT' AND $2 = 'PREPARING' THEN TRUE\n                WHEN orders.status = 'AWAITING_ACKNOWLEDGEMENT' AND $2 = 'CANCELLED' THEN TRUE\n                WHEN orders.status = 'PREPARING' AND $2 = 'IN_TRANSIT' THEN TRUE\n                WHEN orders.status = 'IN_TRANSIT' AND $2 = 'DELIVERED' THEN TRUE\n                ELSE FALSE\n            END AS is_valid\n            FROM\n                orders\n            WHERE id = $1\n        )\n        UPDATE\n            orders\n        SET\n            status = $2\n        WHERE\n            id = $1\n            AND (SELECT is_valid FROM valid_transition)\n        RETURNING *\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "payment_method",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "delivery_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "service_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "sub_total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "total",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "delivery_address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "dispatch_rider_note",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 11,
+        "name": "owner_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 12,
+        "name": "delivery_date",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 13,
+        "name": "kitchen_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 14,
+        "name": "items",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "173527ef67b40750a1fc6d0d4081484758b6f1c4518d82ad74f2ada0d4d6ccb1"
+}
