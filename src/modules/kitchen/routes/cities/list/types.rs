@@ -1,3 +1,7 @@
+pub mod request {
+    pub use crate::modules::auth::middleware::Auth;
+}
+
 pub mod response {
     use axum::{extract::Json, http::StatusCode, response::IntoResponse};
     use serde_json::json;
