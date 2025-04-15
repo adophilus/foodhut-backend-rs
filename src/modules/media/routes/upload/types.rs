@@ -21,7 +21,7 @@ pub mod response {
         fn into_response(self) -> axum::response::Response {
             match self {
                 Self::UploadedMedia(url, file_name) => (
-                    StatusCode::CREATED,
+                    StatusCode::OK,
                     Json(json!({
                         "public_id": file_name,
                         "signature": file_name,

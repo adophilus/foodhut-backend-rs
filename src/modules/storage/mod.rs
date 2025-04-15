@@ -74,13 +74,14 @@ pub async fn upload_file(ctx: StorageContext, contents: Vec<u8>) -> Result<Uploa
             Error::UploadFailed
         })?;
 
-    if res.status() != StatusCode::OK {
+    let response_status_code = res.status();
+    if response_status_code != StatusCode::OK {
         let data = res.text().await.map_err(|err| {
             tracing::error!("Error occurred while processing return data: {:?}", err);
             Error::UploadFailed
         })?;
 
-        tracing::error!("Failed to upload file, non OK status: {}", data);
+        tracing::error!("Failed to upload file, non OK status {}: {}", response_status_code, data);
         return Err(Error::UploadFailed);
     }
 
