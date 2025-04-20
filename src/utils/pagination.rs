@@ -14,14 +14,14 @@ pub struct Paginated<T> {
     pub meta: PaginatedMeta,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct PaginatedMeta {
     pub total: u32,
     pub page: u32,
     pub per_page: u32,
 }
 
-impl<T> Paginated<T> {
+impl<T: Clone> Paginated<T> {
     pub fn new(items: Vec<T>, total: u32, page: u32, per_page: u32) -> Paginated<T> {
         Self {
             items,

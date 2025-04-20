@@ -3,40 +3,37 @@ use super::types::{
     response,
 };
 use crate::{
-    modules::transaction::{self, repository::FindManyForOrdersType},
+    modules::transaction::{self, repository::OrderFilter},
     types::Context,
 };
 use std::sync::Arc;
 
 pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::Response {
-    let paginated_transactions = match payload.filters.r#type {
-        GetAnalyticsFiltersType::Total => transaction::repository::find_many_for_orders(
-            &ctx.db_conn.pool,
-            payload.pagination,
-            transaction::repository::FindManyForOrdersFilters {
-                before: payload.filters.before,
-                after: payload.filters.after,
-                r#type: FindManyForOrdersType::Total,
-            },
-        )
-        .await
-        .map_err(|_| response::Error::FailedToFetchAnalytics)?,
-        GetAnalyticsFiltersType::Vendor => transaction::repository::find_many_for_orders(
-            &ctx.db_conn.pool,
-            payload.pagination,
-            transaction::repository::FindManyForOrdersFilters {
-                before: payload.filters.before,
-                after: payload.filters.after,
-                r#type: FindManyForOrdersType::Vendor,
-            },
-        )
-        .await
-        .map_err(|_| response::Error::FailedToFetchAnalytics)?,
-        _ => unimplemented!(),
+    let filter_type = match payload.filters.r#type {
+        request::GetAnalyticsFiltersType::Total => OrderFilter::Total,
+        request::GetAnalyticsFiltersType::Vendor => OrderFilter::Vendor,
+        request::GetAnalyticsFiltersType::Profit => OrderFilter::Profit,
     };
 
-    transaction::repository::get_total_transaction_volume(&ctx.db_conn.pool)
-        .await
-        .map_err(|_| response::Error::FailedToFetchAnalytics)
-        .map(|tv| response::Success::Analytics(tv, paginated_transactions))
+    let paginated_transactions = transaction::repository::find_many_for_orders(
+        &ctx.db_conn.pool,
+        payload.pagination,
+        transaction::repository::FindManyForOrdersFilters {
+            before: payload.filters.before,
+            after: payload.filters.after,
+            r#type: filter_type.clone(),
+        },
+    )
+    .await
+    .map_err(|_| response::Error::FailedToFetchAnalytics)?;
+
+    transaction::repository::get_total_transaction_volume_for_order(
+        &ctx.db_conn.pool,
+        transaction::repository::GetTotalTransactionVolumeForOrder {
+            r#type: filter_type,
+        },
+    )
+    .await
+    .map_err(|_| response::Error::FailedToFetchAnalytics)
+    .map(|tv| response::Success::Analytics(tv, paginated_transactions))
 }

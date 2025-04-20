@@ -80,15 +80,15 @@ impl ToString for TransactionDirection {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TransactionPurposeOrder {
     pub order_id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TransactionPurposeOther;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum TransactionPurpose {
     #[serde(rename = "OTHER")]
@@ -104,7 +104,7 @@ impl From<serde_json::Value> for TransactionPurpose {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OnlineTransaction {
     pub id: String,
     pub amount: BigDecimal,
@@ -117,7 +117,7 @@ pub struct OnlineTransaction {
     pub updated_at: Option<NaiveDateTime>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletTransaction {
     pub id: String,
     pub amount: BigDecimal,
@@ -131,7 +131,7 @@ pub struct WalletTransaction {
     pub updated_at: Option<NaiveDateTime>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DbTransaction {
     pub id: String,
     pub amount: BigDecimal,
@@ -147,6 +147,7 @@ pub struct DbTransaction {
 }
 
 define_paginated!(DatabasePaginatedDbTransaction, DbTransaction);
+define_paginated!(DatabasePaginatedTransaction, Transaction);
 
 impl From<DbTransaction> for Transaction {
     fn from(db_tx: DbTransaction) -> Self {
@@ -156,7 +157,7 @@ impl From<DbTransaction> for Transaction {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Transaction {
     Wallet(WalletTransaction),
@@ -405,8 +406,8 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
     })
 }
 
-#[derive(Serialize)]
-pub enum FindManyForOrdersType {
+#[derive(Serialize, Clone)]
+pub enum OrderFilter {
     #[serde(rename = "TOTAL")]
     Total,
     #[serde(rename = "VENDOR")]
@@ -415,7 +416,7 @@ pub enum FindManyForOrdersType {
     Profit,
 }
 
-impl ToString for FindManyForOrdersType {
+impl ToString for OrderFilter {
     fn to_string(&self) -> String {
         match serde_json::to_value(self).unwrap() {
             serde_json::Value::String(string) => string,
@@ -427,7 +428,7 @@ impl ToString for FindManyForOrdersType {
 pub struct FindManyForOrdersFilters {
     pub before: Option<u64>,
     pub after: Option<u64>,
-    pub r#type: FindManyForOrdersType,
+    pub r#type: OrderFilter,
 }
 
 pub async fn find_many_for_orders<'e, Executor: PgExecutor<'e>>(
@@ -436,7 +437,7 @@ pub async fn find_many_for_orders<'e, Executor: PgExecutor<'e>>(
     filters: FindManyForOrdersFilters,
 ) -> Result<Paginated<Transaction>, Error> {
     sqlx::query_as!(
-        DatabasePaginatedDbTransaction,
+        DatabasePaginatedTransaction,
         r#"
         WITH transactions AS (
         SELECT
@@ -518,41 +519,48 @@ pub struct TotalTransactionVolume {
     pub total_transaction_volume: BigDecimal,
 }
 
-pub async fn get_total_transaction_volume<'e, E: PgExecutor<'e>>(
+pub struct GetTotalTransactionVolumeForOrder {
+    pub r#type: OrderFilter,
+}
+
+pub async fn get_total_transaction_volume_for_order<'e, E: PgExecutor<'e>>(
     e: E,
+    filters: GetTotalTransactionVolumeForOrder,
 ) -> Result<TotalTransactionVolume, Error> {
-    sqlx::query_as!(
-        TotalTransactionVolume,
+    let volume = sqlx::query_scalar!(
         r#"
-        WITH txs AS (
-            SELECT
-            DISTINCT ref,
-            TO_JSONB(transactions) AS transaction
-            FROM
-                transactions
-            WHERE
-                purpose->>'type' = 'order'
-                AND direction = 'OUTGOING'
-            GROUP BY
-                transactions.ref,
-                transactions.*
-        )
-        SELECT 
-            COALESCE(SUM((txs.transaction->>'amount')::NUMERIC), 0) AS "total_transaction_volume!"
-        FROM
-            txs
-        GROUP BY
-            txs.transaction
+        SELECT COALESCE(
+            SUM(transactions.amount::NUMERIC),
+            0
+        ) AS "volume!"
+        FROM transactions
+        WHERE
+            purpose->>'type' = 'ORDER'
+            AND direction = 'OUTGOING';
         "#
     )
     .fetch_one(e)
     .await
     .map_err(|err| {
         tracing::error!(
-            "Error occurred while trying to fetch transaction volume: {}",
+            "Error occurred while fetching raw transaction volume: {}",
             err
         );
         Error::UnexpectedError
+    })?;
+
+    let platform_fee_percentage = BigDecimal::from_str("0.2").unwrap();
+    let vendor_share = (platform_fee_percentage + BigDecimal::from(1)).inverse();
+    let profit_margin = BigDecimal::from(1) - vendor_share.clone();
+
+    let factor = match filters.r#type {
+        OrderFilter::Total => BigDecimal::from(1),
+        OrderFilter::Vendor => vendor_share,
+        OrderFilter::Profit => profit_margin,
+    };
+
+    Ok(TotalTransactionVolume {
+        total_transaction_volume: (volume * factor).round(2),
     })
 }
 
