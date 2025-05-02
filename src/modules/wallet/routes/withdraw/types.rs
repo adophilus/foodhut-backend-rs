@@ -39,7 +39,7 @@ pub mod response {
     }
 
     pub enum Error {
-        FailedToWithdrawFunds,
+        FailedToPlaceWithdrawal,
         InsufficientFunds,
     }
 
@@ -51,7 +51,7 @@ pub mod response {
                     Json(json!({ "error": "Insufficient funds" })),
                 )
                     .into_response(),
-                Self::FailedToWithdrawFunds => (
+                Self::FailedToPlaceWithdrawal => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({ "error": "Failed to place withdrawal request" })),
                 )

@@ -65,18 +65,20 @@ pub async fn send_paystack_request<'a, R: DeserializeOwned>(
 
     let http_response_status_code = res.status();
 
-    if http_response_status_code != payload.expected_status_code {
-        tracing::error!(
-            "Got unexpected http response status: {}",
-            http_response_status_code
-        );
-        Err(Error::InvalidHttpResponseStatusCode)?
-    }
-
     let data = res.text().await.map_err(|err| {
         tracing::error!("Failed to get text of failed paystack request: {}", err);
         Error::InvalidHttpResponseStatusCode
     })?;
+
+    if http_response_status_code != payload.expected_status_code {
+        tracing::error!(
+            "Got unexpected http response status: {}, data: {}",
+            http_response_status_code,
+            data
+        );
+
+        Err(Error::InvalidHttpResponseStatusCode)?
+    }
 
     tracing::trace!("Response received from paystack server: {}", data);
 

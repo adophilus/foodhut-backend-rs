@@ -9,7 +9,7 @@ use crate::{
 use bigdecimal::BigDecimal;
 use std::sync::Arc;
 
-struct WithdrawFundsPayload {
+pub struct WithdrawFundsPayload {
     account_number: String,
     bank_code: String,
     account_name: String,
@@ -27,20 +27,20 @@ pub async fn withdraw_funds(
         .pool
         .begin()
         .await
-        .map_err(|_| response::Error::FailedToWithdrawFunds)?;
+        .map_err(|_| response::Error::FailedToPlaceWithdrawal)?;
 
     let wallet = match payload.as_kitchen {
         true => {
             let kitchen = kitchen::repository::find_by_owner_id(&mut *tx, payload.user.id.clone())
                 .await
-                .map_err(|_| response::Error::FailedToWithdrawFunds)?
-                .ok_or(response::Error::FailedToWithdrawFunds)?;
+                .map_err(|_| response::Error::FailedToPlaceWithdrawal)?
+                .ok_or(response::Error::FailedToPlaceWithdrawal)?;
             repository::find_by_kitchen_id(&mut *tx, kitchen.id).await
         }
         false => repository::find_by_owner_id(&mut *tx, payload.user.id.clone()).await,
     }
-    .map_err(|_| response::Error::FailedToWithdrawFunds)?
-    .ok_or(response::Error::FailedToWithdrawFunds)?;
+    .map_err(|_| response::Error::FailedToPlaceWithdrawal)?
+    .ok_or(response::Error::FailedToPlaceWithdrawal)?;
 
     if wallet.balance < payload.amount {
         return Err(response::Error::InsufficientFunds);
@@ -57,7 +57,7 @@ pub async fn withdraw_funds(
         },
     )
     .await
-    .map_err(|_| response::Error::FailedToWithdrawFunds)?;
+    .map_err(|_| response::Error::FailedToPlaceWithdrawal)?;
 
     transaction::repository::create(
         &mut *tx,
@@ -79,7 +79,7 @@ pub async fn withdraw_funds(
         ),
     )
     .await
-    .map_err(|_| response::Error::FailedToWithdrawFunds)?;
+    .map_err(|_| response::Error::FailedToPlaceWithdrawal)?;
 
     repository::update_by_id(
         &mut *tx,
@@ -90,11 +90,11 @@ pub async fn withdraw_funds(
         },
     )
     .await
-    .map_err(|_| response::Error::FailedToWithdrawFunds)?;
+    .map_err(|_| response::Error::FailedToPlaceWithdrawal)?;
 
     tx.commit().await.map_err(|err| {
         tracing::error!("Failed to commit database transaction: {:?}", err);
-        response::Error::FailedToWithdrawFunds
+        response::Error::FailedToPlaceWithdrawal
     })?;
 
     Ok(response::Success::WithdrawalPlaced)
