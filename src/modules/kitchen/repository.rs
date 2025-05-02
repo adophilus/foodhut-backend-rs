@@ -282,13 +282,29 @@ pub async fn find_by_owner_id<'e, E: PgExecutor<'e>>(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize)]
+#[serde(rename_all(serialize = "UPPERCASE", deserialize = "UPPERCASE"))]
+pub enum QueryerRole {
+    Admin,
+    User,
+}
+
+impl ToString for QueryerRole {
+    fn to_string(&self) -> String {
+        match serde_json::to_value(self).unwrap() {
+            serde_json::Value::String(string) => string,
+            _ => unreachable!(),
+        }
+    }
+}
+
 pub struct FindManyFilters {
-    r#type: Option<String>,
-    search: Option<String>,
+    pub r#type: Option<String>,
+    pub search: Option<String>,
+    pub queryer_role: QueryerRole,
 }
 
-pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
+pub async fn find_many<'e, E: PgExecutor<'e>>(
     e: E,
     pagination: Pagination,
     filters: FindManyFilters,
@@ -296,7 +312,7 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
     sqlx::query_as!(
         DatabasePaginatedKitchen,
         r#"
-        WITH filtered_data AS (
+        WITH filtered_kitchens AS (
             SELECT
                 kitchens.*,
                 TO_JSONB(kitchen_cities) AS city
@@ -307,94 +323,43 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 kitchens.type = COALESCE($3, kitchens.type)
                 AND kitchens.name ILIKE CONCAT('%', COALESCE($4, kitchens.name), '%')
                 AND kitchens.city_id = kitchen_cities.id
+                AND (
+                    $5::TEXT = 'USER'
+                    AND kitchens.is_available = TRUE
+                    AND kitchens.is_blocked = FALSE
+                    AND kitchens.is_verified = TRUE
+                )
+        ),
+        limited_kitchens AS (
+            SELECT
+                *
+            FROM
+                filtered_kitchens
             LIMIT $2
             OFFSET ($1 - 1) * $2
         ),
         total_count AS (
             SELECT
-                COUNT(kitchens.id) AS total_rows
+                COUNT(filtered_kitchens.id) AS total_rows
             FROM
-                kitchens
-            WHERE
-                kitchens.type = COALESCE($3, kitchens.type)
-                AND kitchens.name ILIKE CONCAT('%', COALESCE(NULL, kitchens.name), '%')
+                filtered_kitchens
         )
         SELECT
-            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
+            COALESCE(JSONB_AGG(ROW_TO_JSON(limited_kitchens)), '[]'::JSONB) AS items,
             JSONB_BUILD_OBJECT(
                 'page', $1,
                 'per_page', $2,
                 'total', (SELECT total_rows FROM total_count)
             ) AS meta
         FROM
-            filtered_data,
+            limited_kitchens,
             total_count
         "#,
         pagination.page as i32,
         pagination.per_page as i32,
         filters.r#type,
         filters.search,
-    )
-    .fetch_one(e)
-    .await
-    .map(DatabasePaginatedKitchen::into)
-    .map_err(|err| {
-        tracing::error!(
-            "Error occurred while trying to fetch many kitchens: {}",
-            err
-        );
-        Error::UnexpectedError
-    })
-}
-
-pub async fn find_many_as_user<'e, E: PgExecutor<'e>>(
-    e: E,
-    pagination: Pagination,
-    filters: FindManyFilters,
-) -> Result<Paginated<Kitchen>, Error> {
-    sqlx::query_as!(
-        DatabasePaginatedKitchen,
-        r#"
-        WITH filtered_data AS (
-            SELECT
-                kitchens.*,
-                TO_JSONB(kitchen_cities) AS city
-            FROM
-                kitchens,
-                kitchen_cities
-            WHERE
-                kitchens.type = COALESCE($3, kitchens.type)
-                AND kitchens.name ILIKE CONCAT('%', COALESCE($4, kitchens.name), '%')
-                AND kitchens.city_id = kitchen_cities.id
-                AND kitchens.is_available = TRUE
-            LIMIT $2
-            OFFSET ($1 - 1) * $2
-        ),
-        total_count AS (
-            SELECT
-                COUNT(kitchens.id) AS total_rows
-            FROM
-                kitchens
-            WHERE
-                kitchens.type = COALESCE($3, kitchens.type)
-                AND kitchens.name ILIKE CONCAT('%', COALESCE(NULL, kitchens.name), '%')
-                AND kitchens.is_available = TRUE
-        )
-        SELECT
-            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
-            JSONB_BUILD_OBJECT(
-                'page', $1,
-                'per_page', $2,
-                'total', (SELECT total_rows FROM total_count)
-            ) AS meta
-        FROM
-            filtered_data,
-            total_count
-        "#,
-        pagination.page as i32,
-        pagination.per_page as i32,
-        filters.r#type,
-        filters.search,
+        filters.queryer_role.to_string()
     )
     .fetch_one(e)
     .await
@@ -741,8 +706,6 @@ pub async fn unverify_by_id<'e, E: PgExecutor<'e>>(executor: E, id: String) -> R
     })
     .map(|_| ())
 }
-
-
 
 pub fn is_owner(user: &User, kitchen: &Kitchen) -> bool {
     kitchen.owner_id == user.id

@@ -1,7 +1,12 @@
 pub mod request {
-    use crate::{modules::kitchen::repository, utils::pagination::Pagination};
+    use crate::utils::pagination::Pagination;
+    use serde::Deserialize;
 
-    pub type Filters = repository::FindManyFilters;
+    #[derive(Deserialize)]
+    pub struct Filters {
+        pub r#type: Option<String>,
+        pub search: Option<String>,
+    }
 
     pub struct Payload {
         pub filters: Filters,

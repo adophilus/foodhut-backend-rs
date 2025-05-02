@@ -378,7 +378,7 @@ where
     sqlx::query_as!(
         DatabasePaginatedMeal,
         r#"
-        WITH filtered_data AS (
+        WITH filtered_meals AS (
             SELECT
                 meals.*
             FROM
@@ -392,41 +392,45 @@ where
                 meal_user_reactions.user_id = $5 AND 
                 meal_user_reactions.reaction = 'LIKE'
             )
+            LEFT JOIN
+                kitchens
+            ON
+                meals.kitchen_id = kitchens.id
             WHERE
                 meals.kitchen_id = COALESCE($3, meals.kitchen_id)
                 AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
                 AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
-                AND (meals.is_available = TRUE)
+                AND meals.is_available = TRUE
+                AND (
+                    kitchens.is_available = TRUE
+                    AND kitchens.is_blocked = FALSE
+                    AND kitchens.is_verified = TRUE
+                )
                 AND deleted_at IS NULL
-            LIMIT $2 OFFSET ($1 - 1) * $2
+        ),
+        limited_meals AS (
+            SELECT
+                *
+            FROM
+                filtered_meals
+            LIMIT $2
+            OFFSET ($1 - 1) * $2
         ),
         total_count AS (
             SELECT
-                COUNT(meals.id) AS total_rows
+                COUNT(filtered_meals.id) AS total_rows
             FROM
-                meals
-            LEFT JOIN meal_user_reactions 
-            ON meals.id = meal_user_reactions.meal_id
-            AND (
-                $5::TEXT IS NOT NULL AND 
-                meal_user_reactions.user_id = $5 AND 
-                meal_user_reactions.reaction = 'LIKE'
-            )
-            WHERE
-                meals.kitchen_id = COALESCE($3, meals.kitchen_id)
-                AND meals.name ILIKE CONCAT('%', COALESCE($4, meals.name), '%')
-                AND ($5::TEXT IS NULL OR meal_user_reactions.id IS NOT NULL)
-                AND (meals.is_available = TRUE)
-                AND deleted_at IS NULL
+                filtered_meals
         )
         SELECT 
-            COALESCE(JSONB_AGG(ROW_TO_JSON(filtered_data)), '[]'::JSONB) AS items,
+            COALESCE(JSONB_AGG(ROW_TO_JSON(limited_meals)), '[]'::JSONB) AS items,
             JSONB_BUILD_OBJECT(
                 'page', $1,
                 'per_page', $2,
                 'total', (SELECT total_rows FROM total_count)
             ) AS meta
-        FROM filtered_data;
+        FROM
+            limited_meals
         "#,
         pagination.page as i32,
         pagination.per_page as i32,
