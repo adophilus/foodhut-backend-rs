@@ -18,14 +18,20 @@ pub async fn service(ctx: Arc<Context>, payload: request::Payload) -> response::
             .ok_or(response::Error::FailedToFetchOrder)
             .map(|owner| response::Success::OrderWithOwner(order.with_owner(owner)))
     } else {
-        repository::find_full_order_by_id_and_owner_id(
-            &ctx.db_conn.pool,
-            payload.id,
-            payload.auth.user.id,
-        )
-        .await
-        .map_err(|_| response::Error::FailedToFetchOrder)?
-        .ok_or(response::Error::OrderNotFound)
-        .map(response::Success::Order)
+        // TODO: please add an 'as_kitchen' field here to make it more secure
+        // repository::find_full_order_by_id_and_owner_id(
+        //     &ctx.db_conn.pool,
+        //     payload.id,
+        //     payload.auth.user.id,
+        // )
+        // .await
+        // .map_err(|_| response::Error::FailedToFetchOrder)?
+        // .ok_or(response::Error::OrderNotFound)
+        // .map(response::Success::Order)
+        repository::find_full_order_by_id(&ctx.db_conn.pool, payload.id)
+            .await
+            .map_err(|_| response::Error::FailedToFetchOrder)?
+            .ok_or(response::Error::OrderNotFound)
+            .map(response::Success::Order)
     }
 }
