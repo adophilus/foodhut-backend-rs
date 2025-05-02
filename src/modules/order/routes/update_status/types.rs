@@ -75,7 +75,7 @@ pub mod response {
                     .into_response(),
                 Self::FailedToUpdateOrderStatus => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Failed to updae order status" })),
+                    Json(json!({ "error": "Failed to update order status" })),
                 )
                     .into_response(),
                 Self::OrderNotFound => (
