@@ -325,9 +325,13 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
                 AND kitchens.city_id = kitchen_cities.id
                 AND (
                     $5::TEXT = 'USER'
-                    AND kitchens.is_available = TRUE
-                    AND kitchens.is_blocked = FALSE
-                    AND kitchens.is_verified = TRUE
+                    AND (
+                        kitchens.is_available = TRUE
+                        AND kitchens.is_blocked = FALSE
+                        AND kitchens.is_verified = TRUE
+                    )
+                    OR
+                    $5::TEXT = 'ADMIN'
                 )
         ),
         limited_kitchens AS (
