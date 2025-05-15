@@ -333,6 +333,8 @@ pub async fn find_many<'e, E: PgExecutor<'e>>(
                     OR
                     $5::TEXT = 'ADMIN'
                 )
+            ORDER BY
+                created_at ASC
         ),
         limited_kitchens AS (
             SELECT

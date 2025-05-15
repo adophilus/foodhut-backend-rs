@@ -33,15 +33,15 @@ pub async fn find_many_meals_and_kitchens<'e, E: PgExecutor<'e>>(
         "
             WITH ranked_results AS (
                 SELECT 
-                    name,
+                    meals.name,
                     'meal' AS type,
-                    SIMILARITY(name, $3) AS rank_score,
+                    SIMILARITY(meals.name, $3) AS rank_score,
                     TO_JSONB(meals) || JSONB_BUILD_OBJECT('kitchen', kitchens) AS item
                 FROM
                     meals
                 INNER JOIN kitchens
                 ON
-                     meal.kitchen_id = kitchens.id
+                     meals.kitchen_id = kitchens.id
                 UNION ALL
                 SELECT 
                     kitchens.name,
@@ -66,16 +66,16 @@ pub async fn find_many_meals_and_kitchens<'e, E: PgExecutor<'e>>(
                     AND (
                         type = 'kitchen'
                         AND (
-                            item->>is_available = TRUE
-                            AND item->>is_blocked = FALSE
-                            AND item->>is_verified = TRUE
+                            item->'is_available' = TO_JSONB(TRUE)
+                            AND item->'is_blocked' = TO_JSONB(FALSE)
+                            AND item->'is_verified' = TO_JSONB(TRUE)
                         )
                         OR (
                             type = 'meal'
                             AND (
-                                item->>kitchen->>is_available = TRUE
-                                AND item->>kitchen->>is_blocked = FALSE
-                                AND item->>kitchen->>is_verified = TRUE
+                                item->'kitchen'->'is_available' = TO_JSONB(TRUE)
+                                AND item->'kitchen'->'is_blocked' = TO_JSONB(FALSE)
+                                AND item->'kitchen'->'is_verified' = TO_JSONB(TRUE)
                             )
                         )
                     )
