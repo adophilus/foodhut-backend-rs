@@ -524,7 +524,7 @@ pub async fn find_full_order_by_id<'e, E: PgExecutor<'e>>(
             order_with_item.owner_id,
             order_with_item.owner,
             order_with_item.created_at,
-            order_with_item.updated_at
+            order_with_item.updated_at;
         "#,
         order_id
     )
