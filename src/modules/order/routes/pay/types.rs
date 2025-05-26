@@ -37,6 +37,7 @@ pub mod response {
         OrderNotFound,
         FailedToInitiateOrderPayment,
         PaymentAlreadyMade,
+        InsufficientBalance,
     }
 
     impl IntoResponse for Error {
@@ -50,6 +51,11 @@ pub mod response {
                 Self::OrderNotFound => (
                     StatusCode::NOT_FOUND,
                     Json(json!({ "error": "Order not found" })),
+                )
+                    .into_response(),
+                Self::InsufficientBalance => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": "Insufficient balance"})),
                 )
                     .into_response(),
                 Self::FailedToInitiateOrderPayment => (

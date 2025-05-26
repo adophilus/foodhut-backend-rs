@@ -13,6 +13,7 @@ use std::borrow::BorrowMut;
 pub enum Error {
     UnexpectedError,
     AlreadyPaid,
+    InsufficientBalance,
 }
 
 pub enum PaymentMethod {
@@ -58,7 +59,10 @@ pub async fn initialize_payment_for_order(
         )
         .await
         .map(|_| PaymentDetails(json!({ "message": "Payment successful" })))
-        .map_err(|_| Error::UnexpectedError),
+        .map_err(|err| match err {
+            wallet::service::Error::InsufficientBalance => Error::InsufficientBalance,
+            _ => Error::UnexpectedError,
+        }),
         PaymentMethod::Online => online::initialize_invoice_for_order(
             ctx,
             online::InitializeInvoiceForOrder {
@@ -76,6 +80,7 @@ pub struct ConfirmPaymentForOrderPayload {
     pub order: Order,
     pub payment_method: PaymentMethod,
 }
+
 pub async fn confirm_payment_for_order(
     _: Arc<Context>,
     tx: &mut Transaction<'_, Postgres>,
@@ -104,7 +109,10 @@ pub async fn confirm_payment_for_order(
                 },
             )
             .await
-            .map_err(|_| Error::UnexpectedError)?;
+            .map_err(|err| match err {
+                wallet::service::Error::InsufficientBalance => Error::InsufficientBalance,
+                _ => Error::UnexpectedError,
+            })?;
         }
     }
 

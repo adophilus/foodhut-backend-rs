@@ -20,7 +20,7 @@ use crate::{
 pub enum Error {
     UnexpectedError,
     WalletNotFound,
-    InsufficientFunds,
+    InsufficientBalance,
 }
 
 pub enum CreationError {
@@ -236,7 +236,7 @@ pub async fn initialize_payment_for_order(
         .ok_or(Error::WalletNotFound)?;
 
     if wallet.balance < payload.order.total {
-        return Err(Error::InsufficientFunds);
+        return Err(Error::InsufficientBalance);
     }
 
     payment::service::confirm_payment_for_order(

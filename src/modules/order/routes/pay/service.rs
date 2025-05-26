@@ -38,6 +38,7 @@ pub async fn pay_for_order(ctx: Arc<Context>, payload: PayForOrderPayload) -> re
     .await
     .map_err(|err| match err {
         payment::service::Error::AlreadyPaid => response::Error::PaymentAlreadyMade,
+        payment::service::Error::InsufficientBalance => response::Error::InsufficientBalance,
         _ => response::Error::FailedToInitiateOrderPayment,
     })?;
 
