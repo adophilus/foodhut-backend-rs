@@ -197,20 +197,21 @@ impl From<Option<serde_json::Value>> for OrderItems {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct OrderOwnerInfo {
-    pub id: String,
-    pub first_name: String,
-    pub last_name: String,
-    pub phone_number: String,
-    pub email: String,
-}
+type OrderOwnerInfo = User;
+// #[derive(Serialize, Deserialize, Clone, Debug)]
+// pub struct OrderOwnerInfo {
+//     pub id: String,
+//     pub first_name: String,
+//     pub last_name: String,
+//     pub phone_number: String,
+//     pub email: String,
+// }
 
-impl From<sqlx::types::Json<OrderOwnerInfo>> for OrderOwnerInfo {
-    fn from(value: sqlx::types::Json<OrderOwnerInfo>) -> Self {
-        value.0
-    }
-}
+// impl From<sqlx::types::Json<OrderOwnerInfo>> for OrderOwnerInfo {
+//     fn from(value: sqlx::types::Json<OrderOwnerInfo>) -> Self {
+//         value.0
+//     }
+// }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FullOrder {
