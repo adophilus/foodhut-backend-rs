@@ -47,9 +47,13 @@ async fn send_order_status_updated_push_notification(
     ctx: Arc<Context>,
     payload: types::OrderStatusUpdated,
 ) -> Result<()> {
+    tracing::debug!("About to send push notification to user with id: {}", &payload.user.id);
+
     let tokens = push_token::find_many_by_user_id(&ctx.db_conn.pool, payload.user.id)
         .await
         .map_err(|_| Error::NotSent)?;
+
+    tracing::debug!("Got {} tokens for user with id {}", tokens.len(), &payload.user.id);
 
     for token in tokens {
         send_fcm_message::<String>(
@@ -63,7 +67,10 @@ async fn send_order_status_updated_push_notification(
             &ctx.google.fcm_project_id,
         )
         .await
-        .map_err(|_| Error::NotSent)?;
+        .map_err(|err| {
+            tracing::error!("Failed to send push notification using token with id {}: {:?}", &token.id, err);
+            Error::NotSent
+        })?;
     }
 
     Ok(())
