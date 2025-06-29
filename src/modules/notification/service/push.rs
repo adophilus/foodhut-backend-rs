@@ -49,7 +49,7 @@ async fn send_order_status_updated_push_notification(
 ) -> Result<()> {
     tracing::debug!("About to send push notification to user with id: {}", &payload.user.id);
 
-    let tokens = push_token::find_many_by_user_id(&ctx.db_conn.pool, payload.user.id)
+    let tokens = push_token::find_many_by_user_id(&ctx.db_conn.pool, payload.user.id.clone())
         .await
         .map_err(|_| Error::NotSent)?;
 
