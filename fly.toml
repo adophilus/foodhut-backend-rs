@@ -6,20 +6,20 @@
 app = 'foodhut'
 primary_region = 'ams'
 
-# [http_service]
-#   internal_port = 8080
-#   auto_stop_machines = false
-#   processes = ['app']
+[http_service]
+  internal_port = 8080
+  auto_stop_machines = false
+  processes = ['app']
 
-# [checks]
-#   [checks.api]
-#     port = 8080
-#     type = 'http'
-#     interval = '2m0s'
-#     timeout = '30s'
-#     grace_period = '1m0s'
-#     method = 'get'
-#     path = '/api'
+[checks]
+  [checks.api]
+    port = 8080
+    type = 'http'
+    interval = '2m0s'
+    timeout = '30s'
+    grace_period = '1m0s'
+    method = 'get'
+    path = '/api'
 
 [[vm]]
   memory = '256mb'
