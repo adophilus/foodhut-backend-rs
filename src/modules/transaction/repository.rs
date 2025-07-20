@@ -352,6 +352,12 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
                 AND ($6::TEXT IS NULL OR wallets.is_kitchen_wallet = TRUE)
                 AND ($6::TEXT IS NULL OR kitchens.id = $6)
             ORDER BY created_at DESC
+        ),
+        limited_transactions AS (
+            SELECT
+                *
+            FROM
+                transactions
             LIMIT $2
             OFFSET ($1 - 1) * $2
         ),
@@ -360,23 +366,15 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
                 COUNT(transactions.id) AS total_rows
             FROM
                 transactions
-            LEFT JOIN wallets ON transactions.wallet_id = wallets.id
-            LEFT JOIN kitchens ON wallets.owner_id = kitchens.owner_id
-            WHERE
-                ($3::TEXT IS NULL OR transactions.user_id = $3)
-                AND ($4::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) < $4)
-                AND ($5::BIGINT IS NULL OR EXTRACT(EPOCH FROM transactions.created_at) > $5)
-                AND ($6::TEXT IS NULL OR wallets.is_kitchen_wallet = TRUE)
-                AND ($6::TEXT IS NULL OR kitchens.id = $6)
         )
         SELECT 
-            COALESCE(JSONB_AGG(filtered_transactions), '[]'::jsonb) AS items,
+            COALESCE(JSONB_AGG(limited_transactions), '[]'::jsonb) AS items,
             JSONB_BUILD_OBJECT(
                 'page', $1,
                 'per_page', $2,
                 'total', (SELECT total_rows FROM total_count)
             ) AS meta
-        FROM filtered_transactions;
+        FROM limited_transactions;
     "#,
         pagination.page as i32,
         pagination.per_page as i32,
