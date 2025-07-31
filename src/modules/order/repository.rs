@@ -1054,7 +1054,7 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 )
                 AND ($5::TEXT IS NULL OR orders.payment_method = $5)
                 AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
-            ORDER BY created_at DESC
+            ORDER BY created_at ASC
             LIMIT $2
             OFFSET ($1 - 1) * $2
         ),
