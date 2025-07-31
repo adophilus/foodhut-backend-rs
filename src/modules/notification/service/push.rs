@@ -74,6 +74,12 @@ async fn send_order_status_updated_push_notification(
             &ctx.google.fcm_project_id,
         )
         .await
+        .map(|_| {
+            tracing::debug!(
+                "Successfully sent push notification using token with id: {}",
+                &token.id
+            );
+        })
         .map_err(|err| {
             tracing::error!(
                 "Failed to send push notification using token with id {}: {:?}",
