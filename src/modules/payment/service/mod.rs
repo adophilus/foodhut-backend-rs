@@ -1,7 +1,7 @@
 pub mod online;
 
 use crate::modules::order::repository::{Order, OrderStatus};
-use crate::modules::{notification, order, transaction, user, wallet};
+use crate::modules::{kitchen, notification, order, transaction, user, wallet};
 use crate::{modules::user::repository::User, types::Context};
 use serde::Serialize;
 use serde_json::json;
@@ -131,16 +131,20 @@ pub async fn confirm_payment_for_order(
     .await
     .map_err(|_| Error::UnexpectedError)?;
 
-    let user = user::repository::find_by_id(&mut **tx, payload.order.owner_id.clone())
+    let kitchen = kitchen::repository::find_by_id(&mut **tx, payload.order.kitchen_id.clone())
         .await
         .map_err(|_| Error::UnexpectedError)?
         .ok_or(Error::UnexpectedError)?;
 
-    // TODO: send notification to the end user
+    let kitchen_owner = user::repository::find_by_id(&mut **tx, kitchen.owner_id)
+        .await
+        .map_err(|_| Error::UnexpectedError)?
+        .ok_or(Error::UnexpectedError)?;
+
     tokio::spawn(notification::service::send(
         ctx.clone(),
-        notification::service::Notification::order_status_updated(payload.order, user),
-        notification::service::Backend::Email,
+        notification::service::Notification::order_status_updated(payload.order, kitchen_owner),
+        notification::service::Backend::Push,
     ));
 
     Ok(())
