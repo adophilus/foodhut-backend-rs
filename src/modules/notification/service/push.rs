@@ -62,7 +62,7 @@ async fn send_order_status_updated_push_notification(
         &payload.user.id
     );
 
-    let fcm_token = &ctx.google.fcm_token_manager.lock().await.get_token();
+    let fcm_token = &ctx.google.fcm_token_manager.lock().await.get_token().await;
     tracing::debug!("Current token: {:?}", fcm_token);
 
     for token in tokens {
