@@ -1054,45 +1054,52 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
                 )
                 AND ($5::TEXT IS NULL OR orders.payment_method = $5)
                 AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
-            ORDER BY created_at ASC
+            ORDER BY created_at DESC
+        ),
+        limited_orders AS (
+            SELECT
+                *
+            FROM
+                filtered_orders
+            ORDER BY created_at DESC
             LIMIT $2
             OFFSET ($1 - 1) * $2
         ),
         order_with_item AS (
             SELECT
-                filtered_orders.id,
-                filtered_orders.status,
-                filtered_orders.payment_method,
-                filtered_orders.delivery_fee,
-                filtered_orders.service_fee,
-                filtered_orders.sub_total,
-                filtered_orders.total,
-                filtered_orders.delivery_address,
-                filtered_orders.delivery_date,
-                filtered_orders.dispatch_rider_note,
-                filtered_orders.kitchen_id,
-                filtered_orders.owner_id,
-                filtered_orders.created_at,
-                filtered_orders.updated_at,
-                filtered_orders.item::JSONB || JSONB_BUILD_OBJECT(
+                limited_orders.id,
+                limited_orders.status,
+                limited_orders.payment_method,
+                limited_orders.delivery_fee,
+                limited_orders.service_fee,
+                limited_orders.sub_total,
+                limited_orders.total,
+                limited_orders.delivery_address,
+                limited_orders.delivery_date,
+                limited_orders.dispatch_rider_note,
+                limited_orders.kitchen_id,
+                limited_orders.owner_id,
+                limited_orders.created_at,
+                limited_orders.updated_at,
+                limited_orders.item::JSONB || JSONB_BUILD_OBJECT(
                     'meal', meals
                 ) AS item,
                 TO_JSONB(kitchens) || JSONB_BUILD_OBJECT('city', kitchen_cities) AS kitchen,
                 TO_JSONB(users) AS owner
             FROM
-                filtered_orders
+                limited_orders
             INNER JOIN
                 meals
-            ON meals.id = filtered_orders.item->>'meal_id'
+            ON meals.id = limited_orders.item->>'meal_id'
             INNER JOIN
                 kitchens
-            ON kitchens.id = filtered_orders.kitchen_id
+            ON kitchens.id = limited_orders.kitchen_id
             INNER JOIN
                 kitchen_cities
             ON kitchen_cities.id = kitchens.city_id
             INNER JOIN
                 users
-            ON users.id = filtered_orders.owner_id
+            ON users.id = limited_orders.owner_id
         ),
         query_result AS (
             SELECT
@@ -1135,20 +1142,20 @@ pub async fn find_many_as_admin<'e, E: PgExecutor<'e>>(
         ),
         total_count AS (
             SELECT COUNT(id) AS total_rows
-            FROM orders
+            FROM filtered_orders
             WHERE
-                ($3::TEXT IS NULL OR orders.owner_id = $3)
+                ($3::TEXT IS NULL OR filtered_orders.owner_id = $3)
                 AND (
                     $4::TEXT IS NULL OR
                     CASE
-                        WHEN $4 = 'PENDING' THEN orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT')
-                        WHEN $4 = 'ONGOING' THEN orders.status IN ('PREPARING', 'IN_TRANSIT')
-                        WHEN $4 = 'COMPLETED' THEN orders.status IN ('DELIVERED', 'CANCELLED')
+                        WHEN $4 = 'PENDING' THEN filtered_orders.status IN ('AWAITING_PAYMENT', 'AWAITING_ACKNOWLEDGEMENT')
+                        WHEN $4 = 'ONGOING' THEN filtered_orders.status IN ('PREPARING', 'IN_TRANSIT')
+                        WHEN $4 = 'COMPLETED' THEN filtered_orders.status IN ('DELIVERED', 'CANCELLED')
                         ELSE TRUE
                     END
                 )
-                AND ($5::TEXT IS NULL OR orders.payment_method = $5)
-                AND ($6::TEXT IS NULL OR orders.kitchen_id = $6)
+                AND ($5::TEXT IS NULL OR filtered_orders.payment_method = $5)
+                AND ($6::TEXT IS NULL OR filtered_orders.kitchen_id = $6)
         )
         SELECT
             COALESCE(JSONB_AGG(query_result), '[]'::JSONB) AS items,
