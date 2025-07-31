@@ -75,7 +75,7 @@ async fn send_order_status_updated_push_notification(
         )
         .await
         .map(|_| {
-            tracing::debug!(
+            tracing::info!(
                 "Successfully sent push notification using token with id: {}",
                 &token.id
             );
@@ -87,7 +87,8 @@ async fn send_order_status_updated_push_notification(
                 err
             );
             Error::NotSent
-        });
+        })
+        .ok();
     }
 
     Ok(())
