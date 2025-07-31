@@ -225,6 +225,19 @@ pub async fn find_by_email_or_phone_number<'e, E: PgExecutor<'e>>(
     })
 }
 
+pub async fn find_all_admins<'e, E: PgExecutor<'e>>(e: E) -> Result<Vec<User>> {
+    sqlx::query_as!(
+        User,
+        "SELECT * FROM users WHERE role = 'ADMIN' AND deleted_at IS NULL"
+    )
+    .fetch_all(e)
+    .await
+    .map_err(|err| {
+        tracing::error!("Error occurred while fetching all admins: {}", err);
+        Error::UnexpectedError
+    })
+}
+
 pub async fn verify_by_phone_number<'e, E: PgExecutor<'e>>(
     e: E,
     phone_number: String,

@@ -143,9 +143,27 @@ pub async fn confirm_payment_for_order(
 
     tokio::spawn(notification::service::send(
         ctx.clone(),
-        notification::service::Notification::order_status_updated(payload.order, kitchen_owner),
+        notification::service::Notification::order_status_updated(
+            payload.order.clone(),
+            kitchen_owner,
+        ),
         notification::service::Backend::Push,
     ));
+
+    let admin_users = user::repository::find_all_admins(&mut **tx)
+        .await
+        .map_err(|_| Error::UnexpectedError)?;
+
+    for admin_user in admin_users {
+        tokio::spawn(notification::service::send(
+            ctx.clone(),
+            notification::service::Notification::order_status_updated(
+                payload.order.clone(),
+                admin_user,
+            ),
+            notification::service::Backend::Push,
+        ));
+    }
 
     Ok(())
 }
