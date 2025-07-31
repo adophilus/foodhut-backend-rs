@@ -357,15 +357,15 @@ pub async fn find_many<'e, Executor: PgExecutor<'e>>(
             SELECT
                 *
             FROM
-                transactions
+                filtered_transactions
             LIMIT $2
             OFFSET ($1 - 1) * $2
         ),
         total_count AS (
             SELECT
-                COUNT(transactions.id) AS total_rows
+                COUNT(filtered_transactions.id) AS total_rows
             FROM
-                transactions
+                filtered_transactions
         )
         SELECT 
             COALESCE(JSONB_AGG(limited_transactions), '[]'::jsonb) AS items,
